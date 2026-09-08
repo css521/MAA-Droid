@@ -31,6 +31,7 @@ import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
 import org.koin.core.context.startKoin
 import org.koin.core.logger.Level
+import com.aliothmoon.maadroid.engine.EngineSetup
 
 class MaaApplication : Application() {
 
@@ -52,6 +53,8 @@ class MaaApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // 引擎装配先于 Koin：宿主的 ViewModel 会读 EngineRegistry 决定显示哪些游戏
+        EngineSetup.install()
         val app = this
         startKoin {
             androidLogger(if (BuildConfig.DEBUG) Level.DEBUG else Level.NONE)

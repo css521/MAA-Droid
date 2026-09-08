@@ -190,6 +190,8 @@ kotlin {
 
 dependencies {
     api(project(":core-remote"))
+    // 各游戏引擎。:app 是唯一依赖全部引擎的模块（装配点）
+    implementation(project(":engine-limbus"))
     compileOnly(project(":hidden-api"))
     implementation(project(":annotation-api"))
     ksp(project(":ksp-processor"))

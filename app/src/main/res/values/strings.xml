@@ -1,4 +1,5 @@
 ﻿<resources>
+    <string name="arknights_game_name">明日方舟</string>
     <string name="app_name">MAA Droid</string>
     <string name="volume_key_service_description">双击音量下键快速切换操作面板</string>
     <string name="accessibility_helper_service_description">无障碍辅助服务：双击音量下键快速切换操作面板</string>
