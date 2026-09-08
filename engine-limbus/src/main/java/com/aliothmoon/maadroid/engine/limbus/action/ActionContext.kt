@@ -2,6 +2,7 @@ package com.aliothmoon.maadroid.engine.limbus.action
 
 import com.aliothmoon.maadroid.engine.InputSink
 import com.aliothmoon.maadroid.engine.limbus.pipeline.PipelineNode
+import com.aliothmoon.maadroid.engine.limbus.recognize.Match
 import com.aliothmoon.maadroid.engine.limbus.recognize.Recognizer
 import com.aliothmoon.maadroid.engine.limbus.recognize.TemplateIndex
 import kotlinx.serialization.json.JsonElement
@@ -34,6 +35,16 @@ interface ActionContext {
 
     /** 素材索引，镜牢的饰品体系展开靠它（见 [TemplateIndex]） */
     val templates: TemplateIndex
+
+    /**
+     * 把本节点带到这里的那次**路由识别**的命中结果。
+     *
+     * 对应上游写回 `params["recognize_result"]` 的东西：节点是被上一个节点的
+     * `get_next` 识别中才执行的，所以动作跑起来时这个结果已经在了。
+     * `click` / `swipe` 的 target 为字符串时取它的第一项，而不是重新截图匹配。
+     * 入口节点没经过识别，故可能为空。
+     */
+    val recognizeResult: List<Match>
 
     /** 任务配置（队伍轮换、饰品黑白名单、主题卡包权重等），键沿用上游的 *_cfg 命名 */
     val config: LimbusConfig

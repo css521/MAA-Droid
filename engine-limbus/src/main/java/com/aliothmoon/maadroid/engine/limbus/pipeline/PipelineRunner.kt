@@ -3,6 +3,7 @@ package com.aliothmoon.maadroid.engine.limbus.pipeline
 import com.aliothmoon.maadroid.engine.limbus.action.ActionContext
 import com.aliothmoon.maadroid.engine.limbus.action.ActionOutcome
 import com.aliothmoon.maadroid.engine.limbus.action.ActionRegistry
+import com.aliothmoon.maadroid.engine.limbus.recognize.Match
 
 /**
  * 流水线执行器。
@@ -27,8 +28,8 @@ import com.aliothmoon.maadroid.engine.limbus.action.ActionRegistry
  */
 class PipelineRunner(
     private val registry: PipelineRegistry,
-    private val contextFactory: (PipelineNode) -> ActionContext,
-    private val recognizeGate: suspend (PipelineNode) -> Boolean,
+    private val contextFactory: (String, PipelineNode, List<Match>) -> ActionContext,
+    private val recognizeGate: suspend (PipelineNode) -> RecognizeOutcome,
     private val onLog: (String) -> Unit = {},
 ) {
 
@@ -42,6 +43,14 @@ class PipelineRunner(
         /** 对该节点做路由：识别 next / interrupt 决定下一步 */
         data class Route(override val name: String, override val node: PipelineNode) : Step
     }
+
+    /**
+     * 每个节点最近一次路由识别的命中结果。
+     *
+     * 上游把它写在节点的 params 里；本项目节点不可变，故存在这里，
+     * 由动作经 [ActionContext.recognizeResult] 读取。
+     */
+    private val lastRecognition = HashMap<String, List<Match>>()
 
     /** 上游的 continue_run 事件；置 false 后主循环尽快退出 */
     @Volatile
@@ -63,6 +72,7 @@ class PipelineRunner(
         running = true
         val stack = ArrayDeque<Step>()
         // 与上游一致：先压 get_next 再压 do_action，故动作先执行、随后才路由
+        lastRecognition.clear()
         stack.addLast(Step.Route(entry, start))
         stack.addLast(Step.Action(entry, start))
 
@@ -86,7 +96,7 @@ class PipelineRunner(
             onLog("节点 ${step.name} 的动作 $actionName 无实现体，按纯路由处理")
             return
         }
-        val ctx = contextFactory(step.node)
+        val ctx = contextFactory(step.name, step.node, lastRecognition[step.name].orEmpty())
         onLog("节点 ${step.name} 执行动作 $actionName")
         when (val outcome = backend.execute(ctx)) {
             ActionOutcome.Continue -> Unit
@@ -139,12 +149,22 @@ class PipelineRunner(
         rateLimit(step.node, started)
     }
 
-    /** 返回第一个识别命中且未被禁用的节点名 */
+    /**
+     * 返回第一个识别命中的节点名，并记下它的命中坐标供该节点的动作取用。
+     *
+     * 按声明顺序取**第一个**命中的，不是取分数最高的 —— 上游如此，
+     * 流水线的 next 顺序本身就是优先级。
+     */
     private suspend fun firstHit(candidates: List<String>): String? {
         for (name in candidates) {
             val node = registry[name] ?: continue
+            // enable 在 recognizeGate 里也判了；这里先挡一次省掉一次截图识别
             if (!node.enable) continue
-            if (recognizeGate(node)) return name
+            val outcome = recognizeGate(node)
+            if (outcome.hit) {
+                lastRecognition[name] = outcome.matches
+                return name
+            }
         }
         return null
     }

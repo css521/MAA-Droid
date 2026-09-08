@@ -33,18 +33,47 @@ class BaseActionsTest {
     }
 
     @Test
-    fun `click 用模板目标时点识别到的中心`() = runTest {
-        val ctx = TestActionContext(node = nodeWith("""{"target":"some_button"}"""))
-        ctx.fakeRecognizer.onTemplate("some_button", Match(640, 360, 0.95))
+    fun `click 用模板目标时点路由识别留下的坐标`() = runTest {
+        // 上游语义：字符串 target 取 params["recognize_result"]，即把本节点带到
+        // 这里的那次路由识别的结果，而不是重新截图匹配
+        val ctx = TestActionContext(
+            node = nodeWith("""{"target":"some_button"}"""),
+            recognizeResult = listOf(Match(640, 360, 0.95)),
+        )
         ActionRegistry["click"]!!.execute(ctx)
         assertEquals(listOf(640 to 360), ctx.fakeInput.clicks())
+        assertTrue("不该重新截图匹配", ctx.fakeRecognizer.templateCalls.isEmpty())
     }
 
     @Test
-    fun `click 模板认不出时不点任何位置`() = runTest {
+    fun `click 用模板目标时叠加 offset`() = runTest {
+        val ctx = TestActionContext(
+            node = nodeWith("""{"target":"some_button","target_offset":[10,-20]}"""),
+            recognizeResult = listOf(Match(640, 360, 0.95)),
+        )
+        ActionRegistry["click"]!!.execute(ctx)
+        assertEquals(listOf(650 to 340), ctx.fakeInput.clicks())
+    }
+
+    @Test
+    fun `click 没配 target 时点识别命中的位置`() = runTest {
+        // 回归用例：上游 target 的缺省值是空字符串，所以「没配 target」等价于
+        // 「点识别结果」。实测上游 23 个 click 节点里有 10 个就是这么写的
+        // （只配 template 与 target_offset），当成「无目标」会让它们静默失效。
+        val ctx = TestActionContext(
+            node = nodeWith("""{"template":"red_exclaimation","target_offset":[-10,10]}"""),
+            recognizeResult = listOf(Match(1100, 100, 0.93)),
+        )
+        ActionRegistry["click"]!!.execute(ctx)
+        assertEquals(listOf(1090 to 110), ctx.fakeInput.clicks())
+    }
+
+    @Test
+    fun `click 没有识别结果时不点任何位置`() = runTest {
+        // 入口节点没经过路由识别，recognizeResult 为空 —— 此时不该乱点
         val ctx = TestActionContext(node = nodeWith("""{"target":"missing"}"""))
         ActionRegistry["click"]!!.execute(ctx)
-        assertTrue("认不出就不该乱点", ctx.fakeInput.clicks().isEmpty())
+        assertTrue("没有坐标就不该乱点", ctx.fakeInput.clicks().isEmpty())
     }
 
     @Test
@@ -66,9 +95,11 @@ class BaseActionsTest {
     }
 
     @Test
-    fun `swipe 起点可以是模板`() = runTest {
-        val ctx = TestActionContext(node = nodeWith("""{"begin":"handle","end":[800,300]}"""))
-        ctx.fakeRecognizer.onTemplate("handle", Match(200, 300, 0.9))
+    fun `swipe 起点为模板时同样取路由识别的坐标`() = runTest {
+        val ctx = TestActionContext(
+            node = nodeWith("""{"begin":"handle","end":[800,300]}"""),
+            recognizeResult = listOf(Match(200, 300, 0.9)),
+        )
         ActionRegistry["swipe"]!!.execute(ctx)
         assertEquals("down(200,300)", ctx.fakeInput.events.first())
         assertEquals("up(800,300)", ctx.fakeInput.events.last())

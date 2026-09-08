@@ -186,6 +186,7 @@ class TestActionContext(
     override val recognize: Recognizer = FakeRecognizer(),
     override val config: LimbusConfig = FakeConfig(),
     override val templates: TemplateIndex = FakeTemplateIndex(),
+    override val recognizeResult: List<Match> = emptyList(),
 ) : ActionContext {
 
     /** 便捷访问：绝大多数用例用的就是默认的记录型替身 */

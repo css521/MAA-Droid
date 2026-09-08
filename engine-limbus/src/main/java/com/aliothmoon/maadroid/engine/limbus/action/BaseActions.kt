@@ -31,32 +31,55 @@ object BaseActions {
 }
 
 private object ClickAction : ActionBackend {
+    /**
+     * 点击。
+     *
+     * 目标有两种形态，**缺省即第二种**（这点极易看漏）：
+     * - `target` 是坐标数组 `[x, y]` → 直接点它（实测上游 13 个节点）
+     * - `target` 是字符串**或根本没配** → 点本节点路由识别命中的位置
+     *   （实测上游 10 个节点，如 error_server_error_retry_confirm 只配了 template）
+     *
+     * 之所以「没配」也走识别结果：上游 `node.get_param("target", "")` 的缺省值是
+     * 空**字符串**，于是落进 `isinstance(target, str)` 分支去读 `recognize_result[0]`。
+     * 若把缺省当成「无目标、不点击」，这 10 个节点会静默失效 —— 流水线照常推进却
+     * 什么都没点，表现为卡在某个界面而日志毫无异常。
+     */
     override suspend fun execute(ctx: ActionContext): ActionOutcome {
         val node = ctx.node
-        val targetOffset = node.ints("target_offset") ?: listOf(0, 0)
-        val ox = targetOffset.getOrElse(0) { 0 }
-        val oy = targetOffset.getOrElse(1) { 0 }
+        val offset = node.ints("target_offset") ?: listOf(0, 0)
+        val ox = offset.getOrElse(0) { 0 }
+        val oy = offset.getOrElse(1) { 0 }
 
-        val targetRaw = node.str("target")
         val coords = node.ints("target")
-
-        val (x, y) = when {
-            coords != null && coords.size >= 2 -> coords[0] + ox to coords[1] + oy
-            targetRaw != null -> {
-                val matches = ctx.recognize.templateMatch(targetRaw)
-                if (matches.isEmpty()) return ActionOutcome.Continue
-                matches[0].x + ox to matches[0].y + oy
+        val (x, y) = if (coords != null && coords.size >= 2) {
+            coords[0] + ox to coords[1] + oy
+        } else {
+            // 上游此处会因 recognize_result 为空而 IndexError 炸掉整条链；
+            // 这里跳过并留日志 —— 识别不中本就是有定义的状态
+            val hit = ctx.recognizeResult.firstOrNull()
+            if (hit == null) {
+                ctx.log("节点 ${ctx.nodeName} 没有可用的识别坐标，跳过点击")
+                return ActionOutcome.Continue
             }
-            else -> return ActionOutcome.Continue
+            hit.x + ox to hit.y + oy
         }
 
         val repeat = node.num("repeat")?.toInt() ?: 1
-        val interval = max((node.num("repeat_interval") ?: 0.2) - 0.5, 0.0)
+        // 上游 max(interval - 0.5, 0)：一次点击自身约耗 0.5 秒，不减会让节奏偏慢
+        val interval = max((node.num("repeat_interval") ?: DEFAULT_CLICK_INTERVAL) - CLICK_COST_SEC, 0.0)
 
         clickRepeat(ctx.input, x, y, repeat, interval) { ctx.delay(it) }
         return ActionOutcome.Continue
     }
 }
+
+/** click 的默认重复间隔与单次点击的估算耗时，均取自上游 */
+private const val DEFAULT_CLICK_INTERVAL = 0.2
+private const val CLICK_COST_SEC = 0.5
+
+/** swipe 的默认重复间隔与单次滑动的估算耗时 */
+private const val DEFAULT_SWIPE_INTERVAL = 0.5
+private const val SWIPE_COST_SEC = 0.5
 
 private object KeyAction : ActionBackend {
     override suspend fun execute(ctx: ActionContext): ActionOutcome {
@@ -70,33 +93,40 @@ private object KeyAction : ActionBackend {
 }
 
 private object SwipeAction : ActionBackend {
+    /**
+     * 滑动。起点与 [ClickAction] 同规则（坐标或识别结果），终点必须是坐标。
+     *
+     * 实测上游只有一个 swipe 节点且起终点都是坐标；这里仍按同一套规则处理起点，
+     * 以便上游改成按识别结果起滑时无需改动。
+     */
     override suspend fun execute(ctx: ActionContext): ActionOutcome {
         val node = ctx.node
+        val end = node.ints("end")
+        if (end == null || end.size < 2) {
+            ctx.log("节点 ${ctx.nodeName} 的 swipe 缺少终点坐标，跳过")
+            return ActionOutcome.Continue
+        }
         val beginOffset = node.ints("begin_offset") ?: listOf(0, 0)
         val endOffset = node.ints("end_offset") ?: listOf(0, 0)
-        val end = node.ints("end") ?: return ActionOutcome.Continue
 
-        val beginRaw = node.str("begin")
         val beginCoords = node.ints("begin")
-
-        val (bx, by) = when {
-            beginCoords != null && beginCoords.size >= 2 ->
-                beginCoords[0] + beginOffset.getOrElse(0) { 0 } to
-                        beginCoords[1] + beginOffset.getOrElse(1) { 0 }
-            beginRaw != null -> {
-                val matches = ctx.recognize.templateMatch(beginRaw)
-                if (matches.isEmpty()) return ActionOutcome.Continue
-                matches[0].x + beginOffset.getOrElse(0) { 0 } to
-                        matches[0].y + beginOffset.getOrElse(1) { 0 }
+        val (bx, by) = if (beginCoords != null && beginCoords.size >= 2) {
+            beginCoords[0] + beginOffset.getOrElse(0) { 0 } to
+                    beginCoords[1] + beginOffset.getOrElse(1) { 0 }
+        } else {
+            val hit = ctx.recognizeResult.firstOrNull()
+            if (hit == null) {
+                ctx.log("节点 ${ctx.nodeName} 没有可用的识别坐标，跳过滑动")
+                return ActionOutcome.Continue
             }
-            else -> return ActionOutcome.Continue
+            hit.x + beginOffset.getOrElse(0) { 0 } to hit.y + beginOffset.getOrElse(1) { 0 }
         }
 
         val ex = end[0] + endOffset.getOrElse(0) { 0 }
         val ey = end[1] + endOffset.getOrElse(1) { 0 }
 
         val repeat = node.num("repeat")?.toInt() ?: 1
-        val interval = max((node.num("repeat_interval") ?: 0.5) - 0.5, 0.0)
+        val interval = max((node.num("repeat_interval") ?: DEFAULT_SWIPE_INTERVAL) - SWIPE_COST_SEC, 0.0)
 
         swipe(ctx.input, bx, by, ex, ey)
         for (i in 1 until repeat) {

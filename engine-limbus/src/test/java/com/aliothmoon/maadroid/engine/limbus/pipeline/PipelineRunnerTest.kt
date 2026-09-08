@@ -14,6 +14,7 @@ import org.junit.Test
 import com.aliothmoon.maadroid.engine.InputSink
 import com.aliothmoon.maadroid.engine.limbus.action.TestActionContext
 import com.aliothmoon.maadroid.engine.limbus.recognize.Crop
+import com.aliothmoon.maadroid.engine.limbus.recognize.Match
 import com.aliothmoon.maadroid.engine.limbus.recognize.Recognizer
 
 /**
@@ -49,8 +50,11 @@ class PipelineRunnerTest {
 
     private fun runner(reg: PipelineRegistry) = PipelineRunner(
         registry = reg,
-        contextFactory = { node -> fakeContext(node) },
-        recognizeGate = { node -> reg.names().first { reg[it] === node }.let { it in hits } },
+        contextFactory = { name, node, matches -> fakeContext(node, name, matches) },
+        recognizeGate = { node ->
+            val name = reg.names().first { reg[it] === node }
+            RecognizeOutcome(hit = name in hits)
+        },
     ).also { it.delayer = { /* 测试里不真睡 */ } }
 
     // 一个最小流水线：main → a / b，interrupt 用 error_handler
@@ -204,10 +208,16 @@ class PipelineRunnerTest {
      * [PipelineRunner] 的 recognizeGate 直接决定。故这里塞会抛异常的替身：
      * 一旦调度逻辑意外去截图或注入，测试立刻炸而不是悄悄通过。
      */
-    private fun fakeContext(node: PipelineNode) = TestActionContext(
+    private fun fakeContext(
+        node: PipelineNode,
+        name: String,
+        matches: List<Match>,
+    ) = TestActionContext(
         node = node,
+        nodeName = name,
         input = throwingInput,
         recognize = throwingRecognizer,
+        recognizeResult = matches,
     )
 
     private companion object {
