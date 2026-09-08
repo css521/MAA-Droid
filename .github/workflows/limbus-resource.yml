@@ -1,0 +1,118 @@
+name: 边狱资源包（跟随 LALC 上游）
+
+# 为什么需要这条流水线：
+# 上游 LALC 没有资源专用 feed —— 它只发一个 249 MB 的 Windows 整包（含 Python 运行时、
+# 无清单、无逐文件 sha256），App 无法据此做增量热更。故由本流水线盯它的 tag，
+# 只取 config/task、config/language、img、ai/model 四份重打包成约 25 MB 带 sha256
+# 清单的资源包发 Release，App 只订阅这一条 feed。
+#
+# 效果：上游改流程 / 模板 / 阈值 → 用户靠热更无感跟随，不必发 APK；
+# 上游引入本 App 未实现的动作 → 清单的 required_actions 让 App 侧门闸拒绝装载并提示升级。
+
+on:
+  schedule:
+    # 每天 UTC 21:17（北京时间次日 05:17）。错开整点，避免与大量定时任务撞在一起
+    - cron: '17 21 * * *'
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        description: '上游 ref（默认取最新 tag）'
+        required: false
+        type: string
+      dry_run:
+        description: '只校验不发布'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 取本仓库（需要打包脚本与动作白名单）
+        uses: actions/checkout@v4
+
+      - name: 解析上游最新 tag
+        id: upstream
+        run: |
+          set -euo pipefail
+          if [ -n "${{ inputs.upstream_ref }}" ]; then
+            REF="${{ inputs.upstream_ref }}"
+          else
+            # 必须过滤成 vX.Y.Z 形态：上游存在 v_tat_2.1.5 / v_tag_2.1.6 这类
+            # 非语义化 tag（历史遗留），--sort=-v:refname 会把它们排到最前，
+            # 不过滤会导致 CI 去打包一个错误的旧版本（实测踩到过）
+            REF=$(git -c 'versionsort.suffix=-' ls-remote --tags --refs --sort=-v:refname \
+              https://github.com/HSLix/LixAssistantLimbusCompany.git \
+              | sed 's#.*refs/tags/##' \
+              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+              | head -n1)
+          fi
+          [ -n "$REF" ] || { echo "::error::未解析到上游 tag"; exit 1; }
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "tag=limbus-resource-$REF" >> "$GITHUB_OUTPUT"
+          echo "上游 ref: $REF"
+
+      - name: 跳过已发布的版本
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "${{ steps.upstream.outputs.tag }}" >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "已存在 ${{ steps.upstream.outputs.tag }}，无需重打包"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 取上游该 tag 的源码
+        if: steps.check.outputs.skip == 'false'
+        uses: actions/checkout@v4
+        with:
+          repository: HSLix/LixAssistantLimbusCompany
+          ref: ${{ steps.upstream.outputs.ref }}
+          path: upstream
+
+      - uses: actions/setup-python@v5
+        if: steps.check.outputs.skip == 'false'
+        with:
+          python-version: '3.12'
+
+      - name: 打包并校验
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          set -euo pipefail
+          # 打包器会做三重校验：流水线引用可达、模板存在、语言目录结构保留。
+          # 任一不过即非零退出且不产出资源包 —— 绝不发布一个跑到中途才崩的包。
+          python scripts/pack_engine_resource.py \
+            --engine limbus \
+            --upstream upstream \
+            --tag "${{ steps.upstream.outputs.ref }}" \
+            --out dist
+
+      - name: 摘要
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          {
+            echo "## 边狱资源包 ${{ steps.upstream.outputs.ref }}"
+            echo '```json'
+            python -c "import json;m=json.load(open('dist/manifest.json'));m['files']=f\"<{len(m['files'])} 个文件>\";print(json.dumps(m,ensure_ascii=False,indent=2))"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 发布 Release
+        if: steps.check.outputs.skip == 'false' && inputs.dry_run != true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release create "${{ steps.upstream.outputs.tag }}" \
+            dist/*.zip dist/manifest.json \
+            --title "边狱资源包 ${{ steps.upstream.outputs.ref }}" \
+            --notes "自动跟随上游 [LALC ${{ steps.upstream.outputs.ref }}](https://github.com/HSLix/LixAssistantLimbusCompany/releases/tag/${{ steps.upstream.outputs.ref }}) 重打包。
+
+            仅含 config/task、config/language、img、ai/model 四份，不含 Python 运行时。
+            清单带逐文件 sha256 与 required_actions，App 装载前会做兼容门闸校验。"

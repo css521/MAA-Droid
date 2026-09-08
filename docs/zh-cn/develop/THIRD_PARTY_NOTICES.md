@@ -52,3 +52,53 @@
 - **项目地址**：[MaaAssistantArknights](https://github.com/MaaAssistantArknights/MaaAssistantArknights)
 - **许可证**：[AGPL-3.0](https://www.gnu.org/licenses/agpl-3.0.html)
 - **使用方式**：通过 `scripts/setup_maa_core.py` 下载预编译产物（`libMaaCore.so` 及资源文件），运行时由 JNA 动态加载
+
+---
+
+## LixAssistantLimbusCompany
+
+- **项目地址**：[LixAssistantLimbusCompany](https://github.com/HSLix/LixAssistantLimbusCompany)
+- **许可证**：[AGPL-3.0](https://www.gnu.org/licenses/agpl-3.0.html)
+- **使用方式**：两部分
+
+### 一、资源直接复用（不修改）
+
+`engine-limbus` 的资源包由 `scripts/pack_engine_resource.py` 从上游 tag 重打包，只取以下四份并**原样使用**：
+
+| 上游路径 | 内容 |
+|---|---|
+| `lalc_backend/config/task/` | 声明式任务流水线（v5.0.0 为 10 个文件 133 个节点） |
+| `lalc_backend/config/language/` | 语言相关的关键词与饰品名表 |
+| `lalc_backend/img/` | 模板素材（622 个 PNG，563 个唯一基名；`zh`/`en` 同名文件是语言变体） |
+| `lalc_backend/ai/model/` | 三个 ONNX 分类模型（mirror_legend / mirror_path / skill_icon） |
+
+资源包不进本仓库版本库，由 CI（`.github/workflows/limbus-resource.yml`）发布到本仓库 Release，App 运行时下载。
+
+### 二、代码移植（衍生作品）
+
+`engine-limbus` 的引擎逻辑移植自上游 Python 实现，属 AGPL-3.0 衍生作品：
+
+| 本仓库 | 移植自上游 |
+|---|---|
+| `pipeline/PipelineNode.kt` | `workflow/task_node.py` 的节点模型与字段语义 |
+| `pipeline/PipelineRegistry.kt` | `workflow/task_registry.py` 的 `init_tasks()` 六步装配与引用校验 |
+| `action/*` | `workflow/task_execution.py` 与 `task_action/*` 的动作语义 |
+| `recognize/Recognizer.kt` | `recognize/img_recognizer.py` 的识别接口 |
+
+> 移植保持了上游的字段名与语义，目的是让上游改动能经资源包热更直接生效、无需转换层。
+
+---
+
+## AhabAssistantLimbusCompany
+
+- **项目地址**：[AhabAssistantLimbusCompany](https://github.com/KIYI671/AhabAssistantLimbusCompany)
+- **许可证**：[GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.html)
+- **使用方式**：**仅作设计参考，未复制代码或素材**
+
+借鉴了以下三处设计思路：
+
+- `module/resource_sync/manifest.py` 的资源清单协议形状（`schema_version` / 清单级稳定标识 / `files[]` / `packages[]`，条目含 `path` + `sha256` + `size`）
+- `module/automation/input_handlers/simulator/simulator_control.py` 的 Android keycode 映射（`enter`→66、`esc`→111、`p`→44），据此确认边狱 Android 客户端接受硬件按键事件
+- `module/game_and_screen/screen.py` 的多分辨率归一化思路
+
+其素材树只按 UI 主题与语言分目录、无 pc/android 之分却同时驱动 Steam 端与模拟器内的 Android 端，这一事实支撑了「边狱两端共用一套 UI 布局、上游 PC 端模板可直接用于 Android」的判断。
