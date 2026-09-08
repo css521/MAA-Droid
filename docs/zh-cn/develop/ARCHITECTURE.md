@@ -91,6 +91,29 @@ theme 同理：22 次引用里 19 次只指向 `MaaMotion.kt` 一个文件。
 **方案正确的判据是那几条断言一条都不用改**。已做变异验证 —— 去掉任一 `@SerialName`
 或把它改成短名，用例都会失败。
 
+### 下一个前置：引擎读设置需要一个契约
+
+判别符解绑之后，试搬 `data/model` 的方舟任务配置（26 个文件 2,768 行），撞到了真正的墙。
+依赖闭包实测如下：
+
+| 被依赖 | 处数 | 状态 |
+|---|---|---|
+| `maa/task/`（`MaaTaskParams`） | 23 | 方舟，3 个文件 55 行、零外部依赖，可随时搬 |
+| `data/resource/` | 7 | 方舟，23 个文件 2,611 行 —— **但它依赖宿主设置** |
+| `R.string` | 22 个 id | 可控，随模块自带 res |
+| `utils.JsonUtils` | 3 | 已在 `core:remote`，加依赖即可 |
+
+墙在 `data/resource/` 上：它 import `data.preferences.AppSettingsManager`（3 处）与
+`data/config/MaaPathConfig`（5 处，而后者自己也依赖 `AppSettingsManager`）。
+搬过去会立刻触犯「引擎不得依赖宿主应用层」—— 这不是搬文件能解决的。
+
+**所以下一个前置是给引擎一个读设置的契约**，而不是继续搬代码。参照 `engine:limbus`
+的做法：它完全不碰宿主偏好，配置以 `paramsJson` 字符串流入，内部只认自定义的窄接口
+`LimbusConfig`（int/bool/str/list 四个取值方法）。方舟需要同样的东西 —— 一个由宿主实现、
+引擎只依赖接口的设置视图。
+
+这次试搬已回退（未留半成品），但依赖图已量清，上表就是下一步的输入。
+
 ### `core:common` 为什么不依赖 Compose
 
 `UiText` 的类型与 `resolve(Context)` 在 `core:common`，而 `@Composable` 的取值器
