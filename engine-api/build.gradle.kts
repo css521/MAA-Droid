@@ -27,7 +27,8 @@ dependencies {
     api(project(":core-bridge"))
 
     // EngineUi 暴露 @Composable 插槽，宿主据此渲染引擎面板而不认识引擎
-    implementation(platform(libs.androidx.compose.bom))
+    // 必须是 api：ui/material3 的版本由 BOM 约束，消费者（engine-*）也要拿到
+    api(platform(libs.androidx.compose.bom))
     api(libs.androidx.ui)
     api(libs.androidx.material3)
     api(libs.androidx.annotation)
