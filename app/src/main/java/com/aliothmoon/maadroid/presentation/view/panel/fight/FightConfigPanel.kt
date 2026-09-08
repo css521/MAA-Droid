@@ -50,7 +50,7 @@ import com.aliothmoon.maadroid.data.repository.DepotRepository
 import com.aliothmoon.maadroid.data.resource.ActivityManager
 import com.aliothmoon.maadroid.data.resource.ItemHelper
 import com.aliothmoon.maadroid.data.resource.StageGroup
-import com.aliothmoon.maadroid.domain.enums.UiUsageConstants
+import com.aliothmoon.maadroid.engine.arknights.enums.UiUsageConstants
 import com.aliothmoon.maadroid.ui.components.CheckBoxWithExpandableTip
 import com.aliothmoon.maadroid.ui.components.CheckBoxWithLabel
 import com.aliothmoon.maadroid.ui.components.SelectableChipGroup

@@ -1,5 +1,4 @@
-package com.aliothmoon.maadroid.domain.enums
-
+package com.aliothmoon.maadroid.engine.arknights.enums
 enum class InfrastMode(val value: Int, val displayName: String) {
     /** 普通 */
     Normal(0, "常规模式"),

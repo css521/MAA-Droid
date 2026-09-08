@@ -1,6 +1,6 @@
 package com.aliothmoon.maadroid.data.model
 
-import com.aliothmoon.maadroid.domain.enums.UiUsageConstants
+import com.aliothmoon.maadroid.engine.arknights.enums.UiUsageConstants
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive

@@ -1,5 +1,4 @@
-package com.aliothmoon.maadroid.domain.enums
-
+package com.aliothmoon.maadroid.engine.arknights.enums
 /**
  * 肉鸽策略模式 - 对齐 WPF RoguelikeMode 枚举
  */

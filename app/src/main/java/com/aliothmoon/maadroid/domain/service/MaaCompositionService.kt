@@ -15,7 +15,7 @@ import com.aliothmoon.maadroid.data.resource.ActivityManager
 import com.aliothmoon.maadroid.domain.models.RemoteBackend
 import com.aliothmoon.maadroid.domain.models.RunMode
 import com.aliothmoon.maadroid.domain.notification.LiveSessionCoordinator
-import com.aliothmoon.maadroid.domain.state.MaaExecutionState
+import com.aliothmoon.maadroid.engine.arknights.state.MaaExecutionState
 import com.aliothmoon.maadroid.maa.AsstMsg
 import com.aliothmoon.maadroid.maa.MaaInstanceOptions.ANDROID
 import com.aliothmoon.maadroid.maa.MaaInstanceOptions.DEPLOYMENT_WITH_PAUSE

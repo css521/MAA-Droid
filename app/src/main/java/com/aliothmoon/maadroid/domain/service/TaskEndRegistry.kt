@@ -1,6 +1,6 @@
 package com.aliothmoon.maadroid.domain.service
 
-import com.aliothmoon.maadroid.domain.state.MaaExecutionState
+import com.aliothmoon.maadroid.engine.arknights.state.MaaExecutionState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

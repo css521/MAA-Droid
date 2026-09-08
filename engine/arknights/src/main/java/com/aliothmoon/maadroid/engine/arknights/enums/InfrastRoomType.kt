@@ -1,5 +1,4 @@
-package com.aliothmoon.maadroid.domain.enums
-
+package com.aliothmoon.maadroid.engine.arknights.enums
 enum class InfrastRoomType {
     /** 制造站 */
     Mfg,

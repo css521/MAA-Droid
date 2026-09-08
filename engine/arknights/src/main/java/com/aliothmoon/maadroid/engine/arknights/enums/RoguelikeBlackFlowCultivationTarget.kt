@@ -1,5 +1,4 @@
-package com.aliothmoon.maadroid.domain.enums
-
+package com.aliothmoon.maadroid.engine.arknights.enums
 /**
  * 黑流树海刷襁褓动物的目标品种 - 对齐 WPF RoguelikeBlackFlowCultivationTarget 枚举
  *

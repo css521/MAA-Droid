@@ -1,7 +1,6 @@
 package com.aliothmoon.maadroid.data.datasource.update
 
 import com.aliothmoon.maadroid.R
-import com.aliothmoon.maadroid.constant.MaaApi
 import com.aliothmoon.maadroid.data.api.HttpClientHelper
 import com.aliothmoon.maadroid.data.api.model.GitHubRelease
 import com.aliothmoon.maadroid.data.model.update.UpdateChannel
@@ -10,6 +9,7 @@ import com.aliothmoon.maadroid.utils.JsonUtils
 import com.aliothmoon.maadroid.common.i18n.LocalizedException
 import com.aliothmoon.maadroid.common.i18n.uiTextOf
 import timber.log.Timber
+import com.aliothmoon.maadroid.constant.AppApi
 
 class GitHubAppDownloadUrlResolver(
     private val httpClient: HttpClientHelper
@@ -20,7 +20,7 @@ class GitHubAppDownloadUrlResolver(
     override suspend fun resolve(version: String, channel: UpdateChannel): Result<String> {
         return runCatching {
             val tag = if (version.startsWith("v", ignoreCase = true)) version else "v$version"
-            val response = httpClient.get(MaaApi.appGitHubReleaseByTag(tag))
+            val response = httpClient.get(AppApi.appGitHubReleaseByTag(tag))
 
             if (!response.isSuccessful) {
                 throw LocalizedException(

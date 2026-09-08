@@ -47,12 +47,13 @@ class HostEngineIsolationContractTest {
         "com.aliothmoon.maadroid.data.achievement.",
         "com.aliothmoon.maadroid.data.repository.",
         "com.aliothmoon.maadroid.presentation.view.panel.",
-        "com.aliothmoon.maadroid.domain.enums.",
+        // 已抽成 engine:arknights 模块的部分：宿主引用它们同样算耦合，
+        // 只是这些引用现在合法（app → engine:arknights），计数用于追踪剩余搬迁量
+        "com.aliothmoon.maadroid.engine.arknights.",
     )
 
-    /** 混杂包里按类名精确点出的方舟类型 */
+    /** 混杂包里按类名精确点出的方舟类型（尚未抽出的） */
     private val arknightsClasses = listOf(
-        "com.aliothmoon.maadroid.domain.state.MaaExecutionState",
         "com.aliothmoon.maadroid.data.config.MaaPathConfig",
     )
 
@@ -73,10 +74,19 @@ class HostEngineIsolationContractTest {
         "data/achievement",
         "data/repository",
         "presentation/view/panel",
-        "domain/enums",
     )
 
-    /** 各宿主目录当前对方舟的 import 行数；0 表示已干净、不得回退 */
+    /**
+     * 各宿主目录当前对方舟的 import 行数；0 表示已干净、不得回退。
+     *
+     * 注意有几项在抽出 `engine:arknights` 时**上升**过，那不是回退而是**测量变准**：
+     * `MaaApi` 原先住在通用的 `constant/` 包里，本表数不到它；拆成
+     * `ArknightsApi`（方舟 API 与 MaaResource 源）与 `AppApi`（App 自更新、公告）
+     * 之后，`data/api` 与 `data/datasource` 对方舟地址的真实依赖才显形。
+     *
+     * 这批依赖的正解是把资源地址挪到 `ResourcePackSpec` 上 —— 宿主的更新服务已按引擎
+     * 遍历资源包，却仍从方舟的常量里取 URL，是遗留耦合。
+     */
     private val hostToArknights = mapOf(
         // ---- 待清理：抽 engine/arknights 时逐条归零 ----
         "presentation/viewmodel" to 62,      // 方舟 ViewModel 尚未随面板迁出
@@ -87,7 +97,7 @@ class HostEngineIsolationContractTest {
         "domain/usecase" to 9,               // AnalyzeTaskChainUseCase 独占多数
         "presentation/view/settings" to 8,   // 成就 UI
         "(顶层文件)" to 6,                    // MainActivity / MaaApplication
-        "data/preferences" to 6,             // TaskChainState 整体是方舟任务链状态机
+        "data/preferences" to 7,             // TaskChainState 整体是方舟任务链状态机
         "remote" to 5,                       // MaaCoreServiceImpl / MaaCoreManager
         "overlay" to 3,
         "presentation/state" to 2,
@@ -96,8 +106,8 @@ class HostEngineIsolationContractTest {
         "schedule" to 1,
         "utils" to 1,
         "manager" to 1,                      // RemoteServiceManager 取 MaaPathConfig
-        "data/datasource" to 0,
-        "data/api" to 1,
+        "data/datasource" to 3,
+        "data/api" to 3,
         "data/log" to 1,
         "engine" to 1,                       // EngineSetup 装配方舟，设计如此
         "domain/launch" to 1,

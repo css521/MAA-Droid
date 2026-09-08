@@ -1,9 +1,9 @@
 package com.aliothmoon.maadroid.data.model
 
 
-import com.aliothmoon.maadroid.domain.enums.InfrastMode
-import com.aliothmoon.maadroid.domain.enums.InfrastRoomType
-import com.aliothmoon.maadroid.domain.enums.UiUsageConstants
+import com.aliothmoon.maadroid.engine.arknights.enums.InfrastMode
+import com.aliothmoon.maadroid.engine.arknights.enums.InfrastRoomType
+import com.aliothmoon.maadroid.engine.arknights.enums.UiUsageConstants
 import com.aliothmoon.maadroid.maa.task.MaaTaskParams
 import com.aliothmoon.maadroid.maa.task.MaaTaskType
 import com.aliothmoon.maadroid.utils.JsonUtils

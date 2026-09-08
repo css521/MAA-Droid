@@ -1,6 +1,5 @@
 package com.aliothmoon.maadroid.data.datasource.update
 
-import com.aliothmoon.maadroid.constant.MaaApi
 import com.aliothmoon.maadroid.data.api.MirrorChyanApiClient
 import com.aliothmoon.maadroid.data.api.MirrorChyanBizException
 import com.aliothmoon.maadroid.data.datasource.ResourceDownloader
@@ -8,6 +7,7 @@ import com.aliothmoon.maadroid.data.model.update.UpdateCheckResult
 import com.aliothmoon.maadroid.data.model.update.UpdateError
 import com.aliothmoon.maadroid.data.model.update.UpdateInfo
 import com.aliothmoon.maadroid.domain.service.update.checker.ResourceVersionChecker
+import com.aliothmoon.maadroid.engine.arknights.constant.ArknightsApi
 
 class MirrorChyanResourceVersionChecker(
     private val apiClient: MirrorChyanApiClient
@@ -15,7 +15,7 @@ class MirrorChyanResourceVersionChecker(
 
     override suspend fun check(currentVersion: String): UpdateCheckResult {
         val result = apiClient.getLatest(
-            MaaApi.MIRROR_CHYAN_RESOURCE,
+            ArknightsApi.MIRROR_CHYAN_RESOURCE,
             query = mapOf(
                 "current_version" to currentVersion,
                 "user_agent" to "MAA-Meow"

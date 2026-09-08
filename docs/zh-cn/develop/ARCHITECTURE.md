@@ -10,7 +10,7 @@
 app/                    宿主：导航、游戏切换、资源中心、定时、通知、引擎装配
 engine/
   api/                  插件契约：GameProfile / AutomationEngine / EngineUi / ResourcePackSpec
-  arknights/            明日方舟（MaaCore）        ┐ 待抽出，现仍在 :app
+  arknights/            明日方舟（MaaCore）— 已建模块，主体仍在 :app 待搬
   limbus/               边狱公司（移植自 LALC）    ┘ 每个游戏一个模块
 core/
   bridge/               native 截图桥、AIDL 契约、输入注入

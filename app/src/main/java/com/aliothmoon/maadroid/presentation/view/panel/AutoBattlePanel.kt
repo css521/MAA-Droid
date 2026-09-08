@@ -87,7 +87,7 @@ import com.aliothmoon.maadroid.data.model.copilot.CopilotListItem
 import com.aliothmoon.maadroid.data.resource.CopilotResourceProvider
 import com.aliothmoon.maadroid.domain.service.OperatorDisplayItem
 import com.aliothmoon.maadroid.domain.service.OperatorSummaryData
-import com.aliothmoon.maadroid.domain.state.MaaExecutionState
+import com.aliothmoon.maadroid.engine.arknights.state.MaaExecutionState
 import com.aliothmoon.maadroid.ui.LocalFloatingWindowContext
 import com.aliothmoon.maadroid.ui.components.CheckBoxWithExpandableTip
 import com.aliothmoon.maadroid.ui.components.CheckBoxWithLabel

@@ -1,6 +1,6 @@
 package com.aliothmoon.maadroid.domain.service
 
-import com.aliothmoon.maadroid.domain.state.MaaExecutionState
+import com.aliothmoon.maadroid.engine.arknights.state.MaaExecutionState
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope

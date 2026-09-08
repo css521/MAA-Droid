@@ -6,8 +6,8 @@ import com.aliothmoon.maadroid.data.model.TaskProfile
 import com.aliothmoon.maadroid.data.notification.NotificationSettings
 import com.aliothmoon.maadroid.data.notification.NotificationSettingsManager
 import com.aliothmoon.maadroid.data.notification.reapplyWebhookPresetIfBlank
-import com.aliothmoon.maadroid.domain.enums.InfrastMode
-import com.aliothmoon.maadroid.domain.enums.UiUsageConstants
+import com.aliothmoon.maadroid.engine.arknights.enums.InfrastMode
+import com.aliothmoon.maadroid.engine.arknights.enums.UiUsageConstants
 import com.aliothmoon.maadroid.domain.models.AppSettings
 import com.aliothmoon.maadroid.schedule.data.ScheduleStrategyRepository
 import com.aliothmoon.maadroid.schedule.service.ScheduleAlarmManager

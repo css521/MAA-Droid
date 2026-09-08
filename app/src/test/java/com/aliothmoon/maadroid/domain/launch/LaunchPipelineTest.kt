@@ -10,7 +10,7 @@ import com.aliothmoon.maadroid.domain.service.ScreenSaverController
 import com.aliothmoon.maadroid.domain.service.TaskEndRegistry
 import com.aliothmoon.maadroid.domain.service.UnlockGestureReader
 import com.aliothmoon.maadroid.domain.service.WakeUnlockEngine
-import com.aliothmoon.maadroid.domain.state.MaaExecutionState
+import com.aliothmoon.maadroid.engine.arknights.state.MaaExecutionState
 import com.aliothmoon.maadroid.schedule.data.ScheduleStrategyRepository
 import com.aliothmoon.maadroid.schedule.model.ExecutionResult
 import com.aliothmoon.maadroid.schedule.service.ScheduleTriggerLogger

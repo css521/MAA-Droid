@@ -3,7 +3,7 @@ package com.aliothmoon.maadroid.presentation.view.panel.roguelike
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import com.aliothmoon.maadroid.domain.enums.RoguelikeMode
+import com.aliothmoon.maadroid.engine.arknights.enums.RoguelikeMode
 import com.aliothmoon.maadroid.ui.components.SelectableChipGroup
 
 /**

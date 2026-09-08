@@ -1,6 +1,6 @@
 package com.aliothmoon.maadroid.maa.callback
 
-import com.aliothmoon.maadroid.domain.state.MaaExecutionState
+import com.aliothmoon.maadroid.engine.arknights.state.MaaExecutionState
 
 interface MaaExecutionStateHolder {
     fun currentRunState(): MaaExecutionState

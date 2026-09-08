@@ -105,7 +105,7 @@ import com.aliothmoon.maadroid.domain.models.RunMode
 import com.aliothmoon.maadroid.domain.service.AppWatchdog
 import com.aliothmoon.maadroid.domain.service.MaaCompositionService
 import com.aliothmoon.maadroid.domain.service.UnifiedStateDispatcher
-import com.aliothmoon.maadroid.domain.state.MaaExecutionState
+import com.aliothmoon.maadroid.engine.arknights.state.MaaExecutionState
 import com.aliothmoon.maadroid.manager.PermissionManager
 import com.aliothmoon.maadroid.overlay.screensaver.ScreenSaverOverlayManager
 import com.aliothmoon.maadroid.ui.LocalInputFocusManager

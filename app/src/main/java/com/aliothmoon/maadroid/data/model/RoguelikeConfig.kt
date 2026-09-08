@@ -1,9 +1,9 @@
 package com.aliothmoon.maadroid.data.model
 
-import com.aliothmoon.maadroid.domain.enums.RoguelikeBlackFlowCultivationTarget
-import com.aliothmoon.maadroid.domain.enums.RoguelikeBoskySubNodeType
-import com.aliothmoon.maadroid.domain.enums.RoguelikeMode
-import com.aliothmoon.maadroid.domain.enums.UiUsageConstants
+import com.aliothmoon.maadroid.engine.arknights.enums.RoguelikeBlackFlowCultivationTarget
+import com.aliothmoon.maadroid.engine.arknights.enums.RoguelikeBoskySubNodeType
+import com.aliothmoon.maadroid.engine.arknights.enums.RoguelikeMode
+import com.aliothmoon.maadroid.engine.arknights.enums.UiUsageConstants
 import com.aliothmoon.maadroid.maa.task.MaaTaskParams
 import com.aliothmoon.maadroid.maa.task.MaaTaskType
 import kotlinx.serialization.Serializable

@@ -1,6 +1,6 @@
 package com.aliothmoon.maadroid.data.model
 
-import com.aliothmoon.maadroid.domain.enums.UiUsageConstants
+import com.aliothmoon.maadroid.engine.arknights.enums.UiUsageConstants
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
@@ -40,7 +40,7 @@ class InfrastCrossFacilityParamsTest {
     @Test
     fun fiammettaRecoveryEnabled_isEmittedRegardlessOfMode() {
         val config = InfrastConfig(fiammettaRecoveryEnabled = true)
-        com.aliothmoon.maadroid.domain.enums.InfrastMode.entries.forEach { mode ->
+        com.aliothmoon.maadroid.engine.arknights.enums.InfrastMode.entries.forEach { mode ->
             val json = paramsOf(config.copy(mode = mode))
             assertTrue("$mode", json.getValue("fiammetta_recovery_enabled").jsonPrimitive.boolean)
         }
@@ -77,7 +77,7 @@ class InfrastCrossFacilityParamsTest {
             useWorldlyPlight = true,
             useAbyssalHunter = true,
         )
-        com.aliothmoon.maadroid.domain.enums.InfrastMode.entries.forEach { mode ->
+        com.aliothmoon.maadroid.engine.arknights.enums.InfrastMode.entries.forEach { mode ->
             val json = paramsOf(config.copy(mode = mode))
             crossFacilityKeys.forEach { key ->
                 assertTrue("$mode/$key", json.getValue(key).jsonPrimitive.boolean)
@@ -90,20 +90,20 @@ class InfrastCrossFacilityParamsTest {
         // 老配置缺项时补齐为未启用，对齐 WPF RefreshInfrastRoomList 的补全分支
         val partial = InfrastConfig(
             facilities = listOf(
-                com.aliothmoon.maadroid.domain.enums.InfrastRoomType.Trade to true,
-                com.aliothmoon.maadroid.domain.enums.InfrastRoomType.Mfg to true,
+                com.aliothmoon.maadroid.engine.arknights.enums.InfrastRoomType.Trade to true,
+                com.aliothmoon.maadroid.engine.arknights.enums.InfrastRoomType.Mfg to true,
             )
         )
         val normalized = partial.normalizedFacilities()
 
         assertEquals(
-            com.aliothmoon.maadroid.domain.enums.InfrastRoomType.values.size,
+            com.aliothmoon.maadroid.engine.arknights.enums.InfrastRoomType.values.size,
             normalized.size,
         )
         assertEquals(
             listOf(
-                com.aliothmoon.maadroid.domain.enums.InfrastRoomType.Trade,
-                com.aliothmoon.maadroid.domain.enums.InfrastRoomType.Mfg,
+                com.aliothmoon.maadroid.engine.arknights.enums.InfrastRoomType.Trade,
+                com.aliothmoon.maadroid.engine.arknights.enums.InfrastRoomType.Mfg,
             ),
             normalized.take(2).map { it.first },
         )
@@ -116,10 +116,10 @@ class InfrastCrossFacilityParamsTest {
     fun facilities_duplicatesAreDropped() {
         val dup = InfrastConfig(
             facilities = InfrastConfig().facilities +
-                (com.aliothmoon.maadroid.domain.enums.InfrastRoomType.Mfg to false)
+                (com.aliothmoon.maadroid.engine.arknights.enums.InfrastRoomType.Mfg to false)
         )
         assertEquals(
-            com.aliothmoon.maadroid.domain.enums.InfrastRoomType.values.size,
+            com.aliothmoon.maadroid.engine.arknights.enums.InfrastRoomType.values.size,
             dup.normalizedFacilities().size,
         )
     }

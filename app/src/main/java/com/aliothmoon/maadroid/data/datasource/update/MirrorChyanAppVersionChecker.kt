@@ -1,6 +1,5 @@
 package com.aliothmoon.maadroid.data.datasource.update
 
-import com.aliothmoon.maadroid.constant.MaaApi
 import com.aliothmoon.maadroid.data.api.MirrorChyanApiClient
 import com.aliothmoon.maadroid.data.api.MirrorChyanBizException
 import com.aliothmoon.maadroid.data.datasource.AppDownloader
@@ -10,6 +9,7 @@ import com.aliothmoon.maadroid.data.model.update.UpdateError
 import com.aliothmoon.maadroid.data.model.update.UpdateInfo
 import com.aliothmoon.maadroid.data.preferences.AppSettingsManager
 import com.aliothmoon.maadroid.domain.service.update.checker.AppVersionChecker
+import com.aliothmoon.maadroid.constant.AppApi
 
 class MirrorChyanAppVersionChecker(
     private val apiClient: MirrorChyanApiClient,
@@ -30,7 +30,7 @@ class MirrorChyanAppVersionChecker(
             if (cdk.length == 24) it + mapOf("cdk" to cdk) else it
         }
         val result = apiClient.getLatest(
-            MaaApi.MIRROR_CHYAN_APP_RESOURCE,
+            AppApi.MIRROR_CHYAN_APP_RESOURCE,
             query = query,
             fetchVersion = true
         )

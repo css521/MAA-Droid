@@ -26,7 +26,7 @@ import com.aliothmoon.maadroid.data.achievement.AchievementEvents
 import com.aliothmoon.maadroid.data.achievement.AchievementRepository
 import com.aliothmoon.maadroid.data.preferences.AppSettingsManager
 import com.aliothmoon.maadroid.domain.service.MaaCompositionService
-import com.aliothmoon.maadroid.domain.state.MaaExecutionState
+import com.aliothmoon.maadroid.engine.arknights.state.MaaExecutionState
 import com.aliothmoon.maadroid.overlay.screensaver.ScreenSaverOverlayManager
 import com.aliothmoon.maadroid.ui.ProvideInputFocusManager
 import com.aliothmoon.maadroid.presentation.navigation.AppNavigation

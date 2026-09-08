@@ -15,7 +15,7 @@ import com.aliothmoon.maadroid.domain.service.MaaCompositionService
 import com.aliothmoon.maadroid.domain.service.MaaResourceLoader
 import com.aliothmoon.maadroid.domain.service.ResourceInitService
 import com.aliothmoon.maadroid.domain.service.update.UpdateService
-import com.aliothmoon.maadroid.domain.state.MaaExecutionState
+import com.aliothmoon.maadroid.engine.arknights.state.MaaExecutionState
 import com.aliothmoon.maadroid.domain.usecase.SwitchCoreDataLocationUseCase
 import com.aliothmoon.maadroid.manager.PermissionManager
 import com.aliothmoon.maadroid.manager.RemoteServiceManager

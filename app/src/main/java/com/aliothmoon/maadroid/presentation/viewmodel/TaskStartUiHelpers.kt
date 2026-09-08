@@ -4,7 +4,7 @@ import android.content.Context
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.domain.service.MaaCompositionService
 import com.aliothmoon.maadroid.domain.service.resolveStartResultMessage
-import com.aliothmoon.maadroid.domain.state.MaaExecutionState
+import com.aliothmoon.maadroid.engine.arknights.state.MaaExecutionState
 import com.aliothmoon.maadroid.domain.usecase.TaskStartAcknowledgement
 import com.aliothmoon.maadroid.domain.usecase.TaskStartDecision
 import com.aliothmoon.maadroid.domain.usecase.TaskStartDecisionReason

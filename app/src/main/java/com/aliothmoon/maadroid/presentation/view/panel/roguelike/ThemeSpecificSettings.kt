@@ -13,11 +13,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.data.model.RoguelikeConfig
-import com.aliothmoon.maadroid.domain.enums.RoguelikeMode
+import com.aliothmoon.maadroid.engine.arknights.enums.RoguelikeMode
 import com.aliothmoon.maadroid.ui.components.CheckBoxWithLabel
 import com.aliothmoon.maadroid.ui.components.ITextField
 import com.aliothmoon.maadroid.ui.theme.MaaAnimatedVisibility
-import com.aliothmoon.maadroid.domain.enums.UiUsageConstants.Roguelike as RoguelikeUi
+import com.aliothmoon.maadroid.engine.arknights.enums.UiUsageConstants.Roguelike as RoguelikeUi
 
 @Composable
 fun ThemeSpecificSettings(

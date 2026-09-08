@@ -37,6 +37,7 @@ import timber.log.Timber
 import java.io.IOException
 import java.util.Locale
 import java.util.UUID
+import com.aliothmoon.maadroid.engine.arknights.enums.InfrastMode
 
 
 class TaskChainState(
@@ -332,7 +333,7 @@ class TaskChainState(
             return null
         }
         val cfg = node.config as? InfrastConfig ?: return null
-        if (cfg.mode != com.aliothmoon.maadroid.domain.enums.InfrastMode.Custom) return null
+        if (cfg.mode != InfrastMode.Custom) return null
         if (cfg.customInfrastPlanSelect < 0) return null
         val count = cfg.customPlanNames.size
         if (count <= 0) {

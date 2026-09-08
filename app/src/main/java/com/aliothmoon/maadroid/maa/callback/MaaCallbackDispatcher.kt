@@ -8,7 +8,7 @@ import com.aliothmoon.maadroid.domain.service.CoreReportRequest
 import com.aliothmoon.maadroid.domain.service.GameDataReporter
 import com.aliothmoon.maadroid.domain.service.MaaNotificationCenter
 import com.aliothmoon.maadroid.domain.service.MaaSessionLogger
-import com.aliothmoon.maadroid.domain.state.MaaExecutionState
+import com.aliothmoon.maadroid.engine.arknights.state.MaaExecutionState
 import com.aliothmoon.maadroid.maa.AsstMsg
 import com.aliothmoon.maadroid.maa.CallbackJsonAbbreviator
 import timber.log.Timber

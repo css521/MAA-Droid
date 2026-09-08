@@ -34,7 +34,7 @@ import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.data.preferences.AppSettingsManager
 import com.aliothmoon.maadroid.domain.models.RunMode
 import com.aliothmoon.maadroid.domain.service.MaaCompositionService
-import com.aliothmoon.maadroid.domain.state.MaaExecutionState
+import com.aliothmoon.maadroid.engine.arknights.state.MaaExecutionState
 import com.aliothmoon.maadroid.ui.LocalFloatingWindowContext
 import com.aliothmoon.maadroid.ui.LocalInputFocusManager
 import com.aliothmoon.maadroid.ui.components.AdaptiveTaskPromptDialog

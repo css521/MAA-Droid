@@ -1,8 +1,8 @@
 package com.aliothmoon.maadroid.data.model
 
-import com.aliothmoon.maadroid.domain.enums.RoguelikeBlackFlowCultivationTarget
-import com.aliothmoon.maadroid.domain.enums.RoguelikeMode
-import com.aliothmoon.maadroid.domain.enums.UiUsageConstants.Roguelike as RoguelikeUi
+import com.aliothmoon.maadroid.engine.arknights.enums.RoguelikeBlackFlowCultivationTarget
+import com.aliothmoon.maadroid.engine.arknights.enums.RoguelikeMode
+import com.aliothmoon.maadroid.engine.arknights.enums.UiUsageConstants.Roguelike as RoguelikeUi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive

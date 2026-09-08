@@ -59,13 +59,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.aliothmoon.maadroid.R
-import com.aliothmoon.maadroid.constant.MaaApi
 import com.aliothmoon.maadroid.data.config.MaaPathConfig
 import com.aliothmoon.maadroid.data.model.CustomInfrastConfig
 import com.aliothmoon.maadroid.data.model.InfrastConfig
-import com.aliothmoon.maadroid.domain.enums.InfrastMode
-import com.aliothmoon.maadroid.domain.enums.InfrastRoomType
-import com.aliothmoon.maadroid.domain.enums.UiUsageConstants
+import com.aliothmoon.maadroid.engine.arknights.enums.InfrastMode
+import com.aliothmoon.maadroid.engine.arknights.enums.InfrastRoomType
+import com.aliothmoon.maadroid.engine.arknights.enums.UiUsageConstants
 import com.aliothmoon.maadroid.ui.LocalFloatingWindowContext
 import com.aliothmoon.maadroid.ui.components.CheckBoxWithExpandableTip
 import com.aliothmoon.maadroid.ui.components.tip.ExpandableTipContent
@@ -83,6 +82,7 @@ import sh.calvin.reorderable.ReorderableColumn
 import java.io.File
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import com.aliothmoon.maadroid.engine.arknights.constant.ArknightsApi
 
 /**
  * 基建换班配置面板
@@ -484,7 +484,7 @@ private fun CustomInfrastSection(
             style = MaterialTheme.typography.bodySmall.copy(
                 textDecoration = TextDecoration.Underline
             ), color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable {
-                Misc.openUriSafely(context, MaaApi.BASE_SCHEDULING_SCHEMA)
+                Misc.openUriSafely(context, ArknightsApi.BASE_SCHEDULING_SCHEMA)
             })
 
         val importBackgroundOnlyMessage =

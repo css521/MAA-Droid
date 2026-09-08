@@ -1,10 +1,10 @@
 package com.aliothmoon.maadroid.announcement
 
 import android.content.Context
-import com.aliothmoon.maadroid.constant.MaaApi
 import com.aliothmoon.maadroid.data.preferences.AppSettingsManager
 import java.io.IOException
 import java.util.Locale
+import com.aliothmoon.maadroid.constant.AppApi
 
 object AnnouncementConfig {
 
@@ -23,7 +23,7 @@ object AnnouncementConfig {
         if (isZh(language)) "announcement/NoSkland.jpg" else "announcement/NoSklandEn.jpg"
 
     fun remoteUrl(language: AppSettingsManager.AppLanguage): String =
-        if (isZh(language)) MaaApi.ANNOUNCEMENT_ZH else MaaApi.ANNOUNCEMENT_EN
+        if (isZh(language)) AppApi.ANNOUNCEMENT_ZH else AppApi.ANNOUNCEMENT_EN
 
     /** assets 与磁盘缓存共用 */
     fun fileName(language: AppSettingsManager.AppLanguage): String =

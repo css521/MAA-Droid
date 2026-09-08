@@ -92,7 +92,6 @@ import androidx.navigation.NavController
 import com.aliothmoon.maadroid.BuildConfig
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.constant.DefaultDisplayConfig
-import com.aliothmoon.maadroid.constant.MaaApi
 import com.aliothmoon.maadroid.constant.OFFICIAL_SHIZUKU_PACKAGE
 import com.aliothmoon.maadroid.constant.Routes
 import com.aliothmoon.maadroid.data.model.update.UpdateChannel
@@ -140,6 +139,7 @@ import org.koin.compose.koinInject
 import kotlin.math.roundToInt
 import com.aliothmoon.maadroid.ui.theme.ThemeMode
 import com.aliothmoon.maadroid.engine.EngineRegistry
+import com.aliothmoon.maadroid.constant.AppApi
 
 // LazyColumn 里「关于」分区的项序，item 顺序变了要同步
 private const val ABOUT_ITEM_INDEX = 8
@@ -1143,7 +1143,7 @@ fun SettingsView(
                                 description = stringResource(R.string.settings_about_faq_desc),
                                 contentColor = contentColor,
                             ) {
-                                Misc.openUriSafely(context, MaaApi.FAQ_URL)
+                                Misc.openUriSafely(context, AppApi.FAQ_URL)
                             }
                             ListItemDivider()
                             SettingClickItem(
@@ -1151,7 +1151,7 @@ fun SettingsView(
                                 description = stringResource(R.string.settings_about_feedback_desc),
                                 contentColor = contentColor,
                             ) {
-                                Misc.openUriSafely(context, MaaApi.FEEDBACK_URL)
+                                Misc.openUriSafely(context, AppApi.FEEDBACK_URL)
                             }
                         }
                         ListItemDivider()

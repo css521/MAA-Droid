@@ -1,5 +1,4 @@
-package com.aliothmoon.maadroid.domain.enums
-
+package com.aliothmoon.maadroid.engine.arknights.enums
 /**
  * 界园常乐节点子类型 - 对齐 WPF RoguelikeBoskySubNodeType 枚举
  */

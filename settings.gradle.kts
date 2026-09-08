@@ -40,6 +40,7 @@ include(":app")
 
 // 游戏引擎层：每个游戏一个模块，彼此不相依
 include(":engine:api")
+include(":engine:arknights")
 include(":engine:limbus")
 
 // 平台能力层：与游戏无关，不得反向依赖 engine:*（由 ModuleBoundaryContractTest 钉住）

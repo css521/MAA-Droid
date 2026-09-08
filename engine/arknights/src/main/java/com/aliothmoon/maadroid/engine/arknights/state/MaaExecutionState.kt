@@ -1,5 +1,4 @@
-package com.aliothmoon.maadroid.domain.state
-
+package com.aliothmoon.maadroid.engine.arknights.state
 enum class MaaExecutionState {
     IDLE,      // 空闲
     STARTING,  // 启动中

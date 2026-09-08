@@ -212,6 +212,7 @@ dependencies {
     implementation(project(":core:ui"))
     implementation(project(":core:common"))
     // 各游戏引擎。:app 是唯一依赖全部引擎的模块（装配点）
+    implementation(project(":engine:arknights"))
     implementation(project(":engine:limbus"))
     compileOnly(project(":hidden-api"))
     implementation(project(":tooling:annotation-api"))

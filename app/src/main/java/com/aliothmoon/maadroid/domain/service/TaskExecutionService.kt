@@ -14,7 +14,7 @@ import com.aliothmoon.maadroid.domain.notification.LiveCategory
 import com.aliothmoon.maadroid.domain.notification.LiveNotifyIds
 import com.aliothmoon.maadroid.domain.notification.LiveSession
 import com.aliothmoon.maadroid.domain.notification.LiveSessionCoordinator
-import com.aliothmoon.maadroid.domain.state.MaaExecutionState
+import com.aliothmoon.maadroid.engine.arknights.state.MaaExecutionState
 import com.aliothmoon.maadroid.maa.callback.TaskChainStatusTracker
 import com.aliothmoon.maadroid.maa.callback.TaskRunInfo
 import com.aliothmoon.maadroid.maa.callback.TaskRunStatus

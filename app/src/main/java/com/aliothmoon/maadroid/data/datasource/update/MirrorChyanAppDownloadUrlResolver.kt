@@ -2,7 +2,6 @@ package com.aliothmoon.maadroid.data.datasource.update
 
 import com.aliothmoon.maadroid.BuildConfig
 import com.aliothmoon.maadroid.R
-import com.aliothmoon.maadroid.constant.MaaApi
 import com.aliothmoon.maadroid.data.api.CdkRequiredException
 import com.aliothmoon.maadroid.data.api.MirrorChyanApiClient
 import com.aliothmoon.maadroid.data.model.update.UpdateChannel
@@ -10,6 +9,7 @@ import com.aliothmoon.maadroid.data.preferences.AppSettingsManager
 import com.aliothmoon.maadroid.domain.service.update.resolver.AppDownloadUrlResolver
 import com.aliothmoon.maadroid.common.i18n.LocalizedException
 import com.aliothmoon.maadroid.common.i18n.uiTextOf
+import com.aliothmoon.maadroid.constant.AppApi
 
 class MirrorChyanAppDownloadUrlResolver(
     private val apiClient: MirrorChyanApiClient,
@@ -23,7 +23,7 @@ class MirrorChyanAppDownloadUrlResolver(
         }
 
         return apiClient.getLatest(
-            MaaApi.MIRROR_CHYAN_APP_RESOURCE,
+            AppApi.MIRROR_CHYAN_APP_RESOURCE,
             query = mapOf(
                 "current_version" to BuildConfig.VERSION_NAME,
                 "user_agent" to "MAA-Meow",

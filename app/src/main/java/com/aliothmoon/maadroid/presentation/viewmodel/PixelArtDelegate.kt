@@ -12,7 +12,7 @@ import com.aliothmoon.maadroid.domain.models.pixelart.PixelDitherMode
 import com.aliothmoon.maadroid.domain.models.pixelart.PixelFitMode
 import com.aliothmoon.maadroid.domain.models.pixelart.PreparedImage
 import com.aliothmoon.maadroid.domain.service.pixelart.PixelPaintHelper
-import com.aliothmoon.maadroid.domain.state.MaaExecutionState
+import com.aliothmoon.maadroid.engine.arknights.state.MaaExecutionState
 import com.aliothmoon.maadroid.maa.callback.ToolboxResultCollector
 import com.aliothmoon.maadroid.common.i18n.UiText
 import com.aliothmoon.maadroid.common.i18n.uiTextOf

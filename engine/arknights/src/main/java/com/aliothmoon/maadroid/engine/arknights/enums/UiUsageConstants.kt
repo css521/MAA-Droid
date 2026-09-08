@@ -1,6 +1,5 @@
-package com.aliothmoon.maadroid.domain.enums
-
-import com.aliothmoon.maadroid.domain.enums.UiUsageConstants.USER_DEFINED_INFRAST
+package com.aliothmoon.maadroid.engine.arknights.enums
+import com.aliothmoon.maadroid.engine.arknights.enums.UiUsageConstants.USER_DEFINED_INFRAST
 
 
 object UiUsageConstants {

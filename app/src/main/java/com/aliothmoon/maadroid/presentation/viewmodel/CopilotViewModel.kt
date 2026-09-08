@@ -22,7 +22,7 @@ import com.aliothmoon.maadroid.domain.service.CopilotRequestException
 import com.aliothmoon.maadroid.domain.service.MaaCompositionService
 import com.aliothmoon.maadroid.domain.service.OperatorSummaryData
 import com.aliothmoon.maadroid.domain.service.copilot.CopilotRequirementCorrector
-import com.aliothmoon.maadroid.domain.state.MaaExecutionState
+import com.aliothmoon.maadroid.engine.arknights.state.MaaExecutionState
 import com.aliothmoon.maadroid.domain.usecase.CheckGameReadinessUseCase
 import com.aliothmoon.maadroid.domain.usecase.GameReadiness
 import com.aliothmoon.maadroid.domain.usecase.TaskStartContext

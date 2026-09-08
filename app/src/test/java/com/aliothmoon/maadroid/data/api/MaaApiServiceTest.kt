@@ -1,6 +1,5 @@
 package com.aliothmoon.maadroid.data.api
 
-import com.aliothmoon.maadroid.constant.MaaApi
 import com.aliothmoon.maadroid.data.config.MaaPathConfig
 import io.mockk.coEvery
 import io.mockk.every
@@ -20,6 +19,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 import java.io.IOException
+import com.aliothmoon.maadroid.engine.arknights.constant.ArknightsApi
 
 /**
  * 锁住两条不变量：
@@ -31,9 +31,9 @@ class MaaApiServiceTest {
     @get:Rule
     val tempFolder = TemporaryFolder()
 
-    private val api = MaaApi.STAGE_ACTIVITY_API
-    private val primary = MaaApi.MAA_API
-    private val backup = MaaApi.MAA_API_BACKUP
+    private val api = ArknightsApi.STAGE_ACTIVITY_API
+    private val primary = ArknightsApi.MAA_API
+    private val backup = ArknightsApi.MAA_API_BACKUP
 
     /** 模拟持久化的 validator，跨 service 实例存活 */
     private val storedETags = mutableMapOf<String, String>()

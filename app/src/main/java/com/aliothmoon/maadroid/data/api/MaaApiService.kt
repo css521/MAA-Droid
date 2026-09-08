@@ -1,8 +1,6 @@
 package com.aliothmoon.maadroid.data.api
 
 import android.content.Context
-import com.aliothmoon.maadroid.constant.MaaApi
-import com.aliothmoon.maadroid.constant.MaaApi.API_URLS
 import com.aliothmoon.maadroid.data.config.MaaPathConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -11,6 +9,8 @@ import timber.log.Timber
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
+import com.aliothmoon.maadroid.engine.arknights.constant.ArknightsApi
+import com.aliothmoon.maadroid.engine.arknights.constant.ArknightsApi.API_URLS
 
 class MaaApiService(
     private val context: Context,
@@ -201,14 +201,14 @@ class MaaApiService(
      * 获取活动关卡数据
      */
     suspend fun getStageActivity(): String? {
-        return requestWithCache(MaaApi.STAGE_ACTIVITY_API)
+        return requestWithCache(ArknightsApi.STAGE_ACTIVITY_API)
     }
 
     /**
      * 获取任务配置数据
      */
     suspend fun getTasksInfo(): String? {
-        return requestWithCache(MaaApi.TASKS_API)
+        return requestWithCache(ArknightsApi.TASKS_API)
     }
 
     /**
@@ -216,16 +216,16 @@ class MaaApiService(
      * @param clientType 客户端类型（如 YoStarEN、YoStarJP、YoStarKR、txwy）
      */
     suspend fun getGlobalTasksInfo(clientType: String): String? {
-        return requestWithCache(MaaApi.getGlobalTasksApi(clientType))
+        return requestWithCache(ArknightsApi.getGlobalTasksApi(clientType))
     }
 
     /** 检查活动关卡数据是否有更新 */
     suspend fun checkStageActivityChanged(): Boolean {
-        return checkChanged(MaaApi.STAGE_ACTIVITY_API)
+        return checkChanged(ArknightsApi.STAGE_ACTIVITY_API)
     }
 
     /** 检查任务配置数据是否有更新 */
     suspend fun checkTasksChanged(): Boolean {
-        return checkChanged(MaaApi.TASKS_API)
+        return checkChanged(ArknightsApi.TASKS_API)
     }
 }
