@@ -72,6 +72,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
+import com.aliothmoon.maadroid.presentation.view.engine.EngineTaskView
 
 /** 主 Tab 路由集合（与 [BottomNavTab.all] 单一真源），用于判断是否处于主界面。 */
 private val MAIN_TAB_ROUTES: Set<String> = BottomNavTab.all.mapTo(HashSet()) { it.route }
@@ -208,6 +209,12 @@ fun AppNavigation(
                 // 主 Tab 路由仅作占位，真实内容由 MainScreen 的 HorizontalPager 渲染
                 BottomNavTab.all.forEach { tab -> composable(tab.route) {} }
 
+                composable(Routes.ENGINE_TASK) { backStackEntry ->
+                    val engineId = backStackEntry.arguments?.getString("engineId")
+                    if (engineId != null) {
+                        EngineTaskView(navController = navController, engineId = engineId)
+                    }
+                }
                 composable(Routes.NOTIFICATION) {
                     NotificationSettingsView(navController = navController)
                 }

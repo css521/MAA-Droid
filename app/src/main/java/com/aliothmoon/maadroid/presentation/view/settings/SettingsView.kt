@@ -139,6 +139,7 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import kotlin.math.roundToInt
 import com.aliothmoon.maadroid.ui.theme.ThemeMode
+import com.aliothmoon.maadroid.engine.EngineRegistry
 
 // LazyColumn 里「关于」分区的项序，item 顺序变了要同步
 private const val ABOUT_ITEM_INDEX = 8
@@ -981,6 +982,36 @@ fun SettingsView(
                             contentColor = contentColor
                         ) {
                             importLauncher.launch(arrayOf("application/json"))
+                        }
+                    }
+                }
+            }
+
+            // 其它游戏引擎。方舟的任务页仍是宿主专属的 BackgroundTaskView，
+            // 这里按 EngineRegistry 列出**自带任务面板**的引擎，为它们提供入口。
+            // 方舟的 taskPanels 目前为空，故不会出现在这里 —— 等它收拢为
+            // AutomationEngine 并把面板迁到 EngineUi 之后，两条路径合并。
+            // 注册表在启动时装配完就不再变，且只有两项，无需 remember
+            // （这里是 LazyListScope，不是 composable 上下文，remember 也用不了）
+            val enginesWithPanels = EngineRegistry.profiles().filter {
+                EngineRegistry.provider(it.id)?.ui?.taskPanels?.isNotEmpty() == true
+            }
+            if (enginesWithPanels.isNotEmpty()) {
+                item {
+                    CollapsibleSection(
+                        title = stringResource(R.string.settings_section_engines),
+                        sectionKey = "settings_section_engines",
+                    ) {
+                        SettingsGroupCard {
+                            enginesWithPanels.forEach { profile ->
+                                SettingClickItem(
+                                    title = stringResource(profile.displayNameRes),
+                                    description = stringResource(R.string.settings_engine_task_desc),
+                                    contentColor = contentColor
+                                ) {
+                                    navController.navigate(Routes.engineTask(profile.id))
+                                }
+                            }
                         }
                     }
                 }

@@ -2491,4 +2491,9 @@
     <string name="blackflow_termination_map_rebuild_failed_twice">Map rebuild failed twice consecutively</string>
     <string name="blackflow_termination_planning_retry_exhausted">Preview changes exhausted the route replanning limit</string>
     <string name="blackflow_termination_unknown">See the file log for details</string>
+    <string name="engine_start">Start</string>
+    <string name="engine_stop">Stop</string>
+    <string name="engine_no_task_panels">This engine has no task panels yet</string>
+    <string name="settings_section_engines">Other games</string>
+    <string name="settings_engine_task_desc">Configure and run this game\u2019s tasks</string>
 </resources>

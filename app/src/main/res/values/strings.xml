@@ -2548,4 +2548,9 @@
     <string name="blackflow_termination_map_rebuild_failed_twice">连续两次地图重建失败</string>
     <string name="blackflow_termination_planning_retry_exhausted">预览反复改变可选路线，已经超过重新规划次数</string>
     <string name="blackflow_termination_unknown">详细原因请查看文件日志</string>
+    <string name="engine_start">开始</string>
+    <string name="engine_stop">停止</string>
+    <string name="engine_no_task_panels">该引擎的任务面板尚未接入</string>
+    <string name="settings_section_engines">其它游戏</string>
+    <string name="settings_engine_task_desc">配置并运行该游戏的任务</string>
 </resources>
