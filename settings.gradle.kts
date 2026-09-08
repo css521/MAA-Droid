@@ -32,6 +32,7 @@ rootProject.name = "MaaDroid"
 include(":app")
 include(":core-bridge")
 include(":core-remote")
+include(":engine-api")
 include(":hidden-api")
 include(":annotation-api")
 include(":ksp-processor")
