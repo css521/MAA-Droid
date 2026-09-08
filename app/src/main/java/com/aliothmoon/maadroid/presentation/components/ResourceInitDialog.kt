@@ -23,8 +23,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.domain.state.ResourceInitState
-import com.aliothmoon.maadroid.theme.OpaqueTheme
+import com.aliothmoon.maadroid.ui.theme.OpaqueTheme
 import com.aliothmoon.maadroid.utils.i18n.asString
+import com.aliothmoon.maadroid.ui.components.AdaptiveTaskPromptDialog
 
 /**
  * 资源初始化弹窗

@@ -66,7 +66,7 @@ import com.aliothmoon.maadroid.schedule.model.ScheduleStrategy
 import com.aliothmoon.maadroid.schedule.service.AutoStartHelper
 import com.aliothmoon.maadroid.schedule.service.AutoStartTarget
 import com.aliothmoon.maadroid.schedule.service.ExactAlarmSettings
-import com.aliothmoon.maadroid.theme.MaaDesignTokens
+import com.aliothmoon.maadroid.ui.theme.MaaDesignTokens
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

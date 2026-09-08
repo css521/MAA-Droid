@@ -22,12 +22,12 @@ import com.aliothmoon.maadroid.domain.models.RunMode
 import com.aliothmoon.maadroid.domain.service.MaaCompositionService
 import com.aliothmoon.maadroid.domain.state.MaaExecutionState
 import com.aliothmoon.maadroid.overlay.border.BorderOverlayManager
-import com.aliothmoon.maadroid.presentation.LocalFloatingWindowContext
-import com.aliothmoon.maadroid.presentation.ProvideInputFocusManager
+import com.aliothmoon.maadroid.ui.LocalFloatingWindowContext
+import com.aliothmoon.maadroid.ui.ProvideInputFocusManager
 import com.aliothmoon.maadroid.presentation.view.panel.ExpandedControlPanel
 import com.aliothmoon.maadroid.schedule.model.CountdownState
 import com.aliothmoon.maadroid.service.AccessibilityHelperService
-import com.aliothmoon.maadroid.theme.MaaDroidTheme
+import com.aliothmoon.maadroid.ui.theme.MaaDroidTheme
 import com.aliothmoon.maadroid.utils.Misc
 import com.aliothmoon.maadroid.utils.UiScale
 import com.petterp.floatingx.FloatingX

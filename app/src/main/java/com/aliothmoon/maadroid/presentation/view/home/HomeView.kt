@@ -68,7 +68,7 @@ import com.aliothmoon.maadroid.domain.models.RemoteBackend
 import com.aliothmoon.maadroid.domain.models.RunMode
 import com.aliothmoon.maadroid.domain.state.ResourceInitState
 import com.aliothmoon.maadroid.manager.PermissionManager
-import com.aliothmoon.maadroid.presentation.components.AdaptiveTaskPromptDialog
+import com.aliothmoon.maadroid.ui.components.AdaptiveTaskPromptDialog
 import com.aliothmoon.maadroid.presentation.components.ChangelogDialog
 import com.aliothmoon.maadroid.presentation.components.ResourceInitDialog
 import com.aliothmoon.maadroid.presentation.components.ShizukuReadinessGate
@@ -81,8 +81,8 @@ import com.aliothmoon.maadroid.presentation.state.StatusColorType
 import com.aliothmoon.maadroid.presentation.state.UiEffect
 import com.aliothmoon.maadroid.presentation.viewmodel.HomeViewModel
 import com.aliothmoon.maadroid.presentation.viewmodel.UpdateViewModel
-import com.aliothmoon.maadroid.theme.LocalReduceMotion
-import com.aliothmoon.maadroid.theme.MaaAnimatedVisibility
+import com.aliothmoon.maadroid.ui.theme.LocalReduceMotion
+import com.aliothmoon.maadroid.ui.theme.MaaAnimatedVisibility
 import com.aliothmoon.maadroid.utils.Misc
 import com.aliothmoon.maadroid.utils.i18n.UiText
 import com.aliothmoon.maadroid.utils.i18n.asString

@@ -38,8 +38,8 @@ import com.aliothmoon.maadroid.domain.models.pixelart.PixelArtPlan
 import com.aliothmoon.maadroid.domain.models.pixelart.PixelDitherMode
 import com.aliothmoon.maadroid.domain.models.pixelart.PixelFitMode
 import com.aliothmoon.maadroid.domain.service.pixelart.PixelPaintHelper
-import com.aliothmoon.maadroid.presentation.LocalFloatingWindowContext
-import com.aliothmoon.maadroid.presentation.components.SelectableCardButton
+import com.aliothmoon.maadroid.ui.LocalFloatingWindowContext
+import com.aliothmoon.maadroid.ui.components.SelectableCardButton
 import com.aliothmoon.maadroid.presentation.viewmodel.GRID_DELAY_MAX_MS
 import com.aliothmoon.maadroid.presentation.viewmodel.PixelArtDelegate
 import com.aliothmoon.maadroid.utils.Misc

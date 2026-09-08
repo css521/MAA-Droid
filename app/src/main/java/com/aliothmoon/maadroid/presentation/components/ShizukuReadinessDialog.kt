@@ -9,6 +9,7 @@ import androidx.compose.ui.res.stringResource
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.manager.ShizukuReadiness
 import com.aliothmoon.maadroid.manager.ShizukuReadinessStage
+import com.aliothmoon.maadroid.ui.components.AdaptiveTaskPromptDialog
 
 /**
  * Shizuku 就绪引导弹窗（统一组件）

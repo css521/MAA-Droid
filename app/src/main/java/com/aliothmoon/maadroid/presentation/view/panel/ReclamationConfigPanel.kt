@@ -27,10 +27,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.data.model.ReclamationConfig
-import com.aliothmoon.maadroid.presentation.components.CheckBoxWithLabel
-import com.aliothmoon.maadroid.presentation.components.ITextField
-import com.aliothmoon.maadroid.presentation.components.SelectableChipGroup
-import com.aliothmoon.maadroid.theme.MaaAnimatedVisibility
+import com.aliothmoon.maadroid.ui.components.CheckBoxWithLabel
+import com.aliothmoon.maadroid.ui.components.ITextField
+import com.aliothmoon.maadroid.ui.components.SelectableChipGroup
+import com.aliothmoon.maadroid.ui.theme.MaaAnimatedVisibility
 import kotlinx.coroutines.launch
 
 @Composable

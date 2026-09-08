@@ -51,6 +51,7 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.io.InputStream
 import java.io.OutputStream
+import com.aliothmoon.maadroid.ui.theme.ThemeMode
 
 /** markdown 是 Mirror 酱下发的远端正文，没有资源可以支撑，不套 UiText */
 data class ChangelogArchive(
@@ -452,14 +453,14 @@ class SettingsViewModel(
         }
     }
 
-    val themeMode: StateFlow<AppSettingsManager.ThemeMode> = appSettingsManager.themeMode
+    val themeMode: StateFlow<ThemeMode> = appSettingsManager.themeMode
         .stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(5000),
-            AppSettingsManager.ThemeMode.WHITE
+            ThemeMode.WHITE
         )
 
-    fun setThemeMode(mode: AppSettingsManager.ThemeMode) {
+    fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch {
             appSettingsManager.setThemeMode(mode)
         }

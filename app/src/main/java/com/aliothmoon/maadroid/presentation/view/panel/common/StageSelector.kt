@@ -37,8 +37,8 @@ import androidx.compose.ui.unit.dp
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.data.resource.StageAliasMapper
 import com.aliothmoon.maadroid.data.resource.StageGroup
-import com.aliothmoon.maadroid.presentation.components.ITextFieldWithFocus
-import com.aliothmoon.maadroid.theme.MaaAnimatedVisibility
+import com.aliothmoon.maadroid.ui.components.ITextFieldWithFocus
+import com.aliothmoon.maadroid.ui.theme.MaaAnimatedVisibility
 
 /**
  * 已选关卡徽章：主色底、白字、圆角

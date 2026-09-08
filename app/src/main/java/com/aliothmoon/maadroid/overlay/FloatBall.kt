@@ -35,7 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.domain.state.MaaExecutionState
-import com.aliothmoon.maadroid.theme.MaaMotion
+import com.aliothmoon.maadroid.ui.theme.MaaMotion
 
 
 @Composable

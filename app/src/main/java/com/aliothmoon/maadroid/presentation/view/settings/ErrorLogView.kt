@@ -48,11 +48,11 @@ import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.data.achievement.AchievementEvents
 import com.aliothmoon.maadroid.data.achievement.AchievementRepository
 
-import com.aliothmoon.maadroid.presentation.components.AdaptiveTaskPromptDialog
+import com.aliothmoon.maadroid.ui.components.AdaptiveTaskPromptDialog
 import com.aliothmoon.maadroid.presentation.components.LogExportController
 import com.aliothmoon.maadroid.presentation.components.TopAppBar
 import com.aliothmoon.maadroid.presentation.viewmodel.ErrorLogViewModel
-import com.aliothmoon.maadroid.theme.LogTypography
+import com.aliothmoon.maadroid.ui.theme.LogTypography
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import java.time.Instant

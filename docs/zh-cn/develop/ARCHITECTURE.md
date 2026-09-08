@@ -15,8 +15,8 @@ engine/
 core/
   bridge/               native 截图桥、AIDL 契约、输入注入
   remote/               提权进程实现、虚拟显示器、设备侧抽象实现
-  common/               偏好、日志、通知、定时、更新框架   ┐ 待拆，现仍在 :app
-  ui/                   Compose 组件、主题、悬浮窗        ┘
+  ui/                   引擎与宿主共用的 Compose 组件与主题
+  common/               偏好、日志、通知、定时、更新框架   ← 待拆，现仍在 :app
 hidden-api/             framework 隐藏 API 桩，仅编译期
 tooling/
   annotation-api/       偏好 KSP 的注解
@@ -41,9 +41,38 @@ Gradle 路径与目录一致：`:engine:limbus`、`:core:bridge`、`:tooling:ksp
 注意区分 `engine.*`（契约所在包，`core:remote` 依赖它是设计如此）与
 `engine.<游戏>.*`（具体引擎，禁止被 core 引用）。规则只禁后者。
 
-第三条规则同时**编码了抽取 `engine/arknights` 的前置条件**：方舟代码现在用着仍在
-`:app` 里的偏好、通知与 Compose 组件，直接搬过去会立刻触犯它 —— 也就是必须先把这些
-通用能力下沉到 `core:common` / `core:ui`，顺序不能颠倒。
+第三条规则同时**编码了抽取 `engine/arknights` 的前置条件**：方舟代码用着仍在 `:app`
+里的东西，直接搬过去会立刻触犯它。这些依赖由 `HostEngineIsolationContractTest`
+按宿主包逐项计数、只允许下降，进度一目了然：
+
+| 方舟依赖的宿主包 | 起始 | 当前 | 去向 |
+|---|---|---|---|
+| `presentation.components.` | 76 | **4** | `core:ui`（已下沉；残留 4 处是误放在宿主的方舟组件）|
+| `theme.` | 22 | **2** | `core:ui`（已下沉；残留 2 处是日志色板，依赖宿主日志模型）|
+| `utils.i18n.` | 20 | 20 | `core:common` |
+| `presentation.viewmodel.` | 15 | 15 | 方舟改构造函数注入即可消除，非前置 |
+| `data.preferences.` | 10 | 10 | 随 `TaskChainState` 迁入方舟 |
+
+### `core:ui` 的范围是怎么划的
+
+**按引擎实际需要，而不是把 `:app` 的组件目录整个搬过来。** 实测方舟只用到 18 个组件符号
+（`presentation/components/` 共 33 个文件），其中还要剔掉两类：
+
+- `ResourceLoadingOverlay` 依赖 `MaaResourceLoader` —— 它是**方舟专属**的，搬进 `core:ui`
+  会让平台层反向依赖引擎，正是边界契约要拦的事
+- `RecruitTimeSelector` / `CoreCharSelector` 是误放在宿主目录里的方舟组件
+
+theme 同理：22 次引用里 19 次只指向 `MaaMotion.kt` 一个文件。
+
+最终 `core:ui` = 13 个组件文件 + theme（除 `LogColors.kt`）+ 6 条通用文案，约 2.4k 行。
+`LogColors.kt` 留在 `:app`：它依赖 `data/model` 里的日志模型，那批东西的去处是
+`core:common`，把它塞进 UI 模块是错误的分层。
+
+一处解耦值得记下：`ThemeMode` 原本是 `AppSettingsManager` 的嵌套枚举，于是 `Theme.kt`
+想下沉就得连整个设置管理器一起拖走。主题模式本就属于主题，故提到 `core:ui`；
+宿主的设置只负责持久化它的 `name`（**枚举名即持久化值，不可改名**，改了会让已装用户的
+主题设置读不出来）。同理 `MaaDroidTheme` 不再直接调宿主的日志调色板，改为只提供
+`LocalIsDarkTheme`，由宿主自己在其上叠加。
 
 ## 两层引擎注册
 

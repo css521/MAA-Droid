@@ -24,7 +24,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.aliothmoon.maadroid.R
-import com.aliothmoon.maadroid.presentation.components.ITextField
+import com.aliothmoon.maadroid.ui.components.ITextField
 
 @Composable
 fun InlineAddItemPanel(

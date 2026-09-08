@@ -40,7 +40,7 @@ import com.aliothmoon.maadroid.presentation.components.InfoCard
 import com.aliothmoon.maadroid.presentation.components.TopAppBar
 import com.aliothmoon.maadroid.presentation.viewmodel.AchievementEvent
 import com.aliothmoon.maadroid.presentation.viewmodel.AchievementViewModel
-import com.aliothmoon.maadroid.theme.MaaDesignTokens
+import com.aliothmoon.maadroid.ui.theme.MaaDesignTokens
 import org.koin.androidx.compose.koinViewModel
 import java.text.DateFormat
 import java.util.Date

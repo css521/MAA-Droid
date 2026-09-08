@@ -56,7 +56,7 @@ import com.aliothmoon.maadroid.schedule.model.ExecutionResult
 import com.aliothmoon.maadroid.schedule.model.ScheduleFixAction
 import com.aliothmoon.maadroid.schedule.model.TriggerLogEntry
 import com.aliothmoon.maadroid.schedule.service.ScheduleTriggerLogger.TriggerLogSummary
-import com.aliothmoon.maadroid.theme.MaaDesignTokens
+import com.aliothmoon.maadroid.ui.theme.MaaDesignTokens
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import org.koin.androidx.compose.koinViewModel

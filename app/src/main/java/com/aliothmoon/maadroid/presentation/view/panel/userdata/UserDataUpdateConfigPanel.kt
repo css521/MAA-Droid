@@ -29,8 +29,8 @@ import com.aliothmoon.maadroid.data.model.UserDataUpdateConfig
 import com.aliothmoon.maadroid.data.repository.DepotRepository
 import com.aliothmoon.maadroid.data.repository.OperBoxRepository
 import com.aliothmoon.maadroid.domain.models.UserDataUpdateTriggerInterval
-import com.aliothmoon.maadroid.presentation.components.CheckBoxWithLabel
-import com.aliothmoon.maadroid.presentation.components.SelectableChipGroup
+import com.aliothmoon.maadroid.ui.components.CheckBoxWithLabel
+import com.aliothmoon.maadroid.ui.components.SelectableChipGroup
 import com.aliothmoon.maadroid.utils.i18n.formatToolboxSyncTime
 import org.koin.compose.koinInject
 

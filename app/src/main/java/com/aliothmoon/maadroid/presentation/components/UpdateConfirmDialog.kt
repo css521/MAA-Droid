@@ -8,6 +8,7 @@ import androidx.compose.ui.res.stringResource
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.data.datasource.ResourceDownloader
 import com.aliothmoon.maadroid.data.model.update.UpdateInfo
+import com.aliothmoon.maadroid.ui.components.AdaptiveTaskPromptDialog
 
 /**
  * 资源更新确认弹窗

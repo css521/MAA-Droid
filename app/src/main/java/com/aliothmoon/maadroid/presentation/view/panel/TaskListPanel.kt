@@ -42,7 +42,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.data.model.TaskChainNode
-import com.aliothmoon.maadroid.theme.MaaAnimatedVisibility
+import com.aliothmoon.maadroid.ui.theme.MaaAnimatedVisibility
 import sh.calvin.reorderable.ReorderableColumn
 
 /**

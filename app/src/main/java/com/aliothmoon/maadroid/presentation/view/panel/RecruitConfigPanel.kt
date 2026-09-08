@@ -46,10 +46,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.data.model.RecruitConfig
 import com.aliothmoon.maadroid.data.resource.ResourceDataManager
-import com.aliothmoon.maadroid.presentation.components.INumericField
+import com.aliothmoon.maadroid.ui.components.INumericField
 import com.aliothmoon.maadroid.presentation.components.RecruitTimeSelector
-import com.aliothmoon.maadroid.presentation.components.tip.ExpandableTipContent
-import com.aliothmoon.maadroid.presentation.components.tip.ExpandableTipIcon
+import com.aliothmoon.maadroid.ui.components.tip.ExpandableTipContent
+import com.aliothmoon.maadroid.ui.components.tip.ExpandableTipIcon
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 

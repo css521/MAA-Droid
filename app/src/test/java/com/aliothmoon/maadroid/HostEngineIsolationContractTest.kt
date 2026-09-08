@@ -136,9 +136,13 @@ class HostEngineIsolationContractTest {
      * 数字降到 0 之日，即该依赖类别不再阻塞抽取。
      */
     private val arknightsToHost = mapOf(
-        // → core:ui（最大工作量，也是 P0 前置）
-        "com.aliothmoon.maadroid.presentation.components." to 76,
-        "com.aliothmoon.maadroid.theme." to 22,
+        // → core:ui。主体已下沉（组件 76→4、主题 22→2）。
+        // 残留的都是**方舟专属**、该去 engine/arknights 而非 core:ui 的东西：
+        // RecruitTimeSelector(2) / CoreCharSelector(1) 是误放在宿主的方舟组件，
+        // ResourceLoadingOverlay(1) 依赖 MaaResourceLoader，
+        // LocalLogPalette + themedColor(2) 是日志色板，依赖宿主的日志模型（待 core:common）
+        "com.aliothmoon.maadroid.presentation.components." to 4,
+        "com.aliothmoon.maadroid.theme." to 2,
         // → core:common
         "com.aliothmoon.maadroid.utils.i18n." to 20,
         // → 方舟侧改构造函数注入即可消除，非前置

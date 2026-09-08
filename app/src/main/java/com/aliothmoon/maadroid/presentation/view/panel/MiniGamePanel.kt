@@ -28,7 +28,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.data.resource.MiniGameTextRegistry
-import com.aliothmoon.maadroid.presentation.components.SelectableCardButton
+import com.aliothmoon.maadroid.ui.components.SelectableCardButton
 import com.aliothmoon.maadroid.presentation.viewmodel.MiniGameDelegate
 import com.aliothmoon.maadroid.presentation.viewmodel.PixelArtDelegate
 import com.aliothmoon.maadroid.utils.i18n.asString

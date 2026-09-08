@@ -79,10 +79,10 @@ class UiI18nHardcodedStringsTest {
             TargetFile("src/main/java/com/aliothmoon/maadroid/presentation/components/UpdateConfirmDialog.kt"),
             TargetFile("src/main/java/com/aliothmoon/maadroid/presentation/components/TopAppBar.kt"),
             TargetFile("src/main/java/com/aliothmoon/maadroid/presentation/components/ShizukuReadinessDialog.kt"),
-            TargetFile("src/main/java/com/aliothmoon/maadroid/presentation/components/tip/ExpandableTipIcon.kt"),
-            TargetFile("src/main/java/com/aliothmoon/maadroid/presentation/components/AdaptiveTaskPromptDialog.kt"),
+            TargetFile("src/main/java/com/aliothmoon/maadroid/ui/components/tip/ExpandableTipIcon.kt"),
+            TargetFile("src/main/java/com/aliothmoon/maadroid/ui/components/AdaptiveTaskPromptDialog.kt"),
             TargetFile("src/main/java/com/aliothmoon/maadroid/presentation/components/OverlayDialog.kt"),
-            TargetFile("src/main/java/com/aliothmoon/maadroid/presentation/components/PanelComponents.kt"),
+            TargetFile("src/main/java/com/aliothmoon/maadroid/ui/components/PanelComponents.kt"),
             TargetFile(
                 "src/main/java/com/aliothmoon/maadroid/presentation/components/CoreCharSelector.kt",
                 allowedLiterals = setOf(

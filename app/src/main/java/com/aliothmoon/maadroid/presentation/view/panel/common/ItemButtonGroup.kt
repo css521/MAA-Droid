@@ -28,8 +28,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.aliothmoon.maadroid.R
-import com.aliothmoon.maadroid.presentation.components.SelectableChipGroup
-import com.aliothmoon.maadroid.theme.MaaAnimatedVisibility
+import com.aliothmoon.maadroid.ui.components.SelectableChipGroup
+import com.aliothmoon.maadroid.ui.theme.MaaAnimatedVisibility
 
 /** 材料选择（可折叠，交互对齐 [GroupedStageButtonGroup]） */
 @Composable

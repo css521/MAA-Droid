@@ -68,12 +68,12 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.presentation.components.DialogIconBadge
-import com.aliothmoon.maadroid.presentation.components.consumeAllPointerEvents
+import com.aliothmoon.maadroid.ui.components.consumeAllPointerEvents
 import com.aliothmoon.maadroid.presentation.navigation.BottomNavTab
-import com.aliothmoon.maadroid.theme.LocalReduceMotion
-import com.aliothmoon.maadroid.theme.MaaAnimatedVisibility
-import com.aliothmoon.maadroid.theme.MaaMotion
-import com.aliothmoon.maadroid.theme.OpaqueTheme
+import com.aliothmoon.maadroid.ui.theme.LocalReduceMotion
+import com.aliothmoon.maadroid.ui.theme.MaaAnimatedVisibility
+import com.aliothmoon.maadroid.ui.theme.MaaMotion
+import com.aliothmoon.maadroid.ui.theme.OpaqueTheme
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest

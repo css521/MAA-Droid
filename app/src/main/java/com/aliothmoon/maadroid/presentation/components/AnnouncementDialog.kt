@@ -71,6 +71,7 @@ import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.announcement.AnnouncementSectionParser
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import com.aliothmoon.maadroid.ui.components.dialogWidth
 
 /** 勾选"不再显示"前需停留的秒数 */
 private const val STAY_SECONDS_REQUIRED = 5

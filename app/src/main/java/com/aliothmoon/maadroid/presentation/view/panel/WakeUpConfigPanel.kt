@@ -23,9 +23,9 @@ import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.data.model.WakeUpConfig
 import com.aliothmoon.maadroid.domain.service.MaaCompositionService
 import com.aliothmoon.maadroid.domain.state.MaaExecutionState
-import com.aliothmoon.maadroid.presentation.components.CheckBoxWithLabel
-import com.aliothmoon.maadroid.presentation.components.ITextField
-import com.aliothmoon.maadroid.presentation.components.SelectableChipGroup
+import com.aliothmoon.maadroid.ui.components.CheckBoxWithLabel
+import com.aliothmoon.maadroid.ui.components.ITextField
+import com.aliothmoon.maadroid.ui.components.SelectableChipGroup
 import com.aliothmoon.maadroid.utils.i18n.wakeUpClientTypeDisplayName
 import org.koin.compose.koinInject
 

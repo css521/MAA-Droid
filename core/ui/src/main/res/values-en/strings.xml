@@ -1,0 +1,10 @@
+<resources>
+    <!-- core:ui 组件用到的通用文案。随组件一同下沉，
+         这样引擎使用这些组件时不必依赖宿主的 R -->
+    <string name="common_cancel">Cancel</string>
+    <string name="common_collapse">Collapse</string>
+    <string name="common_confirm">Confirm</string>
+    <string name="common_expand">Expand</string>
+    <string name="panel_empty_config_hint">&lt;- Select a task to configure</string>
+    <string name="accessibility_tip">Tip</string>
+</resources>

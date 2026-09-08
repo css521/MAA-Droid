@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aliothmoon.maadroid.R
-import com.aliothmoon.maadroid.presentation.components.RainbowFlowText
+import com.aliothmoon.maadroid.ui.components.RainbowFlowText
 import com.aliothmoon.maadroid.presentation.viewmodel.ToolboxViewModel
 import com.aliothmoon.maadroid.utils.i18n.asString
 

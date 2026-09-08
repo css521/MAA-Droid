@@ -14,10 +14,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.data.model.FightConfig
-import com.aliothmoon.maadroid.presentation.components.CheckBoxWithLabel
-import com.aliothmoon.maadroid.presentation.components.InlineConfirmPanel
-import com.aliothmoon.maadroid.presentation.components.tip.ExpandableTipContent
-import com.aliothmoon.maadroid.presentation.components.tip.ExpandableTipIcon
+import com.aliothmoon.maadroid.ui.components.CheckBoxWithLabel
+import com.aliothmoon.maadroid.ui.components.InlineConfirmPanel
+import com.aliothmoon.maadroid.ui.components.tip.ExpandableTipContent
+import com.aliothmoon.maadroid.ui.components.tip.ExpandableTipIcon
 
 
 /**

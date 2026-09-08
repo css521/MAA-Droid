@@ -108,8 +108,8 @@ import com.aliothmoon.maadroid.domain.service.UnifiedStateDispatcher
 import com.aliothmoon.maadroid.domain.state.MaaExecutionState
 import com.aliothmoon.maadroid.manager.PermissionManager
 import com.aliothmoon.maadroid.overlay.screensaver.ScreenSaverOverlayManager
-import com.aliothmoon.maadroid.presentation.LocalInputFocusManager
-import com.aliothmoon.maadroid.presentation.components.AdaptiveTaskPromptDialog
+import com.aliothmoon.maadroid.ui.LocalInputFocusManager
+import com.aliothmoon.maadroid.ui.components.AdaptiveTaskPromptDialog
 import com.aliothmoon.maadroid.presentation.components.LogExportController
 import com.aliothmoon.maadroid.presentation.components.MaaWindowInsets
 import com.aliothmoon.maadroid.presentation.components.ShizukuReadinessGate
@@ -136,9 +136,9 @@ import com.aliothmoon.maadroid.presentation.viewmodel.BackgroundTaskViewModel
 import com.aliothmoon.maadroid.presentation.viewmodel.CopilotViewModel
 import com.aliothmoon.maadroid.presentation.viewmodel.ToolboxTab
 import com.aliothmoon.maadroid.presentation.viewmodel.ToolboxViewModel
-import com.aliothmoon.maadroid.theme.LocalReduceMotion
-import com.aliothmoon.maadroid.theme.MaaMotion
-import com.aliothmoon.maadroid.theme.MaaThemeAlphas
+import com.aliothmoon.maadroid.ui.theme.LocalReduceMotion
+import com.aliothmoon.maadroid.ui.theme.MaaMotion
+import com.aliothmoon.maadroid.ui.theme.MaaThemeAlphas
 import com.aliothmoon.maadroid.utils.i18n.asString
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch

@@ -56,10 +56,10 @@ import com.aliothmoon.maadroid.data.model.MallConfig
 import com.aliothmoon.maadroid.data.preferences.TaskChainState
 import com.aliothmoon.maadroid.data.resource.ActivityManager
 import com.aliothmoon.maadroid.domain.models.MallCreditFightAvailability
-import com.aliothmoon.maadroid.presentation.components.CheckBoxWithLabel
-import com.aliothmoon.maadroid.presentation.components.tip.ExpandableTipContent
-import com.aliothmoon.maadroid.presentation.components.tip.ExpandableTipIcon
-import com.aliothmoon.maadroid.theme.MaaAnimatedVisibility
+import com.aliothmoon.maadroid.ui.components.CheckBoxWithLabel
+import com.aliothmoon.maadroid.ui.components.tip.ExpandableTipContent
+import com.aliothmoon.maadroid.ui.components.tip.ExpandableTipIcon
+import com.aliothmoon.maadroid.ui.theme.MaaAnimatedVisibility
 import com.aliothmoon.maadroid.utils.i18n.asString
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject

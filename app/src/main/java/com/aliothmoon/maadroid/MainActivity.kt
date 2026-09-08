@@ -28,7 +28,7 @@ import com.aliothmoon.maadroid.data.preferences.AppSettingsManager
 import com.aliothmoon.maadroid.domain.service.MaaCompositionService
 import com.aliothmoon.maadroid.domain.state.MaaExecutionState
 import com.aliothmoon.maadroid.overlay.screensaver.ScreenSaverOverlayManager
-import com.aliothmoon.maadroid.presentation.ProvideInputFocusManager
+import com.aliothmoon.maadroid.ui.ProvideInputFocusManager
 import com.aliothmoon.maadroid.presentation.navigation.AppNavigation
 import com.aliothmoon.maadroid.presentation.pip.LocalIsInPip
 import com.aliothmoon.maadroid.presentation.pip.PipController
@@ -36,7 +36,7 @@ import com.aliothmoon.maadroid.presentation.pip.PipHost
 import com.aliothmoon.maadroid.presentation.pip.PipRequest
 import com.aliothmoon.maadroid.presentation.viewmodel.BackgroundTaskViewModel
 import com.aliothmoon.maadroid.schedule.LaunchIntentMapper
-import com.aliothmoon.maadroid.theme.MaaDroidTheme
+import com.aliothmoon.maadroid.ui.theme.MaaDroidTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,6 +45,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
 import org.koin.androidx.viewmodel.ext.android.viewModel
+import com.aliothmoon.maadroid.ui.theme.ThemeMode
 
 class MainActivity : AppCompatActivity(), PipHost {
 
@@ -213,10 +214,10 @@ class MainActivity : AppCompatActivity(), PipHost {
         }
     }
 
-    private fun AppSettingsManager.ThemeMode.toAppCompatNightMode(): Int = when (this) {
-        AppSettingsManager.ThemeMode.SYSTEM -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
-        AppSettingsManager.ThemeMode.WHITE -> AppCompatDelegate.MODE_NIGHT_NO
-        AppSettingsManager.ThemeMode.DARK,
-        AppSettingsManager.ThemeMode.PURE_DARK -> AppCompatDelegate.MODE_NIGHT_YES
+    private fun ThemeMode.toAppCompatNightMode(): Int = when (this) {
+        ThemeMode.SYSTEM -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+        ThemeMode.WHITE -> AppCompatDelegate.MODE_NIGHT_NO
+        ThemeMode.DARK,
+        ThemeMode.PURE_DARK -> AppCompatDelegate.MODE_NIGHT_YES
     }
 }

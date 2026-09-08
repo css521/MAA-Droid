@@ -12,7 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import com.aliothmoon.maadroid.theme.MaaDesignTokens
+import com.aliothmoon.maadroid.ui.theme.MaaDesignTokens
 
 @Composable
 private fun BaseCard(

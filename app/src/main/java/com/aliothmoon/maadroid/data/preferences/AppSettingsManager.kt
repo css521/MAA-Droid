@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import com.aliothmoon.maadroid.engine.EngineRegistry
+import com.aliothmoon.maadroid.ui.theme.ThemeMode
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.preferencesDataStore
 import com.aliothmoon.maadroid.R
@@ -449,10 +450,9 @@ class AppSettingsManager(
         return true
     }
 
-    // 主题模式
-    enum class ThemeMode {
-        SYSTEM, WHITE, DARK, PURE_DARK
-    }
+    // 主题模式定义已下沉到 core:ui（见 ui.theme.ThemeMode）——
+    // 它本就属于主题而非设置类，留在这里会让 Theme.kt 想下沉就得拖走整个设置管理器。
+    // 这里只负责持久化它的 name。
 
     val themeMode: StateFlow<ThemeMode> = settings
         .map {

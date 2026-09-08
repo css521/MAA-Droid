@@ -2,7 +2,7 @@ package com.aliothmoon.maadroid.presentation.view.panel.fight
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import com.aliothmoon.maadroid.presentation.components.SelectableChipGroup
+import com.aliothmoon.maadroid.ui.components.SelectableChipGroup
 
 /**
  * 关卡选择按钮组

@@ -21,13 +21,14 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.aliothmoon.maadroid.data.preferences.AppSettingsManager
 import com.aliothmoon.maadroid.domain.service.MaaSessionLogger
 import com.aliothmoon.maadroid.domain.service.ScreenSaverController
-import com.aliothmoon.maadroid.theme.MaaDroidTheme
+import com.aliothmoon.maadroid.ui.theme.MaaDroidTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import timber.log.Timber
+import com.aliothmoon.maadroid.ui.theme.ThemeMode
 
 class ScreenSaverOverlayManager(
     private val context: Context,
@@ -72,7 +73,7 @@ class ScreenSaverOverlayManager(
             setViewTreeSavedStateRegistryOwner(this@ScreenSaverOverlayManager)
 
             setContent {
-                MaaDroidTheme(themeMode = AppSettingsManager.ThemeMode.DARK) {
+                MaaDroidTheme(themeMode = ThemeMode.DARK) {
                     val baseDensity = LocalDensity.current
                     CompositionLocalProvider(
                         LocalDensity provides Density(

@@ -66,11 +66,11 @@ import com.aliothmoon.maadroid.data.model.InfrastConfig
 import com.aliothmoon.maadroid.domain.enums.InfrastMode
 import com.aliothmoon.maadroid.domain.enums.InfrastRoomType
 import com.aliothmoon.maadroid.domain.enums.UiUsageConstants
-import com.aliothmoon.maadroid.presentation.LocalFloatingWindowContext
-import com.aliothmoon.maadroid.presentation.components.CheckBoxWithExpandableTip
-import com.aliothmoon.maadroid.presentation.components.tip.ExpandableTipContent
-import com.aliothmoon.maadroid.presentation.components.tip.ExpandableTipIcon
-import com.aliothmoon.maadroid.theme.MaaAnimatedVisibility
+import com.aliothmoon.maadroid.ui.LocalFloatingWindowContext
+import com.aliothmoon.maadroid.ui.components.CheckBoxWithExpandableTip
+import com.aliothmoon.maadroid.ui.components.tip.ExpandableTipContent
+import com.aliothmoon.maadroid.ui.components.tip.ExpandableTipIcon
+import com.aliothmoon.maadroid.ui.theme.MaaAnimatedVisibility
 import com.aliothmoon.maadroid.utils.JsonUtils
 import com.aliothmoon.maadroid.utils.Misc
 import kotlinx.coroutines.Dispatchers

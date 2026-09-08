@@ -45,6 +45,9 @@ include(":engine:limbus")
 // 平台能力层：与游戏无关，不得反向依赖 engine:*（由 ModuleBoundaryContractTest 钉住）
 include(":core:bridge")
 include(":core:remote")
+// 引擎与宿主共用的 Compose 组件与主题。范围按「引擎实际需要」划，
+// 不是把 app 的组件目录整个搬过来 —— 见 core/ui 的包注释
+include(":core:ui")
 
 // framework 隐藏 API 桩，只在编译期使用
 include(":hidden-api")

@@ -36,10 +36,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.data.resource.ResourceDataManager
-import com.aliothmoon.maadroid.presentation.components.tip.ExpandableTipContent
-import com.aliothmoon.maadroid.presentation.components.tip.ExpandableTipIcon
+import com.aliothmoon.maadroid.ui.components.tip.ExpandableTipContent
+import com.aliothmoon.maadroid.ui.components.tip.ExpandableTipIcon
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import com.aliothmoon.maadroid.ui.components.ITextField
 
 @Composable
 fun CoreCharSelector(

@@ -13,7 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
-import com.aliothmoon.maadroid.theme.MaaDesignTokens
+import com.aliothmoon.maadroid.ui.theme.MaaDesignTokens
 
 @Composable
 fun SettingRow(

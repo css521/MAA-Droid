@@ -59,7 +59,7 @@ import com.aliothmoon.maadroid.data.model.LogColorRole
 import com.aliothmoon.maadroid.data.model.LogItem
 import com.aliothmoon.maadroid.data.model.LogLevel
 import com.aliothmoon.maadroid.data.model.RecruitCombination
-import com.aliothmoon.maadroid.presentation.components.AdaptiveTaskPromptDialog
+import com.aliothmoon.maadroid.ui.components.AdaptiveTaskPromptDialog
 import com.aliothmoon.maadroid.theme.LocalLogPalette
 import com.aliothmoon.maadroid.theme.themedColor
 

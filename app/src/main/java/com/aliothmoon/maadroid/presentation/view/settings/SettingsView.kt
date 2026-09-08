@@ -105,11 +105,11 @@ import com.aliothmoon.maadroid.domain.service.AchievementReporter
 import com.aliothmoon.maadroid.domain.service.ResourceInitService
 import com.aliothmoon.maadroid.domain.state.ResourceInitState
 import com.aliothmoon.maadroid.manager.ShizukuInstallHelper
-import com.aliothmoon.maadroid.presentation.components.AdaptiveTaskPromptDialog
+import com.aliothmoon.maadroid.ui.components.AdaptiveTaskPromptDialog
 import com.aliothmoon.maadroid.presentation.components.ChangelogDialog
-import com.aliothmoon.maadroid.presentation.components.CollapsibleSection
-import com.aliothmoon.maadroid.presentation.components.ITextField
-import com.aliothmoon.maadroid.presentation.components.ListItemDivider
+import com.aliothmoon.maadroid.ui.components.CollapsibleSection
+import com.aliothmoon.maadroid.ui.components.ITextField
+import com.aliothmoon.maadroid.ui.components.ListItemDivider
 import com.aliothmoon.maadroid.presentation.components.LogExportController
 import com.aliothmoon.maadroid.presentation.components.ReInitializeConfirmDialog
 import com.aliothmoon.maadroid.presentation.components.ResourceInitDialog
@@ -123,9 +123,9 @@ import com.aliothmoon.maadroid.presentation.viewmodel.AchievementEffect
 import com.aliothmoon.maadroid.presentation.viewmodel.AchievementEvent
 import com.aliothmoon.maadroid.presentation.viewmodel.AchievementViewModel
 import com.aliothmoon.maadroid.presentation.viewmodel.SettingsViewModel
-import com.aliothmoon.maadroid.theme.LocalReduceMotion
-import com.aliothmoon.maadroid.theme.MaaAnimatedVisibility
-import com.aliothmoon.maadroid.theme.MaaDesignTokens
+import com.aliothmoon.maadroid.ui.theme.LocalReduceMotion
+import com.aliothmoon.maadroid.ui.theme.MaaAnimatedVisibility
+import com.aliothmoon.maadroid.ui.theme.MaaDesignTokens
 import com.aliothmoon.maadroid.utils.Misc
 import com.aliothmoon.maadroid.utils.UiScale
 import com.aliothmoon.maadroid.utils.i18n.LocaleBootstrap.resolveSelectedLanguage
@@ -138,6 +138,7 @@ import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import kotlin.math.roundToInt
+import com.aliothmoon.maadroid.ui.theme.ThemeMode
 
 // LazyColumn 里「关于」分区的项序，item 顺序变了要同步
 private const val ABOUT_ITEM_INDEX = 8
@@ -1184,8 +1185,8 @@ fun SettingsView(
 @Composable
 private fun SettingThemeSection(
     contentColor: Color,
-    selectedMode: AppSettingsManager.ThemeMode,
-    onModeSelected: (AppSettingsManager.ThemeMode) -> Unit,
+    selectedMode: ThemeMode,
+    onModeSelected: (ThemeMode) -> Unit,
     useSystemMonetColor: Boolean,
     onMonetColorChanged: (Boolean) -> Unit,
     fontSizeScale: Int,
@@ -1205,10 +1206,10 @@ private fun SettingThemeSection(
             )
             Row(modifier = Modifier.fillMaxWidth()) {
                 val modes = listOf(
-                    AppSettingsManager.ThemeMode.SYSTEM to stringResource(R.string.settings_theme_system),
-                    AppSettingsManager.ThemeMode.WHITE to stringResource(R.string.settings_theme_white),
-                    AppSettingsManager.ThemeMode.DARK to stringResource(R.string.settings_theme_dark),
-                    AppSettingsManager.ThemeMode.PURE_DARK to stringResource(R.string.settings_theme_pure_dark),
+                    ThemeMode.SYSTEM to stringResource(R.string.settings_theme_system),
+                    ThemeMode.WHITE to stringResource(R.string.settings_theme_white),
+                    ThemeMode.DARK to stringResource(R.string.settings_theme_dark),
+                    ThemeMode.PURE_DARK to stringResource(R.string.settings_theme_pure_dark),
                 )
                 modes.forEach { (mode, label) ->
                     Row(

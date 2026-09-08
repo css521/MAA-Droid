@@ -59,7 +59,7 @@ import com.aliothmoon.maadroid.data.model.TaskProfile
 import com.aliothmoon.maadroid.data.model.TaskTypeInfo
 import com.aliothmoon.maadroid.data.model.UserDataUpdateConfig
 import com.aliothmoon.maadroid.data.model.WakeUpConfig
-import com.aliothmoon.maadroid.presentation.components.ITextField
+import com.aliothmoon.maadroid.ui.components.ITextField
 import com.aliothmoon.maadroid.presentation.view.panel.depot.DepotMaintainConfigPanel
 import com.aliothmoon.maadroid.presentation.view.panel.fight.FightConfigPanel
 import com.aliothmoon.maadroid.presentation.view.panel.mall.MallConfigPanel

@@ -63,7 +63,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.domain.service.MaaSessionLogger
-import com.aliothmoon.maadroid.theme.ScreenSaverDimens
+import com.aliothmoon.maadroid.ui.theme.ScreenSaverDimens
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalTime

@@ -35,11 +35,11 @@ import com.aliothmoon.maadroid.data.preferences.AppSettingsManager
 import com.aliothmoon.maadroid.domain.models.RunMode
 import com.aliothmoon.maadroid.domain.service.MaaCompositionService
 import com.aliothmoon.maadroid.domain.state.MaaExecutionState
-import com.aliothmoon.maadroid.presentation.LocalFloatingWindowContext
-import com.aliothmoon.maadroid.presentation.LocalInputFocusManager
-import com.aliothmoon.maadroid.presentation.components.AdaptiveTaskPromptDialog
+import com.aliothmoon.maadroid.ui.LocalFloatingWindowContext
+import com.aliothmoon.maadroid.ui.LocalInputFocusManager
+import com.aliothmoon.maadroid.ui.components.AdaptiveTaskPromptDialog
 import com.aliothmoon.maadroid.presentation.components.ResourceLoadingOverlay
-import com.aliothmoon.maadroid.presentation.components.clearFocusOnBlankTap
+import com.aliothmoon.maadroid.ui.components.clearFocusOnBlankTap
 import com.aliothmoon.maadroid.presentation.state.UiEffect
 import com.aliothmoon.maadroid.presentation.view.panel.PanelDialogType.ERROR
 import com.aliothmoon.maadroid.presentation.view.panel.PanelDialogType.SUCCESS

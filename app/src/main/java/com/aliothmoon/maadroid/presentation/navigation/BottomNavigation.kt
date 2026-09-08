@@ -33,7 +33,7 @@ import com.aliothmoon.maadroid.constant.Routes
 import com.aliothmoon.maadroid.presentation.components.MaaWindowInsets
 import com.aliothmoon.maadroid.presentation.onboarding.OnboardingTarget
 import com.aliothmoon.maadroid.presentation.onboarding.onboardingTarget
-import com.aliothmoon.maadroid.theme.MaaDesignTokens
+import com.aliothmoon.maadroid.ui.theme.MaaDesignTokens
 
 sealed class BottomNavTab(
     val route: String, @param:StringRes val labelRes: Int, val icon: ImageVector

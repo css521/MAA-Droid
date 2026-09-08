@@ -3,7 +3,7 @@ package com.aliothmoon.maadroid.presentation.view.panel.roguelike
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import com.aliothmoon.maadroid.presentation.components.SelectableChipGroup
+import com.aliothmoon.maadroid.ui.components.SelectableChipGroup
 
 /**
  * 难度按钮组

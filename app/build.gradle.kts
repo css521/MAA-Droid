@@ -208,6 +208,8 @@ kotlin {
 
 dependencies {
     api(project(":core:remote"))
+    // 引擎与宿主共用的 Compose 组件与主题
+    implementation(project(":core:ui"))
     // 各游戏引擎。:app 是唯一依赖全部引擎的模块（装配点）
     implementation(project(":engine:limbus"))
     compileOnly(project(":hidden-api"))

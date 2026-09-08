@@ -23,9 +23,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aliothmoon.maadroid.domain.service.MaaResourceLoader
-import com.aliothmoon.maadroid.theme.LocalReduceMotion
-import com.aliothmoon.maadroid.theme.MaaAnimatedVisibility
-import com.aliothmoon.maadroid.theme.MaaMotion
+import com.aliothmoon.maadroid.ui.theme.LocalReduceMotion
+import com.aliothmoon.maadroid.ui.theme.MaaAnimatedVisibility
+import com.aliothmoon.maadroid.ui.theme.MaaMotion
 import com.aliothmoon.maadroid.utils.i18n.resourceLoaderMessage
 import org.koin.compose.koinInject
 

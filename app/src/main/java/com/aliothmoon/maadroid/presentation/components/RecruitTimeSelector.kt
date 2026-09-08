@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.aliothmoon.maadroid.ui.components.INumericField
 
 /**
  * 通用的公招时长选择器（小时:分钟）

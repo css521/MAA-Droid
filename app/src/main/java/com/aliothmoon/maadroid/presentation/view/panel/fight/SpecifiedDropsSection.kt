@@ -24,8 +24,8 @@ import com.aliothmoon.maadroid.data.model.FightConfig
 import com.aliothmoon.maadroid.data.repository.DepotRepository
 import com.aliothmoon.maadroid.data.resource.ItemInfo
 import com.aliothmoon.maadroid.domain.enums.UiUsageConstants
-import com.aliothmoon.maadroid.presentation.components.CheckBoxWithExpandableTip
-import com.aliothmoon.maadroid.presentation.components.INumericField
+import com.aliothmoon.maadroid.ui.components.CheckBoxWithExpandableTip
+import com.aliothmoon.maadroid.ui.components.INumericField
 import com.aliothmoon.maadroid.presentation.view.panel.common.ItemButtonGroup
 import org.koin.compose.koinInject
 

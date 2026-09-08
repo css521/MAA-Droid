@@ -38,9 +38,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.aliothmoon.maadroid.R
-import com.aliothmoon.maadroid.theme.LocalReduceMotion
-import com.aliothmoon.maadroid.theme.MaaAnimatedVisibility
-import com.aliothmoon.maadroid.theme.MaaMotion
+import com.aliothmoon.maadroid.ui.theme.LocalReduceMotion
+import com.aliothmoon.maadroid.ui.theme.MaaAnimatedVisibility
+import com.aliothmoon.maadroid.ui.theme.MaaMotion
 
 /**
  * 悬浮窗专用对话框组件

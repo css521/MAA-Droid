@@ -49,9 +49,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.data.model.TaskProfile
-import com.aliothmoon.maadroid.presentation.components.AdaptiveTaskPromptDialog
-import com.aliothmoon.maadroid.presentation.components.ITextField
-import com.aliothmoon.maadroid.theme.MaaAnimatedVisibility
+import com.aliothmoon.maadroid.ui.components.AdaptiveTaskPromptDialog
+import com.aliothmoon.maadroid.ui.components.ITextField
+import com.aliothmoon.maadroid.ui.theme.MaaAnimatedVisibility
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 

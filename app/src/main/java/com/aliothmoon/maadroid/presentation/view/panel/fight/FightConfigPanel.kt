@@ -51,16 +51,16 @@ import com.aliothmoon.maadroid.data.resource.ActivityManager
 import com.aliothmoon.maadroid.data.resource.ItemHelper
 import com.aliothmoon.maadroid.data.resource.StageGroup
 import com.aliothmoon.maadroid.domain.enums.UiUsageConstants
-import com.aliothmoon.maadroid.presentation.components.CheckBoxWithExpandableTip
-import com.aliothmoon.maadroid.presentation.components.CheckBoxWithLabel
-import com.aliothmoon.maadroid.presentation.components.SelectableChipGroup
-import com.aliothmoon.maadroid.presentation.components.tip.ExpandableTipContent
-import com.aliothmoon.maadroid.presentation.components.tip.ExpandableTipIcon
+import com.aliothmoon.maadroid.ui.components.CheckBoxWithExpandableTip
+import com.aliothmoon.maadroid.ui.components.CheckBoxWithLabel
+import com.aliothmoon.maadroid.ui.components.SelectableChipGroup
+import com.aliothmoon.maadroid.ui.components.tip.ExpandableTipContent
+import com.aliothmoon.maadroid.ui.components.tip.ExpandableTipIcon
 import com.aliothmoon.maadroid.presentation.view.panel.common.GroupedStageButtonGroup
 import com.aliothmoon.maadroid.presentation.view.panel.common.StageBadge
 import com.aliothmoon.maadroid.presentation.view.panel.common.StageInputField
 import com.aliothmoon.maadroid.presentation.view.panel.common.StageRow
-import com.aliothmoon.maadroid.theme.MaaAnimatedVisibility
+import com.aliothmoon.maadroid.ui.theme.MaaAnimatedVisibility
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 

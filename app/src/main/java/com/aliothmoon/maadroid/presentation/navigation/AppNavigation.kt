@@ -41,7 +41,7 @@ import com.aliothmoon.maadroid.presentation.LocalToaster
 import com.aliothmoon.maadroid.presentation.components.AnnouncementDialog
 import com.aliothmoon.maadroid.presentation.components.MaaWindowInsets
 import com.aliothmoon.maadroid.presentation.components.ResourceLoadingOverlay
-import com.aliothmoon.maadroid.presentation.components.clearFocusOnBlankTap
+import com.aliothmoon.maadroid.ui.components.clearFocusOnBlankTap
 import com.aliothmoon.maadroid.presentation.onboarding.LocalOnboardingState
 import com.aliothmoon.maadroid.presentation.onboarding.OnboardingOverlay
 import com.aliothmoon.maadroid.presentation.onboarding.OnboardingState
@@ -59,8 +59,8 @@ import com.aliothmoon.maadroid.schedule.model.CountdownState
 import com.aliothmoon.maadroid.schedule.ui.CountdownDialog
 import com.aliothmoon.maadroid.schedule.ui.ScheduleEditView
 import com.aliothmoon.maadroid.schedule.ui.ScheduleTriggerLogView
-import com.aliothmoon.maadroid.theme.LocalReduceMotion
-import com.aliothmoon.maadroid.theme.MaaMotion
+import com.aliothmoon.maadroid.ui.theme.LocalReduceMotion
+import com.aliothmoon.maadroid.ui.theme.MaaMotion
 import com.aliothmoon.maadroid.utils.i18n.resolve
 import com.dokar.sonner.ToastType
 import com.dokar.sonner.Toaster

@@ -46,11 +46,11 @@ import androidx.navigation.NavController
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.data.log.LogEntry
 import com.aliothmoon.maadroid.data.log.LogFileInfo
-import com.aliothmoon.maadroid.presentation.components.AdaptiveTaskPromptDialog
+import com.aliothmoon.maadroid.ui.components.AdaptiveTaskPromptDialog
 import com.aliothmoon.maadroid.presentation.components.LogExportController
 import com.aliothmoon.maadroid.presentation.components.TopAppBar
 import com.aliothmoon.maadroid.presentation.viewmodel.LogHistoryViewModel
-import com.aliothmoon.maadroid.theme.LogTypography
+import com.aliothmoon.maadroid.ui.theme.LogTypography
 import org.koin.androidx.compose.koinViewModel
 import java.time.Instant
 import java.time.ZoneId
