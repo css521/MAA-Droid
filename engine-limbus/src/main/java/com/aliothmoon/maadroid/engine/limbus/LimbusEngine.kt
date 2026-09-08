@@ -13,6 +13,7 @@ import com.aliothmoon.maadroid.engine.limbus.pipeline.NodeRecognizer
 import com.aliothmoon.maadroid.engine.limbus.pipeline.PipelineRegistry
 import com.aliothmoon.maadroid.engine.limbus.pipeline.PipelineRunner
 import com.aliothmoon.maadroid.engine.limbus.recognize.LimbusRecognizer
+import com.aliothmoon.maadroid.engine.limbus.recognize.OnnxClassifier
 import com.aliothmoon.maadroid.engine.limbus.recognize.ResourcePackTemplateIndex
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -132,10 +133,12 @@ class LimbusEngine(
 
         this.device = device
         recognizer?.release()
+        val dir = resourceDir ?: throw IllegalStateException("请先 prepare 装载资源")
         recognizer = LimbusRecognizer(
             frames = device.frames,
             index = index,
             templateFileOf = index::fileOf,
+            classifier = OnnxClassifier(dir) { warn(it) },
             onLog = { warn(it) },
         )
 

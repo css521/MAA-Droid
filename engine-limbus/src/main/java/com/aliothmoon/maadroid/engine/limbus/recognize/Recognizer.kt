@@ -46,8 +46,21 @@ interface Recognizer {
     /** 文本查找：在检测结果里做模糊匹配，对应上游 find_text_in_image */
     suspend fun findText(target: String, crop: Crop? = null, threshold: Double = 0.5): List<TextMatch>
 
-    /** ONNX 分类。[model] 取值 mirror_legend / mirror_path / skill_icon */
+    /**
+     * 单标签 ONNX 分类：每个区域一个标签。
+     * [model] 取 `mirror_legend`（九宫格节点类型）或 `skill_icon`（拼点优劣势）。
+     * 传空 [regions] 表示由实现取该模型的约定区域（见 MirrorRegions）。
+     */
     suspend fun classify(model: String, regions: List<Crop>): List<String>
+
+    /**
+     * 多标签 ONNX 分类：每个区域**一组**激活标签。
+     *
+     * 单独一个方法而不是复用 [classify]：`mirror_path` 一次给出三条路径各自连到
+     * 哪些节点（9 个连接位 sigmoid 逐位判定），返回的是一组而不是一个，
+     * 塞进 `List<String>` 会分不清「每区域一个」还是「一个区域多个」。
+     */
+    suspend fun classifyMultiLabel(model: String, regions: List<Crop>): List<List<String>>
 
     // ---- 以下四个上游各只有一处调用，优先级最低 ----
 

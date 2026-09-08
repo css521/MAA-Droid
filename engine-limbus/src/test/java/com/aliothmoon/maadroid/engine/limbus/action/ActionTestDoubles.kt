@@ -111,6 +111,12 @@ class FakeRecognizer : Recognizer {
 
     override suspend fun classify(model: String, regions: List<Crop>): List<String> = classifyResult
 
+    /** 多标签结果，键是模型名；未设置则返回空表（等价于分类器不可用） */
+    val multiLabelResult = mutableMapOf<String, List<List<String>>>()
+
+    override suspend fun classifyMultiLabel(model: String, regions: List<Crop>): List<List<String>> =
+        multiLabelResult[model] ?: emptyList()
+
     override suspend fun colorTemplateMatch(template: String, threshold: Double, crop: Crop?) =
         templateMatch(template, threshold, crop)
 

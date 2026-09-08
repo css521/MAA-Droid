@@ -608,21 +608,22 @@ private object SelectNextNodeAction : ActionBackend {
     private val threePositions = listOf(710 to 110, 710 to 330, 710 to 540)
 
     /**
-     * 选择镜牢的下一个节点。
+     * 选择镜牢的下一个节点，按上游的**带权寻路**择优。
      *
-     * 上游用两个 ONNX 分类器做**带权寻路**：`mirror_legend` 认出九宫格里每个节点的类型，
-     * `mirror_path` 认出三条路径各自连到哪些节点，再按 `node_scores`
-     * （事件 20 / 普通战斗 9 / 精英 2 / …… / 空节点 -100）给每条路打分，取最高的走。
+     * 两个分类器配合：`mirror_legend` 认出九宫格里六个节点各是什么类型，
+     * `mirror_path` 认出三条路径分别连到哪些节点（9 个连接位的多标签）。
+     * 连接名形如 `"01"`：首位是路径号 0/1/2，其后每位是该列选第几个节点。
      *
-     * 本项目**暂按上到下依次尝试**，没有带权择优 —— `mirror_path` 分类器要返回
-     * `connection_names` 这种结构化连接关系，当前 [Recognizer.classify] 只能返回
-     * `List<String>`，表达不了。结果差异：仍能正常推进镜牢，但可能走到收益较低的路。
+     * 打分照抄上游：沿一条连接把途经节点的权重累加，每条路径取其最高分的连接，
+     * 再按分数从高到低依次尝试进入。权重来自用户配置的 `node_scores`
+     * （事件 20 / 普通战斗 9 / 精英 2 / …），空节点固定 -100 —— 上游在读完配置后
+     * **强制覆盖**这一项，防止用户把空节点配成正分而走进死路。
      *
-     * 保留的上游语义（这几条丢了会卡死）：
+     * 保留的上游语义（丢了会卡死）：
      * - 车头偏上时先下滑一次，否则九宫格上沿被裁掉
-     * - 每次点击后都要等连接框消失，再看有没有 `node_enter` 才按回车
-     * - 三条路都进不去就点车头自身
-     * - 仍然进不去则回主页重开，而不是原地重试
+     * - 每次点击后等连接框消失，再看有没有 `node_enter` 才按回车
+     * - 空节点直接跳过，不浪费一次点击
+     * - 三条路都进不去就点车头自身；仍不行则回主页重开而非原地重试
      */
     override suspend fun execute(ctx: ActionContext): ActionOutcome {
         ctx.log("选择下一个镜牢节点")
@@ -632,10 +633,27 @@ private object SelectNextNodeAction : ActionBackend {
             swipe(ctx.input, 460, 270, 460, 340)
         }
 
+        val nodeTypes = ctx.recognize.classify("mirror_legend", emptyList())
+        val connections = ctx.recognize.classifyMultiLabel("mirror_path", emptyList())
+            .firstOrNull()
+            .orEmpty()
+
+        val ordered = rankPaths(ctx, nodeTypes, connections)
+        if (ordered.isEmpty()) {
+            ctx.log("寻路识别不可用，按上到下依次尝试")
+        }
+        val candidates = ordered.ifEmpty { threePositions.indices.toList() }
+
         var entered = false
-        for ((x, y) in threePositions) {
+        for (pathId in candidates) {
             ctx.ensureActive()
-            click(ctx.input, x, y)
+            // 该路径首个节点是空的就没必要点
+            if (nodeTypes.getOrNull(pathId) == NODE_EMPTY) {
+                ctx.log("第 ${pathId + 1} 条路径为空，跳过")
+                continue
+            }
+            val pos = threePositions.getOrNull(pathId) ?: continue
+            click(ctx.input, pos.first, pos.second)
             waitConnectingDisappear(ctx)
             ctx.delay(1.0)
             if (ctx.recognize.templateMatch("node_enter").isNotEmpty()) {
@@ -664,7 +682,66 @@ private object SelectNextNodeAction : ActionBackend {
         }
         return ActionOutcome.Continue
     }
+
+    /**
+     * 按累计权重给三条路径排序，返回路径号（高分在前）。
+     * 识别结果不可用时返回空表，由调用方退回依次尝试。
+     */
+    internal fun rankPaths(
+        ctx: ActionContext,
+        nodeTypes: List<String>,
+        connections: List<String>,
+    ): List<Int> {
+        if (nodeTypes.isEmpty() || connections.isEmpty()) return emptyList()
+        val scores = nodeScores(ctx)
+
+        // 每条路径只保留其最高分的连接
+        val best = HashMap<Int, Int>()
+        for (conn in connections) {
+            val pathId = conn.firstOrNull()?.digitToIntOrNull() ?: continue
+            if (pathId !in threePositions.indices) continue
+            var weight = 0
+            for ((column, ch) in conn.withIndex()) {
+                val pick = ch.digitToIntOrNull() ?: continue
+                // 上游：node_type[column * 3 + pick]
+                val nodeIndex = column * NODES_PER_COLUMN + pick
+                val type = nodeTypes.getOrNull(nodeIndex) ?: continue
+                weight += scores[type] ?: 0
+            }
+            val prev = best[pathId]
+            if (prev == null || weight > prev) best[pathId] = weight
+        }
+        if (best.isEmpty()) return emptyList()
+        ctx.log("寻路打分: $best（节点 $nodeTypes，连接 $connections）")
+        return best.entries.sortedByDescending { it.value }.map { it.key }
+    }
+
+    /**
+     * 节点权重。用户可经 `node_scores` 覆盖，但空节点固定 -100 ——
+     * 上游读完配置后强制覆盖该项，否则用户把它配成正分就会一直走进死路。
+     */
+    private fun nodeScores(ctx: ActionContext): Map<String, Int> {
+        val defaults = mapOf(
+            "node_event" to 20,
+            "node_regular_encounter" to 9,
+            "node_elite_encounter" to 2,
+            "node_focused_encounter" to 1,
+            "node_abnormality_encounter" to 0,
+            "node_shop" to 0,
+            "node_boss_encounter" to 0,
+            "train_head" to 0,
+        )
+        val merged = defaults.mapValues { (k, v) -> ctx.config.int("mirror", "node_score_$k", v) }
+        return merged + (NODE_EMPTY to EMPTY_NODE_SCORE)
+    }
 }
+
+/** 空节点的权重固定值，用户配置不可覆盖 */
+private const val EMPTY_NODE_SCORE = -100
+private const val NODE_EMPTY = "node_empty"
+
+/** 九宫格每列的节点数，连接名的每位在该列内选一个 */
+private const val NODES_PER_COLUMN = 3
 
 /** 车头 y 小于此值说明九宫格上沿被裁，要先下滑 */
 private const val TRAIN_HEAD_TOO_HIGH_Y = 300

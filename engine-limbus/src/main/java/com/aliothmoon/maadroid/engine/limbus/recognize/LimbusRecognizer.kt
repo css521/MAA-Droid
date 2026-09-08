@@ -24,6 +24,7 @@ class LimbusRecognizer(
     private val frames: FrameSource,
     private val index: TemplateIndex,
     private val templateFileOf: (String) -> File?,
+    private val classifier: OnnxClassifier? = null,
     private val onLog: (String) -> Unit = {},
 ) : Recognizer {
 
@@ -91,10 +92,76 @@ class LimbusRecognizer(
         return emptyList()
     }
 
-    /** 三个 ONNX 分类器：mirror_legend / mirror_path / skill_icon */
+    /**
+     * 单标签分类。[regions] 为空时按模型取约定区域：`mirror_legend` 取九宫格
+     * 六格（见 [MirrorRegions.LEGEND_NODES]）。
+     */
     override suspend fun classify(model: String, regions: List<Crop>): List<String> {
-        warnOnce("NN:$model", "分类器 $model 尚未接入")
-        return emptyList()
+        val cls = classifier ?: run {
+            warnOnce("NN:$model", "分类器未初始化")
+            return emptyList()
+        }
+        val spec = cls.specOf(model) ?: run {
+            warnOnce("NN:$model", "分类模型 $model 不在资源包内")
+            return emptyList()
+        }
+        val frame = frames.grab() ?: return emptyList()
+        val screen = frame.toMat()
+        try {
+            val images = if (regions.isEmpty() && model == MODEL_MIRROR_LEGEND) {
+                MirrorRegions.prepareLegendInputs(screen, spec.inputWidth, spec.inputHeight)
+            } else {
+                regions.mapNotNull { r ->
+                    val area = MirrorRegions.clamp(r, screen.cols(), screen.rows())
+                        ?: return@mapNotNull null
+                    val sub = Mat(screen, Rect(area.x, area.y, area.width, area.height))
+                    try {
+                        MirrorRegions.toRgbBytes(sub, spec.inputWidth, spec.inputHeight)
+                    } finally {
+                        sub.release()
+                    }
+                }
+            }
+            if (images.isEmpty()) return emptyList()
+            return cls.classify(model, images)
+        } finally {
+            screen.release()
+        }
+    }
+
+    /**
+     * 多标签分类。`mirror_path` 需要先把六个节点区域涂掉再整块裁剪缩放
+     * （上游的训练期增广，推理时也照做），故 [regions] 一般传空由此处准备。
+     */
+    override suspend fun classifyMultiLabel(model: String, regions: List<Crop>): List<List<String>> {
+        val cls = classifier ?: run {
+            warnOnce("NN:$model", "分类器未初始化")
+            return emptyList()
+        }
+        val spec = cls.specOf(model) ?: run {
+            warnOnce("NN:$model", "分类模型 $model 不在资源包内")
+            return emptyList()
+        }
+        val frame = frames.grab() ?: return emptyList()
+        val screen = frame.toMat()
+        try {
+            val image = if (regions.isEmpty() && model == MODEL_MIRROR_PATH) {
+                MirrorRegions.preparePathInput(screen, spec.inputWidth, spec.inputHeight)
+            } else {
+                val r = regions.firstOrNull() ?: return emptyList()
+                val area = MirrorRegions.clamp(r, screen.cols(), screen.rows()) ?: return emptyList()
+                val sub = Mat(screen, Rect(area.x, area.y, area.width, area.height))
+                try {
+                    MirrorRegions.toRgbBytes(sub, spec.inputWidth, spec.inputHeight)
+                } finally {
+                    sub.release()
+                }
+            }
+            if (image == null) return emptyList()
+            return cls.classifyMultiLabel(model, listOf(image))
+        } finally {
+            screen.release()
+        }
     }
 
     override suspend fun colorTemplateMatch(template: String, threshold: Double, crop: Crop?):
@@ -149,14 +216,18 @@ class LimbusRecognizer(
         mat
     }
 
-    /** 释放缓存的模板。引擎停止或换语言时调用 */
+    /** 释放缓存的模板与推理会话。引擎停止或换语言时调用 */
     fun release() {
         templateCache.values.forEach { it?.release() }
         templateCache.clear()
         warned.clear()
+        classifier?.release()
     }
 
     private companion object {
+
+        const val MODEL_MIRROR_LEGEND = "mirror_legend"
+        const val MODEL_MIRROR_PATH = "mirror_path"
 
         /** BGR 帧 → OpenCV Mat。按 stride 逐行拷贝，容忍将来引入行对齐填充 */
         fun Frame.toMat(): Mat {
