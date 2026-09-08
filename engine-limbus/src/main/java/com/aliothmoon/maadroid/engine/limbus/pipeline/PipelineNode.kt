@@ -66,7 +66,7 @@ data class PipelineNode(
 
     /** 取坐标参数，形如 [x, y] 或 [x, y, w, h] */
     fun ints(key: String): List<Int>? =
-        (params[key] as? JsonElement)?.let { el ->
+        params[key]?.let { el ->
             runCatching { el.jsonArray.map { it.jsonPrimitive.content.toDouble().toInt() } }.getOrNull()
         }
 

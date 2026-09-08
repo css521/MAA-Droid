@@ -11,6 +11,10 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import com.aliothmoon.maadroid.engine.InputSink
+import com.aliothmoon.maadroid.engine.limbus.action.TestActionContext
+import com.aliothmoon.maadroid.engine.limbus.recognize.Crop
+import com.aliothmoon.maadroid.engine.limbus.recognize.Recognizer
 
 /**
  * 流水线调度语义测试。
@@ -45,7 +49,7 @@ class PipelineRunnerTest {
 
     private fun runner(reg: PipelineRegistry) = PipelineRunner(
         registry = reg,
-        contextFactory = { node -> FakeContext(node) },
+        contextFactory = { node -> fakeContext(node) },
         recognizeGate = { node -> reg.names().first { reg[it] === node }.let { it in hits } },
     ).also { it.delayer = { /* 测试里不真睡 */ } }
 
@@ -195,45 +199,53 @@ class PipelineRunnerTest {
         assertTrue("应报死循环而非挂死: $reason", reason?.contains("死循环") == true)
     }
 
-    private class FakeContext(override val node: PipelineNode) : ActionContext {
-        override val input = throwingInput
-        override val recognize = throwingRecognizer
-        override val config = emptyConfig
-        override fun log(message: String) = Unit
-        override fun ensureActive() = Unit
-        override suspend fun delay(seconds: Double) = Unit
-    }
+    /**
+     * 调度用例只验证「弹什么、压什么」，不该碰识别与输入 —— 命中与否由传给
+     * [PipelineRunner] 的 recognizeGate 直接决定。故这里塞会抛异常的替身：
+     * 一旦调度逻辑意外去截图或注入，测试立刻炸而不是悄悄通过。
+     */
+    private fun fakeContext(node: PipelineNode) = TestActionContext(
+        node = node,
+        input = throwingInput,
+        recognize = throwingRecognizer,
+    )
 
     private companion object {
-        // 这些用例只验证调度，不触碰识别与输入；被调用即说明测试写错了
-        val throwingInput = object : com.aliothmoon.maadroid.engine.InputSink {
-            override fun touchDown(x: Int, y: Int, contact: Int) = error("不应调用")
-            override fun touchMove(x: Int, y: Int, contact: Int) = error("不应调用")
-            override fun touchUp(x: Int, y: Int, contact: Int) = error("不应调用")
-            override fun touchCancel() = error("不应调用")
-            override fun keyDown(keyCode: Int) = error("不应调用")
-            override fun keyUp(keyCode: Int) = error("不应调用")
+        val throwingInput = object : InputSink {
+            override fun touchDown(x: Int, y: Int, contact: Int) = error("调度用例不应注入输入")
+            override fun touchMove(x: Int, y: Int, contact: Int) = error("调度用例不应注入输入")
+            override fun touchUp(x: Int, y: Int, contact: Int) = error("调度用例不应注入输入")
+            override fun touchCancel() = error("调度用例不应注入输入")
+            override fun keyDown(keyCode: Int) = error("调度用例不应注入输入")
+            override fun keyUp(keyCode: Int) = error("调度用例不应注入输入")
         }
-        val throwingRecognizer = object : com.aliothmoon.maadroid.engine.limbus.recognize.Recognizer {
+
+        val throwingRecognizer = object : Recognizer {
             override suspend fun templateMatch(
-                template: String, threshold: Double,
-                crop: com.aliothmoon.maadroid.engine.limbus.recognize.Crop?,
-                maskTemplate: com.aliothmoon.maadroid.engine.limbus.recognize.Crop?,
-                screenshotScale: Double,
-            ) = error("不应调用")
-            override suspend fun detectText(crop: com.aliothmoon.maadroid.engine.limbus.recognize.Crop?, threshold: Double) = error("不应调用")
-            override suspend fun findText(target: String, crop: com.aliothmoon.maadroid.engine.limbus.recognize.Crop?, threshold: Double) = error("不应调用")
-            override suspend fun classify(model: String, regions: List<com.aliothmoon.maadroid.engine.limbus.recognize.Crop>) = error("不应调用")
-            override suspend fun colorTemplateMatch(template: String, threshold: Double, crop: com.aliothmoon.maadroid.engine.limbus.recognize.Crop?) = error("不应调用")
-            override suspend fun featureMatch(template: String, threshold: Double, crop: com.aliothmoon.maadroid.engine.limbus.recognize.Crop?) = error("不应调用")
-            override suspend fun pyramidTemplateMatch(template: String, threshold: Double, crop: com.aliothmoon.maadroid.engine.limbus.recognize.Crop?) = error("不应调用")
-            override suspend fun preciseTemplateMatch(template: String, threshold: Double, crop: com.aliothmoon.maadroid.engine.limbus.recognize.Crop?) = error("不应调用")
-        }
-        val emptyConfig = object : com.aliothmoon.maadroid.engine.limbus.action.LimbusConfig {
-            override fun int(section: String, key: String, default: Int) = default
-            override fun bool(section: String, key: String, default: Boolean) = default
-            override fun str(section: String, key: String, default: String) = default
-            override fun list(section: String, key: String) = emptyList<String>()
+                template: String, threshold: Double, crop: Crop?,
+                maskTemplate: Crop?, screenshotScale: Double,
+            ) = error("调度用例不应做识别")
+
+            override suspend fun detectText(crop: Crop?, threshold: Double) =
+                error("调度用例不应做识别")
+
+            override suspend fun findText(target: String, crop: Crop?, threshold: Double) =
+                error("调度用例不应做识别")
+
+            override suspend fun classify(model: String, regions: List<Crop>) =
+                error("调度用例不应做识别")
+
+            override suspend fun colorTemplateMatch(template: String, threshold: Double, crop: Crop?) =
+                error("调度用例不应做识别")
+
+            override suspend fun featureMatch(template: String, threshold: Double, crop: Crop?) =
+                error("调度用例不应做识别")
+
+            override suspend fun pyramidTemplateMatch(template: String, threshold: Double, crop: Crop?) =
+                error("调度用例不应做识别")
+
+            override suspend fun preciseTemplateMatch(template: String, threshold: Double, crop: Crop?) =
+                error("调度用例不应做识别")
         }
     }
 }
