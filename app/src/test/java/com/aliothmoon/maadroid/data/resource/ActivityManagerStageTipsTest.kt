@@ -43,7 +43,8 @@ class ActivityManagerStageTipsTest {
     ): ActivityManager {
         val manager = ActivityManager(
             context = context,
-            chainState = mockk(relaxed = true),
+            // clientType 现以 provider 注入（破 data/resource ↔ TaskChainState 的环）
+            clientTypeProvider = { "Official" },
             maaApiService = mockk(relaxed = true),
             itemHelper = itemHelper,
         )

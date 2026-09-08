@@ -119,8 +119,21 @@ theme 同理：22 次引用里 19 次只指向 `MaaMotion.kt` 一个文件。
 按「它 import 了宿主设置类」下判断会得出「需要设置契约」，按「它到底读了什么」下判断
 只需要改一个构造参数。
 
-`data/config` 现已零宿主设置依赖。`data/resource` 只剩 `ActivityManager` 对
-`TaskChainState` 的一处依赖，那是 P2（拆 `TaskChainState`）的范围。
+`data/config` 现已零宿主设置依赖。`data/resource` 对 `TaskChainState` 的依赖也已解开 ——
+那原本是一个**三方互咬的环**：
+
+```
+data/model  ──需要──▶  data/resource   （MaaCoreVersion / MiniGameTextRegistry）
+data/resource ─需要─▶  TaskChainState  （clientType）
+TaskChainState ─需要─▶ data/model      （TaskChainNode / TaskProfile / 各配置类）
+```
+
+成环的话三者谁都搬不进 `engine/arknights`。破环点选最细的那一环：`ActivityManager`
+实测只用到 `chainState.clientType` 一个属性，换成 `() -> String` 的 provider 即可
+（必须是 provider 而非快照，用户切换渠道服要立即生效）。
+
+剩下 `data/model ↔ data/resource` 仍互相依赖，但两者**同属方舟**，作为一个单元一起搬即可，
+不构成阻塞。
 
 koin 的静态图校验（`AppModuleVerifyTest`）在此处正好发挥了作用：构造参数改成内联提供后
 它立刻报缺定义，按文件已有约定用 `injectedParameters` 放行即可 —— 清点预言的「抽模块时

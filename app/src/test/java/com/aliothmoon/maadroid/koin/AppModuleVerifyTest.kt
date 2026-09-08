@@ -9,6 +9,7 @@ import org.koin.test.verify.definition
 import org.koin.test.verify.injectedParameters
 import org.koin.test.verify.verify
 import com.aliothmoon.maadroid.data.config.MaaPathConfig
+import com.aliothmoon.maadroid.data.resource.ActivityManager
 
 /**
  * 静态校验 Koin 依赖图，防止运行期 NoDefinitionFound 启动崩溃
@@ -31,6 +32,8 @@ class AppModuleVerifyTest {
                 // isCoreSeparated：在装配点从 AppSettingsManager 读成布尔值再传入，
                 // 这样方舟侧的 MaaPathConfig 不必认识宿主的设置类
                 definition<MaaPathConfig>(Boolean::class),
+                // clientTypeProvider：以 provider 注入，破 data/resource ↔ TaskChainState 的环
+                definition<ActivityManager>(Function0::class),
             ),
         )
     }

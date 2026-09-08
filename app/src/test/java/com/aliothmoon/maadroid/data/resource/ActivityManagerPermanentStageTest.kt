@@ -29,7 +29,8 @@ class ActivityManagerPermanentStageTest {
     private fun managerWith(stages: Map<String, MergedStageInfo>): ActivityManager {
         val manager = ActivityManager(
             context = mockk(relaxed = true),
-            chainState = mockk(relaxed = true),
+            // clientType 现以 provider 注入（破 data/resource ↔ TaskChainState 的环）
+            clientTypeProvider = { "Official" },
             maaApiService = mockk(relaxed = true),
             itemHelper = mockk(relaxed = true),
         )

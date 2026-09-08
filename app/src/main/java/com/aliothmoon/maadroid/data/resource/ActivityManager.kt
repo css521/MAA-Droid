@@ -8,7 +8,6 @@ import com.aliothmoon.maadroid.data.model.activity.ClientStageActivity
 import com.aliothmoon.maadroid.data.model.activity.MiniGame
 import com.aliothmoon.maadroid.data.model.activity.StageActivityInfo
 import com.aliothmoon.maadroid.data.model.activity.StageActivityRoot
-import com.aliothmoon.maadroid.data.preferences.TaskChainState
 import com.aliothmoon.maadroid.common.i18n.resolve
 import com.aliothmoon.maadroid.common.i18n.uiTextOf
 import kotlinx.coroutines.CoroutineScope
@@ -36,7 +35,18 @@ import java.time.temporal.ChronoUnit
  */
 class ActivityManager(
     private val context: Context,
-    private val chainState: TaskChainState,
+    /**
+     * 当前渠道服的提供者。
+     *
+     * 刻意收一个 `() -> String` 而不是 `TaskChainState`：后者是**方舟任务链的状态机**
+     * （`TaskChainNode` / `TaskProfile` 都进了它的公开 API 与持久化格式），而它自己又依赖
+     * `data/model` —— 于是 `data/model` ↔ `data/resource` ↔ `TaskChainState` 三者互咬成环，
+     * 谁都搬不进 `engine/arknights`。
+     *
+     * 实测本类只用到 `clientType` 一个属性，换成 provider 即可破环。
+     * 必须是 provider 而非快照值：用户切换渠道服后要立即生效。
+     */
+    private val clientTypeProvider: () -> String,
     private val maaApiService: MaaApiService,
     private val itemHelper: ItemHelper,
 ) {
@@ -68,21 +78,21 @@ class ActivityManager(
 
     /** 鹰历时区 */
     private val serverZone: ZoneId
-        get() = ServerTimezone.getServerZone(chainState.clientType)
+        get() = ServerTimezone.getServerZone(clientTypeProvider())
 
     /**
      * 获取当前鹰角历的星期几（根据客户端类型自动选择时区）
      * 迁移自 WPF DateTimeExtension.ToYjDateTime
      */
     fun getYjDayOfWeek(): DayOfWeek {
-        return ServerTimezone.getYjDayOfWeek(chainState.clientType)
+        return ServerTimezone.getYjDayOfWeek(clientTypeProvider())
     }
 
     /**
      * 获取当前鹰角历星期几的中文名
      */
     fun getYjDayOfWeekName(): String {
-        return ServerTimezone.getYjDayOfWeekName(chainState.clientType)
+        return ServerTimezone.getYjDayOfWeekName(clientTypeProvider())
     }
 
     suspend fun load(clientType: String) {
@@ -430,7 +440,7 @@ class ActivityManager(
             val stageChanged = maaApiService.checkStageActivityChanged()
             val taskChanged = maaApiService.checkTasksChanged()
             if (stageChanged || taskChanged) {
-                val clientType = chainState.clientType
+                val clientType = clientTypeProvider()
                 val type = if (clientType == "Bilibili") "Official" else clientType
                 doLoadActivityStages(type)
                 dirty = true

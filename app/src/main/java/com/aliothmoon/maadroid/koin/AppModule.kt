@@ -314,7 +314,15 @@ val appModule = module {
     singleOf(::ItemHelper)
     singleOf(::StageApCostHelper)
     singleOf(::ItemIconLoader)
-    singleOf(::ActivityManager)
+    // clientType 以 provider 注入，避免 data/resource 依赖方舟任务链状态机（见 ActivityManager）
+    single {
+        ActivityManager(
+            context = get(),
+            clientTypeProvider = { get<TaskChainState>().clientType },
+            maaApiService = get(),
+            itemHelper = get(),
+        )
+    }
     singleOf(::ResourceDataManager)
     // Copilot (自动战斗)
     singleOf(::CopilotApiService)
