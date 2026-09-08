@@ -167,6 +167,24 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
+
+            // 显式声明冲突取舍，不让 AGP 隐式选择（未来版本会直接报错）：
+            //
+            // libonnxruntime.so —— 两份不同构建冲突：
+            //   · MaaCore 带的 26.3 MB，被 libMaaCore.so 硬链接（已用 llvm-readelf 确认
+            //     DT_NEEDED 含 libonnxruntime.so），换掉会让方舟引擎加载失败
+            //   · onnxruntime-android AAR 带的 17.6 MB，配套其 libonnxruntime4j_jni.so
+            //   取舍：保留 app 模块 jniLibs 里 MaaCore 的那份 —— 方舟不能回退是硬约束。
+            //   ONNX 的 C API 经 OrtGetApiBase()->GetApi(version) 协商版本，Java 绑定
+            //   在版本不支持时会明确报错而非静默出错；边狱侧的 ONNX 推理需真机验证。
+            //
+            // libc++_shared.so —— core-bridge（NDK 29）与 OpenCV AAR 各带一份。
+            //   取舍：以 NDK 提供的为准（setup_maa_core.py 的 EXCLUDE_SO 也是同一原则：
+            //   "provided by the NDK toolchain, never ship MAA's copy"）。
+            pickFirsts += setOf(
+                "**/libonnxruntime.so",
+                "**/libc++_shared.so",
+            )
         }
         resources {
             pickFirsts += setOf(
