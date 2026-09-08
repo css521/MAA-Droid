@@ -95,3 +95,43 @@ class LimbusResourcePackTest {
             .forEach { assertNull(it, LimbusResourcePack.mapZipEntry(it)) }
     }
 }
+
+/**
+ * 门闸在**未装载引擎**的状态下必须仍然正确。
+ *
+ * 回归用例。门闸按设计先于 `prepare` 运行（装载前拒绝才有意义），而动作注册原先只在
+ * `prepare` 里做，于是门闸看到的是空的 ActionRegistry，把每一个包都报成
+ * 「需要未实现的动作」—— 等于把所有用户都挡在门外。这个 bug 只有把会话真接起来才会暴露。
+ */
+class LimbusGateWithoutPrepareTest {
+
+    @org.junit.Before
+    fun clearRegistry() {
+        // 模拟 App 刚启动、任何引擎都还没 prepare 的状态
+        com.aliothmoon.maadroid.engine.limbus.action.ActionRegistry.clearForTest()
+        com.aliothmoon.maadroid.engine.limbus.action.LimbusActions.resetForTest()
+    }
+
+    @org.junit.Test
+    fun `未 prepare 时门闸仍放行动作齐备的包`() {
+        val manifest = """
+            {"schema_version":1,"min_engine_version":1,
+             "required_actions":["click","key","swipe","mirror_choose_star"]}
+        """.trimIndent()
+        org.junit.Assert.assertNull(
+            "门闸不应因为引擎还没 prepare 就拒绝合法资源包",
+            LimbusResourcePack.checkCompatibility(manifest),
+        )
+    }
+
+    @org.junit.Test
+    fun `未 prepare 时门闸仍能识别真正缺失的动作`() {
+        val manifest = """
+            {"schema_version":1,"min_engine_version":1,
+             "required_actions":["click","definitely_not_implemented"]}
+        """.trimIndent()
+        val reason = LimbusResourcePack.checkCompatibility(manifest)
+        org.junit.Assert.assertNotNull("真缺动作时必须拒绝", reason)
+        org.junit.Assert.assertTrue(reason!!.contains("definitely_not_implemented"))
+    }
+}

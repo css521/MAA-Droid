@@ -2,6 +2,7 @@ package com.aliothmoon.maadroid.engine.limbus
 
 import com.aliothmoon.maadroid.engine.ResourcePackSpec
 import com.aliothmoon.maadroid.engine.limbus.action.ActionRegistry
+import com.aliothmoon.maadroid.engine.limbus.action.LimbusActions
 import com.aliothmoon.maadroid.remote.EngineIds
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -65,6 +66,11 @@ object LimbusResourcePack : ResourcePackSpec {
      * 必须在装载前拦住并提示升级，而不是跑到一半崩在某个节点上。
      */
     override fun checkCompatibility(manifestJson: String?): String? {
+        // 门闸按设计**先于** prepare 运行（装载前拒绝才有意义），所以不能指望 prepare
+        // 已经注册过动作 —— 否则 ActionRegistry 是空的，会把每一个包都报成
+        // 「需要未实现的动作」，等于把所有用户都挡在门外。install() 是幂等的。
+        LimbusActions.install()
+
         val obj = runCatching { manifestJson?.let { json.parseToJsonElement(it) as JsonObject } }
             .getOrNull() ?: return "资源包缺少或无法解析 $MANIFEST_NAME"
 

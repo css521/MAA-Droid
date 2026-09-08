@@ -21,7 +21,13 @@ interface ResourcePackSpec {
     /** 所属引擎，见 `EngineIds` */
     val engineId: String
 
-    /** 资源落盘根目录（相对提权进程的数据根） */
+    /**
+     * 资源落盘根目录，**相对 App 的数据根**（`externalFilesDir/Maa`，见 `EngineDataRoot`）。
+     *
+     * 不是相对提权进程的 `/data/local/tmp` —— 那个目录 App 进程读不到，而跑在 App 进程的
+     * 引擎必须能直接打开自己的模板与模型。需要投到提权侧的包由
+     * [requiresPrivilegedDelivery] 标记，那是**额外一步**，不改变本字段的基准。
+     */
     val relativeRoot: String
 
     /** 内置于 APK 的初始资源在 assets 下的前缀；为空表示该包必须联网获取 */
