@@ -1,0 +1,26 @@
+package com.aliothmoon.maadroid.maa
+
+import android.os.IBinder
+import com.aliothmoon.maadroid.remote.EngineIds
+import com.aliothmoon.maadroid.remote.MaaCoreManager
+import com.aliothmoon.maadroid.remote.RemoteEngineFactory
+
+/**
+ * 明日方舟引擎在提权进程侧的工厂。
+ *
+ * MaaCore 是 native 库，必须跑在提权进程里（JNA 加载 libMaaCore.so，经 libbridge.so
+ * 取帧与注入），所以方舟引擎的实现体在提权侧、App 侧只持有 AIDL 代理。
+ * 边狱引擎则相反 —— Kotlin + OpenCV/ONNX 跑在 App 进程，只向提权进程要帧和输入。
+ * [RemoteEngineFactory] 同时容纳这两种执行位置。
+ *
+ * 随 maa 包一起归入 engine-arknights（步骤 5）。
+ */
+object ArknightsRemoteEngineFactory : RemoteEngineFactory {
+
+    override val engineId: String = EngineIds.ARKNIGHTS
+
+    /** 惰性：注册表只在首次取用时调用，未启用方舟时不会加载 MaaCore */
+    override fun create(): IBinder = MaaCoreManager.maaService
+
+    override fun close() = MaaCoreManager.destroy()
+}

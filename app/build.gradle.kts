@@ -104,15 +104,6 @@ android {
         ndk {
             abiFilters.addAll(nativeAbis)
         }
-        @Suppress("UnstableApiUsage")
-        externalNativeBuild {
-            cmake {
-                arguments(
-                    "-DANDROID_STL=c++_shared",
-                    "-DMAA_NATIVE_LTO=${if (nativeLto) "ON" else "OFF"}",
-                )
-            }
-        }
     }
 
     signingConfigs {
@@ -173,13 +164,6 @@ android {
         compose = true
     }
 
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/native/CMakeLists.txt")
-            version = "3.22.1"
-        }
-    }
-
     packaging {
         jniLibs {
             useLegacyPackaging = true
@@ -205,6 +189,7 @@ kotlin {
 }
 
 dependencies {
+    api(project(":core-bridge"))
     compileOnly(project(":hidden-api"))
     implementation(project(":annotation-api"))
     ksp(project(":ksp-processor"))

@@ -1,7 +1,8 @@
 package com.aliothmoon.maadroid.maa
 
-import com.aliothmoon.maadroid.maa.TouchPointerSequence.Kind
-import com.aliothmoon.maadroid.maa.TouchPointerSequence.Pointer
+import com.aliothmoon.maadroid.input.TouchPointerSequence
+import com.aliothmoon.maadroid.input.TouchPointerSequence.Kind
+import com.aliothmoon.maadroid.input.TouchPointerSequence.Pointer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

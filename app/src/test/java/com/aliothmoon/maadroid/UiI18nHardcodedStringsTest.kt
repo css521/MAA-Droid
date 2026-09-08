@@ -28,6 +28,9 @@ class UiI18nHardcodedStringsTest {
             File(relativePath),
             File("app/$relativePath"),
             File("../app/$relativePath"),
+            // native 与 third/ 已拆到 core-bridge
+            File("core-bridge/$relativePath"),
+            File("../core-bridge/$relativePath"),
         )
         val file = candidates.firstOrNull { it.isFile }
         checkNotNull(file) { "Source file not found for test: $relativePath" }

@@ -31,6 +31,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
+import com.aliothmoon.maadroid.maa.maaCoreService
 
 class MaaResourceLoader(
     private val pathConfig: MaaPathConfig,

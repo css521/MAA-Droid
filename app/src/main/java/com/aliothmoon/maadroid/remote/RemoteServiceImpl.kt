@@ -4,16 +4,16 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Build
 import android.os.ParcelFileDescriptor
+import android.os.IBinder
 import android.os.Process
 import android.system.Os
 import android.view.Surface
 import com.aliothmoon.maadroid.ITouchEventCallback
-import com.aliothmoon.maadroid.MaaCoreService
 import com.aliothmoon.maadroid.RemoteService
 import com.aliothmoon.maadroid.bridge.NativeBridgeLib
 import com.aliothmoon.maadroid.constant.DefaultDisplayConfig
 import com.aliothmoon.maadroid.constant.DisplayMode
-import com.aliothmoon.maadroid.maa.InputControlUtils
+import com.aliothmoon.maadroid.input.InputControlUtils
 import com.aliothmoon.maadroid.remote.internal.ActivityUtils
 import com.aliothmoon.maadroid.remote.internal.CoreDataStore
 import com.aliothmoon.maadroid.remote.internal.GameAudioMuteController
@@ -54,7 +54,7 @@ class RemoteServiceImpl : RemoteService.Stub() {
                 XmsfFirewall.restoreIfNeeded()
                 PowerController.destroy()
                 ScreenManager.destroy()
-                MaaCoreManager.destroy()
+                RemoteEngineRegistry.closeAll()
             }.onFailure {
                 Ln.e("$TAG: Emergency cleanup failed: ${it.message}")
             }
@@ -62,6 +62,10 @@ class RemoteServiceImpl : RemoteService.Stub() {
     }
 
     init {
+        // 引擎装配点。提权进程由 RootUserService 反射实例化本类，此处把所有引擎工厂
+        // 装进注册表；getEngineService 之后只查表。新增游戏在此追加一行。
+        // 注：本类将随 core-remote 拆出，届时注册移到 :app 提供的子类里（见方案步骤 2）。
+        RemoteEngineRegistry.register(com.aliothmoon.maadroid.maa.ArknightsRemoteEngineFactory)
         RemoteBootTrace.mark("CTOR_START")
         Runtime.getRuntime().addShutdownHook(Thread {
             runCatching { performEmergencyCleanup() }
@@ -98,9 +102,12 @@ class RemoteServiceImpl : RemoteService.Stub() {
 
     override fun exit() = destroy()
 
-    override fun getMaaCoreService(): MaaCoreService {
-        return MaaCoreManager.maaService
-    }
+    /**
+     * 按 engineId 转交引擎 binder。本类不认识任何具体引擎 —— 引擎由 `:app` 在提权进程
+     * 入口处注册进 [RemoteEngineRegistry]，这里只做查表，从而支持多游戏共存。
+     */
+    override fun getEngineService(engineId: String?): IBinder? =
+        engineId?.let { RemoteEngineRegistry.get(it) }
 
     override fun version(): String {
         val maaVersion = MaaCoreManager.MaaContext?.AsstGetVersion() ?: "Not loaded"

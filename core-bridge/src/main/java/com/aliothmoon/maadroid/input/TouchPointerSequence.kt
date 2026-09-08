@@ -1,4 +1,4 @@
-package com.aliothmoon.maadroid.maa
+package com.aliothmoon.maadroid.input
 
 /**
  * 由当前按下的 contact 集合，算出这一次 down/move/up 该发哪种 MotionEvent

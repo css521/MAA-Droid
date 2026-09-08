@@ -10,6 +10,7 @@ import com.aliothmoon.maadroid.manager.RemoteServiceManager
 import timber.log.Timber
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.ceil
+import com.aliothmoon.maadroid.maa.maaCoreService
 
 /**
  * 目标库存运行时重算：stage(slot) → bind(taskId) → onTaskStarted SetTaskParams。

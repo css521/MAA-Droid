@@ -3,7 +3,7 @@ package com.aliothmoon.maadroid.remote.internal
 import android.view.KeyEvent
 import com.aliothmoon.maadroid.constant.WakeUnlockResult
 import com.aliothmoon.maadroid.domain.models.UnlockGesture
-import com.aliothmoon.maadroid.maa.InputControlUtils
+import com.aliothmoon.maadroid.input.InputControlUtils
 import com.aliothmoon.maadroid.remote.internal.ScreenPowerAttempts.SleepAction
 import com.aliothmoon.maadroid.remote.internal.ScreenPowerAttempts.WakeAction
 import com.aliothmoon.maadroid.remote.internal.WakeUnlockController.LOCK_SETTLE_MS

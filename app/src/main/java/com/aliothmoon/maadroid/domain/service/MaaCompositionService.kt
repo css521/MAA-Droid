@@ -55,6 +55,7 @@ import org.koin.java.KoinJavaComponent.inject
 import timber.log.Timber
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import com.aliothmoon.maadroid.maa.maaCoreService
 
 class MaaCompositionService(
     private val context: Context,

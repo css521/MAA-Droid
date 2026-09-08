@@ -19,7 +19,8 @@ out/
 # Gradle/Android Studio
 versionname.txt
 versioncode.txt
-android/.cxx
+# CMake/NDK 构建产物：模块拆分后 native 可能在任意模块下，故不写死路径
+**/.cxx/
 
 # Log Files
 *.log

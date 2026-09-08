@@ -1,6 +1,6 @@
 package com.aliothmoon.maadroid.presentation.state
 
-import com.aliothmoon.maadroid.maa.TouchPointerSequence
+import com.aliothmoon.maadroid.input.TouchPointerSequence
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

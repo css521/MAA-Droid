@@ -3,7 +3,7 @@ package com.aliothmoon.maadroid.remote.internal
 import android.view.Display
 import com.aliothmoon.maadroid.domain.models.UnlockGesture
 import com.aliothmoon.maadroid.domain.models.UnlockStep
-import com.aliothmoon.maadroid.maa.InputControlUtils
+import com.aliothmoon.maadroid.input.InputControlUtils
 import kotlin.math.roundToInt
 
 internal sealed interface InjectAction {

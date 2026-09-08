@@ -4,7 +4,6 @@ import android.content.Intent;
 import android.os.ParcelFileDescriptor;
 import android.view.Surface;
 import com.aliothmoon.maadroid.ITouchEventCallback;
-import com.aliothmoon.maadroid.MaaCoreService;
 import com.aliothmoon.maadroid.remote.PermissionGrantRequest;
 import com.aliothmoon.maadroid.remote.PermissionStateInfo;
 
@@ -24,7 +23,10 @@ interface RemoteService {
 
     boolean clearForcedDisplaySize() = 7;
 
-    MaaCoreService getMaaCoreService() = 9;
+    // 按 engineId 取引擎服务。core-bridge 不认识任何具体引擎：
+    // 引擎在提权进程侧通过 RemoteEngineRegistry 注册，此处只按 id 转交 binder。
+    // 这是「一个 App 控制多个游戏」的进程层接口。
+    IBinder getEngineService(String engineId) = 9;
 
     int setup(String userDir,boolean isDebug) = 10;
 

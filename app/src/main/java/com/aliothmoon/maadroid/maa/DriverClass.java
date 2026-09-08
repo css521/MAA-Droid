@@ -6,6 +6,7 @@ import com.aliothmoon.maadroid.remote.internal.ActivityUtils;
 import com.aliothmoon.maadroid.remote.internal.GameFpsMonitor;
 import com.aliothmoon.maadroid.remote.internal.PrimaryDisplayManager;
 import com.aliothmoon.maadroid.third.Ln;
+import com.aliothmoon.maadroid.input.InputControlUtils;
 
 /**
  * upcall driver

@@ -5,7 +5,7 @@ import android.system.ErrnoException;
 import android.system.Os;
 import android.system.OsConstants;
 
-import com.aliothmoon.maadroid.BuildConfig;
+import com.aliothmoon.maadroid.corebridge.BuildConfig;
 import com.aliothmoon.maadroid.constant.AndroidVersions;
 
 import java.io.FileDescriptor;

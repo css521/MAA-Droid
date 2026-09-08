@@ -17,5 +17,8 @@ internal object TestSources {
         File(relativePath),
         File("app/$relativePath"),
         File("../app/$relativePath"),
+        // native 代码与 scrcpy 派生封装已拆到 core-bridge，契约测试需同时能定位两个模块
+        File("core-bridge/$relativePath"),
+        File("../core-bridge/$relativePath"),
     )
 }

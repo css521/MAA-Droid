@@ -1,6 +1,6 @@
 package com.aliothmoon.maadroid.presentation.state
 
-import com.aliothmoon.maadroid.maa.TouchPointerSequence
+import com.aliothmoon.maadroid.input.TouchPointerSequence
 
 /**
  * 预览手动触控：Compose 的 PointerId（单调递增 Long）→ 注入用 contact（0..15）；

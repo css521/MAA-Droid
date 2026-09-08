@@ -1,4 +1,4 @@
-package com.aliothmoon.maadroid.maa;
+package com.aliothmoon.maadroid.input;
 
 import android.os.RemoteException;
 import android.os.SystemClock;
