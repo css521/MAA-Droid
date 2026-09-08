@@ -137,4 +137,8 @@ interface RemoteService {
     oneway void keyDown(int keyCode) = 54;
 
     oneway void keyUp(int keyCode) = 55;
+
+    // 强停游戏进程。原先只有 MaaCore 自带的 StopGame，属方舟专有；
+    // engine-api 的 DeviceControl.stopApp 需要一个游戏无关的实现
+    oneway void forceStopApp(String packageName) = 56;
 }

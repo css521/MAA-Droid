@@ -26,6 +26,8 @@ android {
 dependencies {
     // AIDL 契约、native 桥、输入注入、scrcpy 派生封装
     api(project(":core-bridge"))
+    // 实现 engine-api 的设备侧抽象（DeviceHandle / FrameSource / InputSink）
+    api(project(":engine-api"))
     compileOnly(project(":hidden-api"))
 
     implementation(libs.androidx.annotation)

@@ -32,6 +32,7 @@ import com.aliothmoon.maadroid.remote.internal.WakeUnlockController
 import com.aliothmoon.maadroid.remote.internal.XmsfFirewall
 import com.aliothmoon.maadroid.third.FakeContext
 import com.aliothmoon.maadroid.third.Ln
+import com.aliothmoon.maadroid.third.wrappers.ServiceManager
 import com.aliothmoon.maadroid.third.Workarounds
 import java.io.File
 import java.io.FileOutputStream
@@ -303,6 +304,13 @@ open class RemoteServiceImpl : RemoteService.Stub() {
         if (displayId != DefaultDisplayConfig.DISPLAY_NONE) {
             InputControlUtils.keyDown(keyCode, displayId)
         }
+    }
+
+    /** 强停游戏进程，供 engine-api 的 DeviceControl.stopApp 使用 */
+    override fun forceStopApp(packageName: String?) {
+        if (packageName.isNullOrBlank()) return
+        runCatching { ServiceManager.getActivityManager().forceStopPackage(packageName) }
+            .onFailure { Ln.e("$TAG: forceStopApp($packageName) failed: ${it.message}") }
     }
 
     override fun keyUp(keyCode: Int) {
