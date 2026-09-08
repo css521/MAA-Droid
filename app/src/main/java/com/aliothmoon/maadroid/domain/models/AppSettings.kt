@@ -8,6 +8,18 @@ import kotlinx.serialization.Serializable
 @Serializable
 @PrefSchema
 data class AppSettings(
+    /**
+     * 当前操控的游戏，取值见 `EngineIds`。
+     *
+     * 缺省是方舟：本 App 是从只有方舟的 MAA-Meow 演进来的，已装用户升级后
+     * 应当停在原来的游戏上，而不是被切到边狱。
+     *
+     * 存的是引擎 id 字符串而非枚举 —— 接第三个游戏时不必改 schema，
+     * 未知 id 由 EngineRegistry 在读取时回落到可用引擎。
+     */
+    @PrefKey(default = "arknights")
+    val currentGameId: String = "arknights",
+
     @PrefKey(default = "ACCESSIBILITY")
     val overlayMode: String = "ACCESSIBILITY",
 

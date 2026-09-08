@@ -111,4 +111,33 @@ class MultiEngineContractTest {
             dir.deleteRecursively()
         }
     }
+
+    @Test
+    fun storedGameIdResolvesToARegisteredProfile() {
+        // 正常情形：两个引擎都在
+        assertEquals(EngineIds.ARKNIGHTS, EngineRegistry.resolveOrFallback(EngineIds.ARKNIGHTS)?.id)
+        assertEquals(EngineIds.LIMBUS, EngineRegistry.resolveOrFallback(EngineIds.LIMBUS)?.id)
+    }
+
+    @Test
+    fun unknownStoredGameIdFallsBackInsteadOfLeavingHostEmpty() {
+        // 存下来的是字符串，所以这两种情形都会真实发生：
+        // 用户曾选的游戏在新版被移除；旧版存的 id 在当前构建里没注册。
+        // 回落到第一个可用方案，而不是让宿主拿着空引擎渲染空白页
+        val fallback = EngineRegistry.resolveOrFallback("some_removed_game")
+        assertNotNull("未知 id 必须回落而不是给 null", fallback)
+        assertTrue(EngineRegistry.isRegistered(fallback!!.id))
+
+        assertNotNull("null 同样回落", EngineRegistry.resolveOrFallback(null))
+    }
+
+    @Test
+    fun defaultGameIsArknightsSoUpgradingUsersStayPut() {
+        // 本 App 从只有方舟的 MAA-Meow 演进而来；已装用户升级后应停在原来的游戏上，
+        // 而不是被切到边狱
+        assertEquals(
+            EngineIds.ARKNIGHTS,
+            com.aliothmoon.maadroid.domain.models.AppSettings().currentGameId,
+        )
+    }
 }

@@ -3,6 +3,7 @@ package com.aliothmoon.maadroid.data.preferences
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import com.aliothmoon.maadroid.engine.EngineRegistry
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.preferencesDataStore
 import com.aliothmoon.maadroid.R
@@ -418,6 +419,34 @@ class AppSettingsManager(
         with(AppSettingsSchema) {
             context.dataStore.edit { it[updateChannel] = channel.name }
         }
+    }
+
+    /**
+     * 当前操控的游戏。
+     *
+     * 经 [EngineRegistry.resolveOrFallback] 解析：存的 id 若在当前构建里没注册
+     * （引擎被移除、或按 ABI 裁剪掉），回落到第一个可用方案，而不是让宿主
+     * 拿着空引擎渲染空白页。
+     */
+    val currentGameId: StateFlow<String> = settings
+        .map { EngineRegistry.resolveOrFallback(it.currentGameId)?.id ?: it.currentGameId }
+        .distinctUntilChanged()
+        .stateIn(
+            scope, SharingStarted.Eagerly,
+            EngineRegistry.resolveOrFallback(initialSettings.currentGameId)?.id
+                ?: initialSettings.currentGameId,
+        )
+
+    /**
+     * 切换游戏。未注册的 id 直接拒绝并返回 false —— 让调用方能报错，
+     * 而不是写进偏好后在下次启动时静默回落。
+     */
+    suspend fun setCurrentGameId(engineId: String): Boolean {
+        if (!EngineRegistry.isRegistered(engineId)) return false
+        with(AppSettingsSchema) {
+            context.dataStore.edit { it[currentGameId] = engineId }
+        }
+        return true
     }
 
     // 主题模式
