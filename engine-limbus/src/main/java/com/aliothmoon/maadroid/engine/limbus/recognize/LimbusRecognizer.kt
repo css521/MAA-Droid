@@ -25,6 +25,7 @@ class LimbusRecognizer(
     private val index: TemplateIndex,
     private val templateFileOf: (String) -> File?,
     private val classifier: OnnxClassifier? = null,
+    private val ocr: com.aliothmoon.maadroid.engine.limbus.recognize.ocr.PpOcrEngine? = null,
     private val onLog: (String) -> Unit = {},
 ) : Recognizer {
 
@@ -78,18 +79,51 @@ class LimbusRecognizer(
     // 每个都留一条日志，让用户知道是能力缺失而不是画面不对。
 
     /**
-     * OCR。上游用量第二（22 处），饰品名、主题卡包、队伍人数、现金都靠它，
-     * 缺了会让镜牢的商店与跨层选饰品退化到只能走模板兜底分支。
-     * 计划走 onnxruntime-android + PP-OCRv4 mobile det/rec，模型随资源包下发。
+     * 文本检测 + 识别。上游用量第二（22 处）：饰品名、主题卡包、队伍人数、现金都靠它。
+     *
+     * [crop] 语义与模板匹配一致 —— 是**裁剪**，返回坐标会加回偏移。
+     * OCR 不可用时返回空表（等价于「识别不中」），依赖文字的步骤会走兜底分支。
      */
     override suspend fun detectText(crop: Crop?, threshold: Double): List<TextMatch> {
-        warnOnce("OCR", "OCR 尚未接入，依赖文字识别的步骤将走兜底分支")
-        return emptyList()
+        val engine = ocr ?: run {
+            warnOnce("OCR", "OCR 不可用，依赖文字识别的步骤将走兜底分支")
+            return emptyList()
+        }
+        val frame = frames.grab() ?: return emptyList()
+        val screen = frame.toMat()
+        try {
+            val region = crop?.clampTo(screen.cols(), screen.rows())
+            val work = if (region == null) screen else Mat(screen, region.toRect())
+            try {
+                val offsetX = region?.x ?: 0
+                val offsetY = region?.y ?: 0
+                return engine.detect(work)
+                    .filter { it.confidence >= threshold }
+                    .map {
+                        TextMatch(
+                            text = it.text,
+                            x = it.centerX + offsetX,
+                            y = it.centerY + offsetY,
+                            score = it.confidence.toDouble(),
+                        )
+                    }
+            } finally {
+                if (work !== screen) work.release()
+            }
+        } finally {
+            screen.release()
+        }
     }
 
+    /**
+     * 在检测结果里找目标文本，对应上游 `find_text_in_image`。
+     *
+     * 用**包含**而非相等：OCR 常把周围的标点或临近文字一起框进来，
+     * 要求相等会让绝大多数查找失败。[threshold] 是置信度下限，不是相似度。
+     */
     override suspend fun findText(target: String, crop: Crop?, threshold: Double): List<TextMatch> {
-        warnOnce("OCR", "OCR 尚未接入，依赖文字识别的步骤将走兜底分支")
-        return emptyList()
+        if (target.isEmpty()) return emptyList()
+        return detectText(crop, threshold).filter { target in it.text }
     }
 
     /**
@@ -222,6 +256,7 @@ class LimbusRecognizer(
         templateCache.clear()
         warned.clear()
         classifier?.release()
+        ocr?.close()
     }
 
     private companion object {

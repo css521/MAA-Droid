@@ -14,6 +14,7 @@ import com.aliothmoon.maadroid.engine.limbus.pipeline.PipelineRegistry
 import com.aliothmoon.maadroid.engine.limbus.pipeline.PipelineRunner
 import com.aliothmoon.maadroid.engine.limbus.recognize.LimbusRecognizer
 import com.aliothmoon.maadroid.engine.limbus.recognize.OnnxClassifier
+import com.aliothmoon.maadroid.engine.limbus.recognize.ocr.PpOcrEngine
 import com.aliothmoon.maadroid.engine.limbus.recognize.ResourcePackTemplateIndex
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -139,6 +140,7 @@ class LimbusEngine(
             index = index,
             templateFileOf = index::fileOf,
             classifier = OnnxClassifier(dir) { warn(it) },
+            ocr = PpOcrEngine.load(dir) { warn(it) },
             onLog = { warn(it) },
         )
 
