@@ -1,0 +1,1234 @@
+package com.aliothmoon.maadroid.presentation.view.panel
+
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.DragIndicator
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.PlaylistRemove
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.UploadFile
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.aliothmoon.maadroid.R
+import com.aliothmoon.maadroid.data.model.copilot.CopilotDocumentation
+import com.aliothmoon.maadroid.data.model.copilot.CopilotListItem
+import com.aliothmoon.maadroid.data.resource.CopilotResourceProvider
+import com.aliothmoon.maadroid.domain.service.OperatorDisplayItem
+import com.aliothmoon.maadroid.domain.service.OperatorSummaryData
+import com.aliothmoon.maadroid.domain.state.MaaExecutionState
+import com.aliothmoon.maadroid.presentation.LocalFloatingWindowContext
+import com.aliothmoon.maadroid.presentation.components.CheckBoxWithExpandableTip
+import com.aliothmoon.maadroid.presentation.components.CheckBoxWithLabel
+import com.aliothmoon.maadroid.presentation.components.ITextField
+import com.aliothmoon.maadroid.presentation.components.tip.ExpandableTipContent
+import com.aliothmoon.maadroid.presentation.components.tip.ExpandableTipIcon
+import com.aliothmoon.maadroid.presentation.viewmodel.CopilotTabs
+import com.aliothmoon.maadroid.presentation.viewmodel.CopilotViewModel
+import com.aliothmoon.maadroid.theme.MaaAnimatedVisibility
+import com.aliothmoon.maadroid.utils.Misc
+import com.aliothmoon.maadroid.utils.i18n.UiText
+import com.aliothmoon.maadroid.utils.i18n.asString
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.koin.compose.koinInject
+import sh.calvin.reorderable.ReorderableCollectionItemScope
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
+
+private data class CopilotTabUiSpec(
+    val index: Int,
+    @param:StringRes val titleRes: Int,
+)
+
+@Composable
+fun AutoBattlePanel(
+    modifier: Modifier = Modifier,
+    viewModel: CopilotViewModel = koinInject()
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val maaState by viewModel.maaState.collectAsStateWithLifecycle()
+    val isStarting = maaState == MaaExecutionState.STARTING
+    val controlsEnabled = !state.isLoading && !isStarting
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val isInFloatingWindow = LocalFloatingWindowContext.current
+    val statusMessage = state.statusMessage.asString()
+    val compactButtonShape = RoundedCornerShape(8.dp)
+    val compactButtonPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+    val importFloatHint = stringResource(R.string.copilot_import_float_hint)
+
+    // SAF 文件选择器（浮窗环境下不可用）
+    val filePicker = if (!isInFloatingWindow) {
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.OpenMultipleDocuments()
+        ) { uris ->
+            if (uris.isEmpty()) return@rememberLauncherForActivityResult
+            scope.launch {
+                val files = withContext(Dispatchers.IO) {
+                    uris.mapNotNull { uri ->
+                        val name = Misc.queryFileName(context, uri)
+                            ?: uri.lastPathSegment
+                            ?: "copilot_${System.currentTimeMillis()}.json"
+                        val json = context.contentResolver.openInputStream(uri)?.use {
+                            it.bufferedReader().readText()
+                        } ?: return@mapNotNull null
+                        name to json
+                    }
+                }
+                if (files.isNotEmpty()) {
+                    viewModel.onImportLocalFiles(files)
+                }
+            }
+        }
+    } else null
+    val tabSpecs = listOf(
+        CopilotTabUiSpec(
+            index = CopilotTabs.MAIN,
+            titleRes = R.string.panel_autobattle_tab_mainline,
+        ),
+        CopilotTabUiSpec(
+            index = CopilotTabs.SSS,
+            titleRes = R.string.panel_autobattle_tab_security,
+        ),
+        CopilotTabUiSpec(
+            index = CopilotTabs.PARADOX,
+            titleRes = R.string.panel_autobattle_tab_paradox,
+        ),
+        CopilotTabUiSpec(
+            index = CopilotTabs.OTHER_ACTIVITY,
+            titleRes = R.string.panel_autobattle_tab_other,
+        )
+    )
+    val regularCopilotTab = CopilotTabs.supportsRegularCopilotOptions(state.tabIndex)
+    val loopCountSupportedTab = CopilotTabs.supportsLoopCount(state.tabIndex)
+    val battleListSupportedTab = CopilotTabs.supportsBattleList(state.tabIndex)
+
+    // 列表平铺进外层 LazyColumn，拖拽状态绑外层：避免嵌套滚动
+    val listState = rememberLazyListState()
+    val haptic = LocalHapticFeedback.current
+    val reorderableState = rememberReorderableLazyListState(listState) { from, to ->
+        // 非列表项的 key 在 VM 里查不到 id，直接忽略
+        val fromId = from.key as? String ?: return@rememberReorderableLazyListState
+        val toId = to.key as? String ?: return@rememberReorderableLazyListState
+        viewModel.onReorderList(fromId, toId)
+    }
+
+    Box(modifier = modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(PaddingValues(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 4.dp)),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item(key = "copilot_tabs") {
+                val textMeasurer = rememberTextMeasurer()
+                val density = LocalDensity.current
+                val labelStyle = MaterialTheme.typography.labelMedium
+                val titles = tabSpecs.map { stringResource(it.titleRes) }
+                // 最宽标签（按选中态粗体）放不进半宽就退化成单列
+                val widestLabel = remember(titles, labelStyle) {
+                    val boldStyle = labelStyle.copy(fontWeight = FontWeight.Bold)
+                    with(density) {
+                        titles.maxOf { title ->
+                            textMeasurer.measure(title, boldStyle, softWrap = false).size.width
+                        }.toDp()
+                    }
+                }
+                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                    val spacing = 6.dp
+                    val cellInset = 8.dp * 2 + 2.dp
+                    val columns = if (widestLabel <= (maxWidth - spacing) / 2 - cellInset) 2 else 1
+                    Column(verticalArrangement = Arrangement.spacedBy(spacing)) {
+                        tabSpecs.chunked(columns).forEach { rowSpecs ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(spacing)
+                            ) {
+                                rowSpecs.forEach { spec ->
+                                    val selected = state.tabIndex == spec.index
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = if (selected) {
+                                            MaterialTheme.colorScheme.primaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.surface
+                                        },
+                                        border = BorderStroke(
+                                            width = 1.dp,
+                                            color = if (selected) {
+                                                MaterialTheme.colorScheme.primary
+                                            } else {
+                                                MaterialTheme.colorScheme.outlineVariant
+                                            }
+                                        ),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .heightIn(min = 36.dp)
+                                            .clickable { viewModel.onTabChanged(spec.index) }
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = stringResource(spec.titleRes),
+                                                style = labelStyle,
+                                                color = if (selected) {
+                                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSurface
+                                                },
+                                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                                textAlign = TextAlign.Center,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    }
+                                }
+                                if (rowSpecs.size < columns) {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            item {
+                ITextField(
+                    value = state.inputText,
+                    onValueChange = viewModel::onInputChanged,
+                    label = stringResource(R.string.panel_autobattle_station_code_label),
+                    placeholder = stringResource(R.string.panel_autobattle_station_code_placeholder),
+                    trailingIcon = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.offset(x = (-4).dp)
+                        ) {
+                            IconButton(
+                                onClick = viewModel::onPasteAndParse,
+                                enabled = controlsEnabled,
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ContentPaste,
+                                    contentDescription = stringResource(R.string.copilot_paste_parse),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = viewModel::onToggleBuiltinPicker,
+                                enabled = controlsEnabled,
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (state.builtinPickerExpanded) {
+                                        Icons.Default.ExpandLess
+                                    } else {
+                                        Icons.Default.ExpandMore
+                                    },
+                                    contentDescription = stringResource(R.string.copilot_builtin_picker),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+                )
+            }
+
+            item {
+                BuiltinCopilotTree(
+                    expanded = state.builtinPickerExpanded,
+                    loaded = state.builtinLoaded,
+                    tree = state.builtinTree,
+                    expandedFolders = state.builtinExpandedFolders,
+                    enabled = controlsEnabled,
+                    onToggleFolder = viewModel::onToggleBuiltinFolder,
+                    onSelectFile = viewModel::onSelectBuiltinFile,
+                )
+            }
+
+            item {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (state.isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                        }
+                        Text(
+                            text = statusMessage.ifBlank {
+                                stringResource(R.string.panel_autobattle_waiting)
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // 读取类：实心主色
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CopilotActionButton(
+                            text = if (state.isLoading) {
+                                stringResource(R.string.panel_autobattle_loading)
+                            } else {
+                                stringResource(R.string.panel_autobattle_read_single)
+                            },
+                            icon = Icons.Default.Search,
+                            filled = true,
+                            enabled = controlsEnabled,
+                            onClick = viewModel::onParseInput,
+                        )
+                    }
+                    // 导入 / 外链：描边次级
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CopilotActionButton(
+                            text = stringResource(R.string.copilot_import_file),
+                            icon = Icons.Default.UploadFile,
+                            filled = false,
+                            enabled = controlsEnabled,
+                            onClick = {
+                                if (filePicker != null) {
+                                    filePicker.launch(
+                                        arrayOf(
+                                            "application/json",
+                                            "application/octet-stream"
+                                        )
+                                    )
+                                } else {
+                                    Toast.makeText(context, importFloatHint, Toast.LENGTH_SHORT)
+                                        .show()
+                                }
+                            },
+                        )
+                        CopilotActionButton(
+                            text = stringResource(R.string.panel_autobattle_station),
+                            icon = Icons.Default.Public,
+                            filled = false,
+                            enabled = true,
+                            onClick = { Misc.openUriSafely(context, "https://zoot.plus") },
+                        )
+                    }
+                }
+            }
+
+            val currentCopilot = state.currentCopilot
+            if (currentCopilot != null) {
+                item(key = "copilot_detail") {
+                    CopilotDetailCard(
+                        stageLabel = state.copilotTaskName,
+                        doc = currentCopilot.doc,
+                        copilotId = state.copilotId,
+                        fromWeb = state.isDataFromWeb,
+                        videoUrl = state.videoUrl,
+                        warnings = state.requirementWarnings,
+                        summary = state.operatorSummary,
+                        onOpenVideo = { Misc.openUriSafely(context, state.videoUrl) },
+                    )
+                }
+            }
+
+            if (regularCopilotTab) {
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        CheckBoxWithExpandableTip(
+                            checked = state.config.formation,
+                            onCheckedChange = {
+                                viewModel.onConfigChanged(state.config.copy(formation = it))
+                            },
+                            label = stringResource(R.string.panel_autobattle_auto_formation),
+                            tipText = stringResource(R.string.panel_autobattle_auto_formation_tip)
+                        )
+                        if (state.config.formation) {
+                            CheckBoxWithLabel(
+                                checked = state.config.useFormation,
+                                onCheckedChange = { enabled ->
+                                    viewModel.onConfigChanged(
+                                        state.config.copy(
+                                            useFormation = enabled,
+                                            formationIndex = state.config.formationIndex.coerceIn(
+                                                1,
+                                                4
+                                            )
+                                        )
+                                    )
+                                },
+                                label = stringResource(R.string.panel_autobattle_use_formation)
+                            )
+
+                            if (state.config.useFormation) {
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    listOf(1, 2, 3, 4).forEach { index ->
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.clickable {
+                                                viewModel.onConfigChanged(
+                                                    state.config.copy(
+                                                        formationIndex = index
+                                                    )
+                                                )
+                                            }
+                                        ) {
+                                            RadioButton(
+                                                selected = state.config.formationIndex == index,
+                                                onClick = {
+                                                    viewModel.onConfigChanged(
+                                                        state.config.copy(
+                                                            formationIndex = index
+                                                        )
+                                                    )
+                                                }
+                                            )
+                                            Text(index.toString())
+                                        }
+                                    }
+                                }
+                            }
+
+                            CheckBoxWithExpandableTip(
+                                checked = state.config.ignoreRequirements,
+                                onCheckedChange = {
+                                    viewModel.onConfigChanged(state.config.copy(ignoreRequirements = it))
+                                },
+                                label = stringResource(R.string.panel_autobattle_ignore_requirements),
+                                tipText = stringResource(R.string.panel_autobattle_ignore_requirements_tip)
+                            )
+
+                            CheckBoxWithExpandableTip(
+                                checked = state.config.useSupportUnit,
+                                onCheckedChange = {
+                                    viewModel.onConfigChanged(state.config.copy(useSupportUnit = it))
+                                },
+                                label = stringResource(R.string.panel_autobattle_support_unit),
+                                tipText = stringResource(R.string.panel_autobattle_support_unit_tip)
+                            )
+
+                            if (state.config.useSupportUnit) {
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    listOf(
+                                        1 to stringResource(R.string.panel_autobattle_support_fill_gaps),
+                                        3 to stringResource(R.string.panel_autobattle_support_random)
+                                    ).forEach { (value, label) ->
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.clickable {
+                                                viewModel.onConfigChanged(
+                                                    state.config.copy(
+                                                        supportUnitUsage = value
+                                                    )
+                                                )
+                                            }
+                                        ) {
+                                            RadioButton(
+                                                selected = state.config.supportUnitUsage == value,
+                                                onClick = {
+                                                    viewModel.onConfigChanged(
+                                                        state.config.copy(
+                                                            supportUnitUsage = value
+                                                        )
+                                                    )
+                                                }
+                                            )
+                                            Text(label)
+                                        }
+                                    }
+                                }
+                            }
+
+                            CheckBoxWithLabel(
+                                checked = state.config.addTrust,
+                                onCheckedChange = {
+                                    viewModel.onConfigChanged(
+                                        state.config.copy(
+                                            addTrust = it
+                                        )
+                                    )
+                                },
+                                label = stringResource(R.string.panel_autobattle_add_trust)
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (battleListSupportedTab) {
+                        CheckBoxWithExpandableTip(
+                            checked = state.useCopilotList,
+                            onCheckedChange = viewModel::onToggleListMode,
+                            label = stringResource(R.string.panel_autobattle_battle_list),
+                            tipText = stringResource(R.string.panel_autobattle_battle_list_tip)
+                        )
+                    }
+
+                    if (state.listModeActive && state.tabIndex == CopilotTabs.MAIN) {
+                        CheckBoxWithLabel(
+                            checked = state.config.useSanityPotion,
+                            onCheckedChange = {
+                                viewModel.onConfigChanged(state.config.copy(useSanityPotion = it))
+                            },
+                            label = stringResource(R.string.panel_autobattle_use_sanity_potion)
+                        )
+                    }
+
+                    if (!state.listModeActive && loopCountSupportedTab) {
+                        CheckBoxWithLabel(
+                            checked = state.config.loop,
+                            onCheckedChange = {
+                                viewModel.onConfigChanged(state.config.copy(loop = it))
+                            },
+                            label = stringResource(R.string.panel_autobattle_loop)
+                        )
+                        if (state.config.loop) {
+                            ITextField(
+                                value = state.config.loopTimes.toString(),
+                                onValueChange = { text ->
+                                    text.toIntOrNull()?.let {
+                                        viewModel.onConfigChanged(
+                                            state.config.copy(
+                                                loopTimes = it.coerceAtLeast(
+                                                    1
+                                                )
+                                            )
+                                        )
+                                    }
+                                },
+                                label = stringResource(R.string.panel_autobattle_loop),
+                                placeholder = "1"
+                            )
+                        }
+                    }
+                }
+            }
+
+
+            if (battleListSupportedTab && (state.listModeActive || state.taskList.isNotEmpty())) {
+                item(key = "battle_list_header") {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            stringResource(R.string.panel_autobattle_battle_list),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        if (!state.listModeActive) {
+                            Text(
+                                stringResource(R.string.panel_autobattle_battle_list_inactive_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                        var sequenceTipExpanded by remember { mutableStateOf(false) }
+                        ExpandableTipIcon(
+                            expanded = sequenceTipExpanded,
+                            onExpandedChange = { sequenceTipExpanded = it })
+                        ExpandableTipContent(
+                            visible = sequenceTipExpanded,
+                            tipText = stringResource(R.string.panel_autobattle_sequence_tip)
+                        )
+                    }
+                }
+                if (state.taskList.isEmpty()) {
+                    item(key = "battle_list_empty") {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                stringResource(R.string.panel_autobattle_empty_entries),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(8.dp)
+                            )
+                        }
+                    }
+                }
+                itemsIndexed(
+                    state.taskList,
+                    key = { _, item -> item.id }
+                ) { index, item ->
+                    ReorderableItem(reorderableState, key = item.id) { isDragging ->
+                        BattleListRow(
+                            item = item,
+                            isDragging = isDragging,
+                            onDragStarted = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            },
+                            onDragStopped = viewModel::onReorderSettled,
+                            onToggle = { viewModel.onToggleListItem(index) },
+                            onLoad = { viewModel.onSelectListItem(index) },
+                            onRemove = { viewModel.onRemoveFromList(index) },
+                            buttonShape = compactButtonShape,
+                            buttonPadding = compactButtonPadding,
+                        )
+                    }
+                }
+                item(key = "battle_list_actions") {
+                    // TODO: 恢复手动输入关卡名 + 添加普通/添加突袭功能
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        BattleListActionButton(
+                            text = stringResource(R.string.panel_autobattle_clear_unchecked),
+                            icon = Icons.Default.PlaylistRemove,
+                            enabled = controlsEnabled && state.taskList.any { !it.isChecked },
+                            onClick = viewModel::onCleanUnchecked,
+                        )
+                        BattleListActionButton(
+                            text = stringResource(R.string.panel_autobattle_clear_list),
+                            icon = Icons.Default.DeleteSweep,
+                            enabled = controlsEnabled && state.taskList.isNotEmpty(),
+                            destructive = true,
+                            onClick = viewModel::onClearList,
+                        )
+                    }
+                }
+            }
+
+            item(key = "tips") {
+                var expanded by remember { mutableStateOf(true) }
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            stringResource(R.string.panel_autobattle_tips_title),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        ExpandableTipIcon(expanded = expanded, onExpandedChange = { expanded = it })
+                    }
+                    ExpandableTipContent(
+                        visible = expanded,
+                        tipText = stringResource(R.string.panel_autobattle_tips_body)
+                    )
+                }
+            }
+        }
+
+    }
+}
+
+@Composable
+private fun RowScope.BattleListActionButton(
+    text: String,
+    icon: ImageVector,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    destructive: Boolean = false,
+) {
+    val colors = if (destructive) {
+        ButtonDefaults.filledTonalButtonColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        )
+    } else {
+        ButtonDefaults.filledTonalButtonColors()
+    }
+    FilledTonalButton(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(8.dp),
+        colors = colors,
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+        modifier = Modifier.weight(1f),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(text = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun ReorderableCollectionItemScope.BattleListRow(
+    item: CopilotListItem,
+    isDragging: Boolean,
+    onDragStarted: () -> Unit,
+    onDragStopped: () -> Unit,
+    onToggle: () -> Unit,
+    onLoad: () -> Unit,
+    onRemove: () -> Unit,
+    buttonShape: RoundedCornerShape,
+    buttonPadding: PaddingValues,
+) {
+    Surface(
+        shadowElevation = if (isDragging) 4.dp else 0.dp,
+        shape = RoundedCornerShape(6.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 2.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            // 只有把手能拖，行的其余区域保持滚动 / 点击语义
+            Icon(
+                Icons.Default.DragIndicator,
+                contentDescription = stringResource(R.string.panel_autobattle_drag_handle),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .size(32.dp)
+                    .draggableHandle(
+                        onDragStarted = { onDragStarted() },
+                        onDragStopped = onDragStopped,
+                    )
+                    .padding(6.dp)
+            )
+            CheckBoxWithLabel(
+                checked = item.isChecked,
+                onCheckedChange = { onToggle() },
+                label = item.name + if (item.isRaid) {
+                    stringResource(R.string.panel_autobattle_raid_suffix)
+                } else {
+                    ""
+                },
+                modifier = Modifier.weight(1f)
+            )
+            OutlinedButton(
+                onClick = onLoad,
+                shape = buttonShape,
+                contentPadding = buttonPadding
+            ) { Text(stringResource(R.string.common_load)) }
+            IconButton(
+                onClick = onRemove,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = stringResource(R.string.common_delete),
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CopilotDetailCard(
+    stageLabel: String,
+    doc: CopilotDocumentation,
+    copilotId: Int,
+    fromWeb: Boolean,
+    videoUrl: String,
+    warnings: List<UiText>,
+    summary: OperatorSummaryData?,
+    onOpenVideo: () -> Unit,
+) {
+    val dividerColor = MaterialTheme.colorScheme.outlineVariant
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (stageLabel.isNotBlank()) {
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Text(
+                            text = stageLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                        )
+                    }
+                }
+                SelectionContainer(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = doc.title.ifBlank { stageLabel },
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                if (videoUrl.isNotBlank()) {
+                    Surface(
+                        onClick = onOpenVideo,
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.primary
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(start = 4.dp, end = 6.dp, top = 2.dp, bottom = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = stringResource(R.string.common_video),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+                    }
+                }
+            }
+            Text(
+                text = if (fromWeb && copilotId > 0) {
+                    stringResource(R.string.panel_autobattle_source_web, copilotId)
+                } else {
+                    stringResource(R.string.panel_autobattle_source_local)
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            if (doc.details.isNotBlank()) {
+                HorizontalDivider(color = dividerColor)
+                var expanded by remember(doc.details) { mutableStateOf(false) }
+                var overflowed by remember(doc.details) { mutableStateOf(false) }
+                SelectionContainer {
+                    Text(
+                        text = doc.details,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = if (expanded) Int.MAX_VALUE else DETAIL_COLLAPSED_LINES,
+                        overflow = TextOverflow.Ellipsis,
+                        onTextLayout = { if (!expanded) overflowed = it.hasVisualOverflow }
+                    )
+                }
+                if (overflowed || expanded) {
+                    Text(
+                        text = stringResource(if (expanded) R.string.common_collapse else R.string.common_expand),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable { expanded = !expanded }
+                    )
+                }
+            }
+
+            if (warnings.isNotEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        warnings.forEach { warning ->
+                            Text(
+                                text = warning.asString(),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (summary != null && !summary.isEmpty) {
+                HorizontalDivider(color = dividerColor)
+                val textMeasurer = rememberTextMeasurer()
+                val labelStyle = MaterialTheme.typography.labelSmall
+                val density = LocalDensity.current
+                val nameWidth = remember(summary) {
+                    val allNames = summary.operators.map { it.name } +
+                            summary.groups.flatMap { (_, opers) -> opers.map { it.name } }
+                    val maxTextWidth = allNames.maxOfOrNull { name ->
+                        textMeasurer.measure(name, labelStyle).size.width
+                    } ?: 0
+                    with(density) { (maxTextWidth + 8.dp.roundToPx()).toDp() }
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(R.string.panel_autobattle_operator_header),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = stringResource(
+                                R.string.panel_autobattle_summary_count,
+                                summary.totalCount
+                            ),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    summary.operators.forEach { oper ->
+                        OperatorRow(oper, nameWidth = nameWidth)
+                    }
+                    summary.groups.forEach { (groupName, opers) ->
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = stringResource(
+                                    R.string.panel_autobattle_group_header,
+                                    groupName
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            opers.forEach { oper ->
+                                OperatorRow(oper, nameWidth = nameWidth)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private const val DETAIL_COLLAPSED_LINES = 3
+
+@Composable
+private fun OperatorRow(
+    item: OperatorDisplayItem,
+    nameWidth: Dp,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(
+            shape = RoundedCornerShape(4.dp),
+            color = MaterialTheme.colorScheme.primaryContainer
+        ) {
+            Text(
+                text = item.name,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier
+                    .width(nameWidth)
+                    .padding(horizontal = 4.dp, vertical = 1.dp),
+                textAlign = TextAlign.Start
+            )
+        }
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            itemVerticalAlignment = Alignment.CenterVertically
+        ) {
+            item.tags.forEach { tag ->
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = MaterialTheme.colorScheme.surface
+                ) {
+                    Text(
+                        text = tag,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 自动战斗操作按钮：等宽网格单元（RowScope.weight(1f)），图标 + 单行文字。
+ * @param filled true=实心主色（读取类主操作）；false=描边次级（导入/外链）
+ */
+@Composable
+private fun RowScope.CopilotActionButton(
+    text: String,
+    icon: ImageVector,
+    filled: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(8.dp)
+    val padding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+    val content: @Composable RowScope.() -> Unit = {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(text = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+    if (filled) {
+        Button(
+            onClick = onClick,
+            enabled = enabled,
+            shape = shape,
+            contentPadding = padding,
+            modifier = Modifier.weight(1f),
+            content = content,
+        )
+    } else {
+        OutlinedButton(
+            onClick = onClick,
+            enabled = enabled,
+            shape = shape,
+            contentPadding = padding,
+            modifier = Modifier.weight(1f),
+            content = content,
+        )
+    }
+}
+
+private data class BuiltinVisibleEntry(
+    val node: CopilotResourceProvider.Node,
+    val depth: Int,
+)
+
+@Composable
+private fun BuiltinCopilotTree(
+    expanded: Boolean,
+    loaded: Boolean,
+    tree: List<CopilotResourceProvider.Node>,
+    expandedFolders: Set<String>,
+    enabled: Boolean,
+    onToggleFolder: (String) -> Unit,
+    onSelectFile: (CopilotResourceProvider.Node) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    MaaAnimatedVisibility(
+        visible = expanded,
+        enter = expandVertically() + fadeIn(),
+        exit = shrinkVertically() + fadeOut(),
+        modifier = modifier,
+    ) {
+        val visibleNodes = remember(tree, expandedFolders) {
+            flattenVisibleNodes(tree, expandedFolders)
+        }
+        Surface(
+            shape = RoundedCornerShape(6.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp)
+                .heightIn(max = 320.dp)
+                .animateContentSize()
+        ) {
+            when {
+                !loaded -> CircularProgressIndicator(
+                    modifier = Modifier
+                        .padding(12.dp)
+                        .size(16.dp),
+                    strokeWidth = 2.dp
+                )
+
+                visibleNodes.isEmpty() -> Text(
+                    text = stringResource(R.string.copilot_builtin_picker_empty),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(12.dp)
+                )
+
+                else -> LazyColumn(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(vertical = 4.dp)
+                ) {
+                    items(visibleNodes, key = { it.node.relativePath }) { entry ->
+                        BuiltinNodeRow(
+                            entry = entry,
+                            expanded = entry.node.relativePath in expandedFolders,
+                            enabled = enabled,
+                            onClick = {
+                                if (entry.node.isFolder) {
+                                    onToggleFolder(entry.node.relativePath)
+                                } else {
+                                    onSelectFile(entry.node)
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun flattenVisibleNodes(
+    tree: List<CopilotResourceProvider.Node>,
+    expandedFolders: Set<String>,
+    depth: Int = 0,
+    out: MutableList<BuiltinVisibleEntry> = mutableListOf(),
+): List<BuiltinVisibleEntry> {
+    for (node in tree) {
+        out.add(BuiltinVisibleEntry(node, depth))
+        if (node.isFolder && node.relativePath in expandedFolders) {
+            flattenVisibleNodes(node.children, expandedFolders, depth + 1, out)
+        }
+    }
+    return out
+}
+
+@Composable
+private fun BuiltinNodeRow(
+    entry: BuiltinVisibleEntry,
+    expanded: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val node = entry.node
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(
+                start = (8 + entry.depth * 16).dp,
+                end = 8.dp,
+                top = 6.dp,
+                bottom = 6.dp
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        if (node.isFolder) {
+            Icon(
+                imageVector = if (expanded) {
+                    Icons.Default.KeyboardArrowDown
+                } else {
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight
+                },
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
+        } else {
+            Spacer(modifier = Modifier.size(18.dp))
+        }
+        Text(
+            text = node.name,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = if (node.isFolder) FontWeight.Medium else FontWeight.Normal,
+            color = if (node.isFolder) {
+                MaterialTheme.colorScheme.onSurface
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}

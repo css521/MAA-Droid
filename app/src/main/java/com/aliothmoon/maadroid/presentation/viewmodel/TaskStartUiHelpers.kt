@@ -1,0 +1,137 @@
+package com.aliothmoon.maadroid.presentation.viewmodel
+
+import android.content.Context
+import com.aliothmoon.maadroid.R
+import com.aliothmoon.maadroid.domain.service.MaaCompositionService
+import com.aliothmoon.maadroid.domain.service.resolveStartResultMessage
+import com.aliothmoon.maadroid.domain.state.MaaExecutionState
+import com.aliothmoon.maadroid.domain.usecase.TaskStartAcknowledgement
+import com.aliothmoon.maadroid.domain.usecase.TaskStartDecision
+import com.aliothmoon.maadroid.domain.usecase.TaskStartDecisionReason
+import com.aliothmoon.maadroid.presentation.view.panel.PanelDialogConfirmAction
+import com.aliothmoon.maadroid.presentation.view.panel.PanelDialogType
+import com.aliothmoon.maadroid.presentation.view.panel.PanelDialogUiState
+import com.aliothmoon.maadroid.utils.i18n.UiText
+import com.aliothmoon.maadroid.utils.i18n.uiTextDynamic
+import com.aliothmoon.maadroid.utils.i18n.uiTextJoin
+import com.aliothmoon.maadroid.utils.i18n.uiTextLines
+import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+
+// 需用户确认的警告文案（手动模式），按确认项区分。各启动入口共享。
+internal fun Context.resolveTaskStartConfirmationMessage(ack: TaskStartAcknowledgement): UiText =
+    when (ack) {
+        TaskStartAcknowledgement.GAME_NOT_RUNNING_WITHOUT_WAKE_UP ->
+            uiTextOf(R.string.task_start_warning_game_not_running)
+
+        TaskStartAcknowledgement.GAME_NOT_INSTALLED ->
+            uiTextOf(R.string.task_start_warning_game_not_installed)
+    }
+
+// 拦截文案，按原因区分。各启动入口共享。
+internal fun Context.resolveTaskStartBlockedMessage(
+    reason: TaskStartDecisionReason,
+    clientTypes: List<String> = emptyList(),
+): UiText = when (reason) {
+    TaskStartDecisionReason.NO_TASK_SELECTED ->
+        uiTextOf(R.string.task_start_error_no_task_selected)
+
+    TaskStartDecisionReason.CONFLICTING_CLIENT_TYPES ->
+        uiTextOf(
+            R.string.task_start_error_conflicting_client_types,
+            uiTextJoin(
+                *clientTypes.map(::uiTextDynamic).toTypedArray(),
+                separator = uiTextOf(R.string.common_enumeration_separator),
+            ),
+        )
+
+    TaskStartDecisionReason.NO_EXECUTABLE_TASKS ->
+        uiTextOf(R.string.task_start_error_no_executable_tasks)
+
+    TaskStartDecisionReason.GAME_NOT_RUNNING_WITHOUT_WAKE_UP ->
+        uiTextOf(R.string.task_start_error_scheduled_no_wakeup)
+
+    TaskStartDecisionReason.GAME_NOT_INSTALLED ->
+        uiTextOf(R.string.task_start_error_scheduled_game_not_installed)
+
+    TaskStartDecisionReason.GAME_NOT_ON_BACKGROUND_DISPLAY ->
+        uiTextOf(R.string.task_start_error_game_not_on_background_display)
+}
+
+internal fun Context.resolveTaskStartDecisionMessage(decision: TaskStartDecision): UiText =
+    when (decision) {
+        is TaskStartDecision.Ready -> UiText.Empty
+        is TaskStartDecision.RequiresConfirmation ->
+            resolveTaskStartConfirmationMessage(decision.acknowledgement)
+
+        is TaskStartDecision.Blocked ->
+            uiTextLines(
+                resolveTaskStartBlockedMessage(decision.reason, decision.clientTypes),
+                *decision.details.toTypedArray(),
+            )
+    }
+
+internal fun Context.resolveTaskStartFailureMessage(
+    result: MaaCompositionService.StartResult,
+): UiText? = resolveStartResultMessage(result)
+
+internal fun Context.formatStartResult(
+    result: MaaCompositionService.StartResult,
+    successMessage: UiText = uiTextOf(R.string.task_start_success),
+): UiText {
+    return resolveTaskStartFailureMessage(result) ?: successMessage
+}
+
+internal fun Context.createStartFailedDialog(message: UiText): PanelDialogUiState {
+    return PanelDialogUiState(
+        type = PanelDialogType.ERROR,
+        title = uiTextOf(R.string.task_start_dialog_failed_title),
+        message = message,
+        confirmText = uiTextOf(R.string.task_start_dialog_view_log),
+        confirmAction = PanelDialogConfirmAction.GO_LOG,
+    )
+}
+
+internal fun Context.createStartBlockedDialog(message: UiText): PanelDialogUiState {
+    return PanelDialogUiState(
+        type = PanelDialogType.WARNING,
+        title = uiTextOf(R.string.task_start_dialog_info_title),
+        message = message,
+        confirmText = uiTextOf(R.string.task_start_dialog_ack),
+        confirmAction = PanelDialogConfirmAction.DISMISS_ONLY,
+    )
+}
+
+internal fun Context.createStartWarningDialog(message: UiText): PanelDialogUiState {
+    return PanelDialogUiState(
+        type = PanelDialogType.WARNING,
+        title = uiTextOf(R.string.toolbox_dialog_start_warning_title),
+        message = message,
+        confirmText = uiTextOf(R.string.toolbox_dialog_start_anyway),
+        dismissText = uiTextOf(R.string.common_cancel),
+        confirmAction = PanelDialogConfirmAction.CONFIRM_PENDING_START,
+    )
+}
+
+internal fun Context.createExecutionEndDialog(endState: MaaExecutionState): PanelDialogUiState {
+    val message = when (endState) {
+        MaaExecutionState.ERROR -> uiTextOf(R.string.task_start_execution_aborted_message)
+        else -> uiTextOf(R.string.task_start_execution_finished_message)
+    }
+    return if (endState == MaaExecutionState.ERROR) {
+        PanelDialogUiState(
+            type = PanelDialogType.ERROR,
+            title = uiTextOf(R.string.task_start_dialog_info_title),
+            message = message,
+            confirmText = uiTextOf(R.string.task_start_dialog_ack),
+            confirmAction = PanelDialogConfirmAction.GO_LOG_AND_STOP,
+        )
+    } else {
+        PanelDialogUiState(
+            type = PanelDialogType.SUCCESS,
+            title = uiTextOf(R.string.task_start_execution_completed_title),
+            message = message,
+            confirmText = uiTextOf(R.string.task_start_dialog_view_log),
+            confirmAction = PanelDialogConfirmAction.GO_LOG,
+        )
+    }
+}
