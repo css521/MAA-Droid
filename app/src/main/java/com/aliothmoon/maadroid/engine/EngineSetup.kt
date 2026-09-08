@@ -1,6 +1,7 @@
 package com.aliothmoon.maadroid.engine
 
 import com.aliothmoon.maadroid.maa.ArknightsProfile
+import com.aliothmoon.maadroid.engine.limbus.LimbusEngine
 import com.aliothmoon.maadroid.engine.limbus.LimbusProfile
 import timber.log.Timber
 
@@ -48,12 +49,16 @@ private object ArknightsEngineProvider : EngineProvider {
     }
 }
 
-/** 边狱引擎供给。引擎实现待补 35 个动作与识别器。 */
+/**
+ * 边狱引擎供给。
+ *
+ * 每次 [createEngine] 都给一个新实例：引擎持有模板 Mat 缓存与设备句柄，
+ * 复用会把上一次会话的原生资源带进新会话。
+ */
 private object LimbusEngineProvider : EngineProvider {
     override val profile: GameProfile = LimbusProfile
 
-    override fun createEngine(): AutomationEngine =
-        TODO("边狱引擎待补动作实现与识别器")
+    override fun createEngine(): AutomationEngine = LimbusEngine()
 
     override val ui: EngineUi = object : EngineUi {
         override val taskPanels: List<TaskPanelSpec> = emptyList()
