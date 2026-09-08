@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.os.IBinder
 import android.os.Process
+import android.os.SharedMemory
 import android.system.Os
 import android.view.Surface
 import com.aliothmoon.maadroid.ITouchEventCallback
@@ -17,6 +18,7 @@ import com.aliothmoon.maadroid.input.InputControlUtils
 import com.aliothmoon.maadroid.remote.internal.ActivityUtils
 import com.aliothmoon.maadroid.remote.internal.CoreDataStore
 import com.aliothmoon.maadroid.remote.internal.GameAudioMuteController
+import com.aliothmoon.maadroid.remote.internal.FrameChannel
 import com.aliothmoon.maadroid.remote.internal.GameFpsMonitor
 import com.aliothmoon.maadroid.remote.internal.GestureRecorder
 import com.aliothmoon.maadroid.remote.internal.PermissionGrantHelper
@@ -99,6 +101,8 @@ open class RemoteServiceImpl : RemoteService.Stub() {
         Ln.i("$TAG: destroy()")
         InputControlUtils.setTouchCallback(null)
         GameFpsMonitor.stop()
+        // 共享内存是实例持有的，performEmergencyCleanup 是静态方法拿不到，故在此释放
+        runCatching { frameChannel.close() }
         performEmergencyCleanup()
         exitProcess(0)
     }
@@ -276,6 +280,37 @@ open class RemoteServiceImpl : RemoteService.Stub() {
     override fun setTouchCallback(callback: ITouchEventCallback?) {
         Ln.i("$TAG: setTouchCallback(${callback != null})")
         InputControlUtils.setTouchCallback(callback)
+    }
+
+    // ---- 帧通道：供跑在 App 进程的 Kotlin 引擎取帧 ----
+
+    private val frameChannel = FrameChannel()
+
+    override fun openFrameChannel(width: Int, height: Int): SharedMemory? =
+        frameChannel.open(width, height)
+
+    override fun grabFrame(): LongArray? = frameChannel.grab()
+
+    override fun closeFrameChannel() = frameChannel.close()
+
+    /**
+     * 按键注入。与 touch 一样只在虚拟显示器模式下生效 —— 前台模式由用户自己操作，
+     * 注入按键会与真人输入打架。
+     */
+    override fun keyDown(keyCode: Int) {
+        if (virtualDisplayMode.get() == DisplayMode.PRIMARY) return
+        val displayId = VirtualDisplayManager.getDisplayId()
+        if (displayId != DefaultDisplayConfig.DISPLAY_NONE) {
+            InputControlUtils.keyDown(keyCode, displayId)
+        }
+    }
+
+    override fun keyUp(keyCode: Int) {
+        if (virtualDisplayMode.get() == DisplayMode.PRIMARY) return
+        val displayId = VirtualDisplayManager.getDisplayId()
+        if (displayId != DefaultDisplayConfig.DISPLAY_NONE) {
+            InputControlUtils.keyUp(keyCode, displayId)
+        }
     }
 
     override fun touchDown(x: Int, y: Int, contact: Int) {

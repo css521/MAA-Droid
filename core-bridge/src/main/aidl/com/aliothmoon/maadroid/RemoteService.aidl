@@ -117,4 +117,24 @@ interface RemoteService {
     ParcelFileDescriptor openCoreDebugFile(String relPath) = 49;
 
     boolean clearCoreData() = 50;
+
+    // ---- 帧通道与按键：供跑在 App 进程的 Kotlin 引擎（边狱）使用 ----
+    // MaaCore 在提权进程内直接访问帧缓冲，不需要这些；而 App 进程的引擎只能跨进程取帧。
+    // 走常驻共享内存：映射一次，之后每帧一次 memcpy（1280x720 BGR 约 2.6 MB，亚毫秒级），
+    // 识别频率只有 1–5 fps，开销可忽略；如此 OpenCV 与 onnxruntime 可留在普通 App 进程。
+
+    // 建立/取回常驻共享内存。容量按 width*height*3（BGR）分配。失败返回 null
+    SharedMemory openFrameChannel(int width, int height) = 51;
+
+    // 触发一次拷贝，返回 [width, height, stride, seq]；无可用帧或容量不足返回 null
+    // （不做截断：截断帧会让模板匹配得到错误结果）
+    long[] grabFrame() = 52;
+
+    oneway void closeFrameChannel() = 53;
+
+    // 边狱的 Android 客户端认硬件按键，流水线里的 key 节点直接映射 keycode
+    // （enter→66、esc→111、p→44，取自 AALC 已验证的映射表）
+    oneway void keyDown(int keyCode) = 54;
+
+    oneway void keyUp(int keyCode) = 55;
 }

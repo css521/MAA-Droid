@@ -6,8 +6,12 @@ import java.nio.ByteBuffer
  * 一帧屏幕内容。
  *
  * [buffer] 是直接缓冲区（映射自跨进程共享内存），生命周期只在本次 [FrameSource.grab]
- * 到下次 grab 之间有效 —— 需要留存请自行拷贝。RGBA_8888，行距 [stride] 字节，
- * 可能大于 `width * 4`（对齐填充），逐行读取时必须按 stride 步进。
+ * 到下次 grab 之间有效 —— 需要留存请自行拷贝。
+ *
+ * 像素格式 **BGR 三通道**，与 native 帧缓冲一致（bridge_frame_buffer 存 bgr_data，
+ * MaaCore 也按此消费）。这对 OpenCV 是原生通道序，构造 Mat 无需转换。
+ * [stride] 为行距（字节），当前实现为紧凑的 `width * 3`，但读取时仍应按 stride 步进
+ * 以免将来引入对齐填充后失效。
  */
 class Frame(
     val width: Int,
@@ -20,8 +24,8 @@ class Frame(
 /**
  * 帧来源。
  *
- * 实现走「常驻共享内存 + 每帧一次 memcpy」：1280x720 RGBA 一帧 3.5 MB，映射只做一次，
- * 单次拷贝约 1 ms，而识别频率只有 1–5 fps，开销可忽略。这样 OpenCV 与 onnxruntime
+ * 实现走「常驻共享内存 + 每帧一次 memcpy」：1280x720 BGR 一帧 2.6 MB，映射只做一次，
+ * 单次拷贝亚毫秒级，而识别频率只有 1–5 fps，开销可忽略。这样 OpenCV 与 onnxruntime
  * 都能留在普通 App 进程，不必在 app_process 里加载。
  */
 interface FrameSource {

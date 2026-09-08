@@ -362,6 +362,28 @@ static jobject BuildArgb8888BitmapFromBgr(JNIEnv *env, const uint8_t *bgr, int w
     return bitmap;
 }
 
+size_t CopyLatestFrameBgr(void *dst, size_t capacity, int64_t *outMeta) {
+    if (!dst || !outMeta) return 0;
+    FrameInfo frame = GetLockedPixels();
+    if (!frame.data || frame.width == 0 || frame.height == 0 || frame.length == 0) {
+        UnlockPixels(frame);
+        return 0;
+    }
+    if (frame.length > capacity) {
+        // 容量不足不做截断：截断后的帧会让模板匹配得到错误结果，宁可让调用方重开通道
+        UnlockPixels(frame);
+        return 0;
+    }
+    memcpy(dst, frame.data, frame.length);
+    const size_t copied = frame.length;
+    outMeta[0] = static_cast<int64_t>(frame.width);
+    outMeta[1] = static_cast<int64_t>(frame.height);
+    outMeta[2] = static_cast<int64_t>(frame.stride);
+    UnlockPixels(frame);
+    outMeta[3] = GetFrameCount();
+    return copied;
+}
+
 jobject CreateFrameBufferBitmap(JNIEnv *env) {
     FrameInfo frame = GetLockedPixels();
     if (!frame.data || frame.width == 0 || frame.height == 0 || frame.length == 0) {
