@@ -159,8 +159,9 @@ class HostEngineIsolationContractTest {
         "com.aliothmoon.maadroid.utils.i18n." to 4,
         // → 方舟侧改构造函数注入即可消除，非前置
         "com.aliothmoon.maadroid.presentation.viewmodel." to 15,
-        // → 随 TaskChainState 一起迁入方舟（P2）
-        "com.aliothmoon.maadroid.data.preferences." to 10,
+        // → 随 TaskChainState 一起迁入方舟（P2）。MaaPathConfig 已解耦（10→9），
+        // 剩下的主要是 ActivityManager 对 TaskChainState 的依赖
+        "com.aliothmoon.maadroid.data.preferences." to 9,
         "com.aliothmoon.maadroid.presentation.state." to 1,
         // 已为 0：一旦出现即是新增的反向依赖
         "com.aliothmoon.maadroid.koin." to 0,

@@ -107,12 +107,24 @@ theme 同理：22 次引用里 19 次只指向 `MaaMotion.kt` 一个文件。
 `data/config/MaaPathConfig`（5 处，而后者自己也依赖 `AppSettingsManager`）。
 搬过去会立刻触犯「引擎不得依赖宿主应用层」—— 这不是搬文件能解决的。
 
-**所以下一个前置是给引擎一个读设置的契约**，而不是继续搬代码。参照 `engine:limbus`
-的做法：它完全不碰宿主偏好，配置以 `paramsJson` 字符串流入，内部只认自定义的窄接口
-`LimbusConfig`（int/bool/str/list 四个取值方法）。方舟需要同样的东西 —— 一个由宿主实现、
-引擎只依赖接口的设置视图。
+这一环已解开，而且**不需要造设置契约** —— 量清之后发现三处「依赖宿主设置」里两处是误判：
 
-这次试搬已回退（未留半成品），但依赖图已量清，上表就是下一步的输入。
+| 处 | 实情 |
+|---|---|
+| `MaaPathConfig` | 只需要「数据是否落在提权目录」**一个布尔值**。而该设置本就「进程内固定、改了要重启」，所以在装配点读一次传进去即可 |
+| `ResourceDataManager.displayLanguageCode` | 只是枚举→字符串的便利函数，转换本该由调用方（宿主）做；`load()` 早就只收字符串 |
+| `BackgroundImageStore` | **不是方舟的** —— 它读写「自定义背景图」偏好，是宿主的 UI 功能，只是被误放在 `data/resource/` |
+
+为一个布尔值造一整套 `HostSettings` 接口是过度设计。真正的教训是：**先量再设计** ——
+按「它 import 了宿主设置类」下判断会得出「需要设置契约」，按「它到底读了什么」下判断
+只需要改一个构造参数。
+
+`data/config` 现已零宿主设置依赖。`data/resource` 只剩 `ActivityManager` 对
+`TaskChainState` 的一处依赖，那是 P2（拆 `TaskChainState`）的范围。
+
+koin 的静态图校验（`AppModuleVerifyTest`）在此处正好发挥了作用：构造参数改成内联提供后
+它立刻报缺定义，按文件已有约定用 `injectedParameters` 放行即可 —— 清点预言的「抽模块时
+这个测试第一个红」确有其事。
 
 ### `core:common` 为什么不依赖 Compose
 

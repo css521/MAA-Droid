@@ -8,6 +8,7 @@ import org.koin.dsl.module
 import org.koin.test.verify.definition
 import org.koin.test.verify.injectedParameters
 import org.koin.test.verify.verify
+import com.aliothmoon.maadroid.data.config.MaaPathConfig
 
 /**
  * 静态校验 Koin 依赖图，防止运行期 NoDefinitionFound 启动崩溃
@@ -24,9 +25,12 @@ class AppModuleVerifyTest {
                 Context::class,
                 androidx.datastore.core.DataStore::class,
             ),
-            // 构造器里的 lambda 参数由模块内联提供，静态校验需显式放行
+            // 构造器里由模块**内联提供**的参数，静态校验需显式放行
             injections = injectedParameters(
                 definition<LaunchPipeline>(Function0::class, Function2::class),
+                // isCoreSeparated：在装配点从 AppSettingsManager 读成布尔值再传入，
+                // 这样方舟侧的 MaaPathConfig 不必认识宿主的设置类
+                definition<MaaPathConfig>(Boolean::class),
             ),
         )
     }

@@ -10,8 +10,6 @@ import com.aliothmoon.maadroid.constant.MaaFiles.OVERRIDES
 import com.aliothmoon.maadroid.constant.MaaFiles.RESOURCE
 import com.aliothmoon.maadroid.constant.MaaFiles.SCREENSHOTS
 import com.aliothmoon.maadroid.constant.MaaFiles.VERSION_FILE
-import com.aliothmoon.maadroid.data.preferences.AppSettingsManager
-import com.aliothmoon.maadroid.domain.models.CoreDataLocation
 import com.aliothmoon.maadroid.remote.CoreDataDir
 import com.aliothmoon.maadroid.remote.ResourceFiles
 import timber.log.Timber
@@ -19,7 +17,16 @@ import java.io.File
 
 class MaaPathConfig(
     private val context: Context,
-    private val appSettings: AppSettingsManager,
+    /**
+     * 引擎数据是否落在提权进程专属目录（`/data/local/tmp`，App 读不到）。
+     *
+     * 刻意收一个**布尔值**而不是宿主的 `AppSettingsManager`：本类是方舟引擎的一部分，
+     * 抽进 `engine/arknights` 时若持有宿主设置类，会立刻触犯「引擎不得依赖宿主应用层」。
+     * 而实测它只需要这一个判断 —— 为此造一整套设置契约是过度设计。
+     *
+     * 构造时取一次即可：该设置本就「进程内固定，改了要重启」（MaaCore 状态不可回滚）。
+     */
+    val isCoreSeparated: Boolean,
 ) {
 
     companion object {
@@ -29,13 +36,6 @@ class MaaPathConfig(
             else -> path
         }
     }
-
-    /** 进程内固定；改了设置要重启（MaaCore 状态本就不可回滚） */
-    val coreLocation: CoreDataLocation by lazy { appSettings.coreDataLocation.value }
-
-    /** core 在 /data/local/tmp，App 读不到 */
-    val isCoreSeparated: Boolean
-        get() = coreLocation == CoreDataLocation.LOCAL_TMP
 
     val coreRootDir: String
         get() = if (isCoreSeparated) CoreDataDir.ROOT else rootDir

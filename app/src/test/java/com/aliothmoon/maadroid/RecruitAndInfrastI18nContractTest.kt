@@ -6,6 +6,7 @@ import com.aliothmoon.maadroid.engine.arknights.enums.UiUsageConstants
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.aliothmoon.maadroid.domain.service.toDisplayLanguageCode
 
 class RecruitAndInfrastI18nContractTest {
 
@@ -17,13 +18,17 @@ class RecruitAndInfrastI18nContractTest {
         )
     }
 
+    /**
+     * 语言枚举 → 资源语言代码。
+     *
+     * 转换函数已从 `ResourceDataManager` 移到宿主侧（`toDisplayLanguageCode`）——
+     * 前者属方舟引擎，不该认识宿主的 `AppSettingsManager.AppLanguage`；引擎只收字符串。
+     * 映射本身不变，故断言原样保留。
+     */
     @Test
     fun displayLanguageCode_mapsSupportedAppLanguages() {
-        assertEquals("zh-cn", ResourceDataManager.displayLanguageCode(AppSettingsManager.AppLanguage.ZH))
-        assertEquals("en-us", ResourceDataManager.displayLanguageCode(AppSettingsManager.AppLanguage.EN))
-        assertEquals(
-            "zh-cn",
-            ResourceDataManager.displayLanguageCode(AppSettingsManager.AppLanguage.SYSTEM)
-        )
+        assertEquals("zh-cn", AppSettingsManager.AppLanguage.ZH.toDisplayLanguageCode())
+        assertEquals("en-us", AppSettingsManager.AppLanguage.EN.toDisplayLanguageCode())
+        assertEquals("zh-cn", AppSettingsManager.AppLanguage.SYSTEM.toDisplayLanguageCode())
     }
 }

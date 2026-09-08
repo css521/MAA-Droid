@@ -52,6 +52,7 @@ import timber.log.Timber
 import java.io.InputStream
 import java.io.OutputStream
 import com.aliothmoon.maadroid.ui.theme.ThemeMode
+import com.aliothmoon.maadroid.domain.service.toDisplayLanguageCode
 
 /** markdown 是 Mirror 酱下发的远端正文，没有资源可以支撑，不套 UiText */
 data class ChangelogArchive(
@@ -494,7 +495,7 @@ class SettingsViewModel(
             AppCompatDelegate.setApplicationLocales(resolved.toLocaleList())
             resourceDataManager.refreshDisplayLanguage(
                 clientType = taskChainState.clientType,
-                displayLanguage = ResourceDataManager.displayLanguageCode(resolved)
+                displayLanguage = resolved.toDisplayLanguageCode()
             )
         }
     }

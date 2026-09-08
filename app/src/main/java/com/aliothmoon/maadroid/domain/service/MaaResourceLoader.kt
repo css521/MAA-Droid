@@ -206,9 +206,8 @@ class MaaResourceLoader(
     }
 
     private suspend fun doLoadDepsInfo(clientType: String) {
-        val displayLanguage = ResourceDataManager.displayLanguageCode(
-            resolveSelectedLanguage(appSettings.language.value)
-        )
+        val displayLanguage =
+            resolveSelectedLanguage(appSettings.language.value).toDisplayLanguageCode()
         withTimeout(30_000) {
             withContext(Dispatchers.IO) {
                 listOf(
@@ -307,4 +306,15 @@ class MaaResourceLoader(
         internal fun requiresServiceRestart(loaded: String?, target: String): Boolean =
             loaded != null && resourceProfileOf(loaded) != resourceProfileOf(target)
     }
+}
+
+/**
+ * 界面语言枚举 → 资源语言代码。
+ *
+ * 放在宿主侧而非 `ResourceDataManager` 里：后者属方舟引擎，不该认识宿主的
+ * `AppSettingsManager.AppLanguage`。引擎只收字符串（见 `ResourceDataManager.load`）。
+ */
+internal fun AppSettingsManager.AppLanguage.toDisplayLanguageCode(): String = when (this) {
+    AppSettingsManager.AppLanguage.EN -> ResourceDataManager.DISPLAY_LANGUAGE_EN
+    else -> ResourceDataManager.DEFAULT_DISPLAY_LANGUAGE
 }

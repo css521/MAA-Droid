@@ -182,7 +182,8 @@ class LogExportService(
         append("Core        : ${MaaCoreVersion.current.ifBlank { "unknown" }}\n")
         append("Resource    : ${pathConfig.readDiskResourceVersion() ?: "none"}\n")
         append("Client      : ${taskChainState.clientType}\n")
-        append("Core Dir    : ${pathConfig.coreLocation} (${pathConfig.coreRootDir})\n")
+        val coreLoc = if (pathConfig.isCoreSeparated) "LOCAL_TMP" else "APP_DIR"
+        append("Core Dir    : $coreLoc (${pathConfig.coreRootDir})\n")
         append("Game        : $gameVersionInfo\n")
         append(
             "Run Mode    : ${appSettingsManager.runMode.value} / " +

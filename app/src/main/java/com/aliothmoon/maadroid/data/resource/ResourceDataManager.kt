@@ -1,7 +1,6 @@
 package com.aliothmoon.maadroid.data.resource
 
 import com.aliothmoon.maadroid.data.config.MaaPathConfig
-import com.aliothmoon.maadroid.data.preferences.AppSettingsManager
 import com.aliothmoon.maadroid.utils.JsonUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -126,11 +125,9 @@ class ResourceDataManager(val pathConfig: MaaPathConfig) {
             "YoStarKR" to "ko-kr"
         )
 
-        fun displayLanguageCode(appLanguage: AppSettingsManager.AppLanguage): String =
-            when (appLanguage) {
-                AppSettingsManager.AppLanguage.EN -> "en-us"
-                else -> "zh-cn"
-            }
+        /** 界面语言代码的默认值；具体语言由调用方（宿主）决定后传 [load] */
+        const val DEFAULT_DISPLAY_LANGUAGE = "zh-cn"
+        const val DISPLAY_LANGUAGE_EN = "en-us"
     }
 
     suspend fun load(clientType: String = "Official", displayLanguage: String = "zh-cn") {

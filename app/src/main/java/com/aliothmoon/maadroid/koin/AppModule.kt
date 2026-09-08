@@ -126,6 +126,7 @@ import org.koin.dsl.bind
 import org.koin.dsl.module
 import java.util.concurrent.TimeUnit
 import kotlin.time.Duration.Companion.seconds
+import com.aliothmoon.maadroid.domain.models.CoreDataLocation
 
 val appModule = module {
 
@@ -218,7 +219,15 @@ val appModule = module {
     }
     singleOf(::TaskChainState)
     singleOf(::ConfigBackupManager)
-    singleOf(::MaaPathConfig)
+    // 把「数据放哪」的设置在装配点读成布尔值再传给 MaaPathConfig ——
+    // 让方舟侧不必认识 AppSettingsManager（见该类构造参数的注释）
+    single {
+        MaaPathConfig(
+            context = get(),
+            isCoreSeparated =
+                get<AppSettingsManager>().coreDataLocation.value == CoreDataLocation.LOCAL_TMP,
+        )
+    }
     singleOf(::CoreDataPusher)
     singleOf(::ResourceDownloader)
     singleOf(::AppDownloader)
