@@ -46,7 +46,7 @@ import com.aliothmoon.maadroid.data.repository.CopilotRepository
 import com.aliothmoon.maadroid.data.repository.DepotRepository
 import com.aliothmoon.maadroid.data.repository.OperBoxRepository
 import com.aliothmoon.maadroid.data.resource.ActivityManager
-import com.aliothmoon.maadroid.data.resource.BackgroundImageStore
+import com.aliothmoon.maadroid.data.background.BackgroundImageStore
 import com.aliothmoon.maadroid.data.resource.CopilotResourceProvider
 import com.aliothmoon.maadroid.data.resource.ItemHelper
 import com.aliothmoon.maadroid.data.resource.ItemIconLoader

@@ -17,7 +17,7 @@ import com.aliothmoon.maadroid.data.preferences.AppSettingsManager
 import com.aliothmoon.maadroid.data.preferences.ConfigBackupManager
 import com.aliothmoon.maadroid.data.preferences.TaskChainState
 import com.aliothmoon.maadroid.data.preferences.UnlockGestureStore
-import com.aliothmoon.maadroid.data.resource.BackgroundImageStore
+import com.aliothmoon.maadroid.data.background.BackgroundImageStore
 import com.aliothmoon.maadroid.data.resource.ResourceDataManager
 import com.aliothmoon.maadroid.domain.models.GestureRecordResult
 import com.aliothmoon.maadroid.domain.models.GestureRecordStatus

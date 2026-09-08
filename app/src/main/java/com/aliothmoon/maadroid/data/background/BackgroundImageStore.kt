@@ -1,5 +1,4 @@
-package com.aliothmoon.maadroid.data.resource
-
+package com.aliothmoon.maadroid.data.background
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -37,6 +36,13 @@ import java.io.File
  * - [imageBitmap]：监听「启用状态 + 令牌」，在 IO 线程解码并缓存为 [ImageBitmap]，供主界面绘制。
  *
  * 只负责数据与解码，不含任何 UI；玻璃主题与遮罩绘制在 presentation/theme 层完成。
+ */
+/**
+ * 自定义背景图。
+ *
+ * 从 `data/resource/` 挪到这里：那个目录是**方舟的游戏资源**（关卡、材料、干员、活动），
+ * 而本类是宿主的界面偏好 —— 消费者是设置页与主屏。混在一起会让 `data/resource`
+ * 抽进 `engine/arknights` 时凭空拖上宿主的 `AppSettingsManager`。
  */
 class BackgroundImageStore(
     private val context: Context,

@@ -20,7 +20,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.aliothmoon.maadroid.constant.Routes
 import com.aliothmoon.maadroid.data.preferences.AppSettingsManager
-import com.aliothmoon.maadroid.data.resource.BackgroundImageStore
+import com.aliothmoon.maadroid.data.background.BackgroundImageStore
 import com.aliothmoon.maadroid.ui.components.consumeAllPointerEvents
 import com.aliothmoon.maadroid.presentation.pip.LocalIsInPip
 import com.aliothmoon.maadroid.presentation.view.background.BackgroundTaskView

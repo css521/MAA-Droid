@@ -89,10 +89,10 @@ class HostEngineIsolationContractTest {
      */
     private val hostToArknights = mapOf(
         // ---- 待清理：抽 engine/arknights 时逐条归零 ----
-        "presentation/viewmodel" to 62,      // 方舟 ViewModel 尚未随面板迁出
+        "presentation/viewmodel" to 61,      // 方舟 ViewModel 尚未随面板迁出
         "domain/service" to 45,              // MaaCompositionService / MaaSessionLogger 等
         "data/model" to 39,                  // 方舟任务配置与宿主模型混居
-        "koin" to 21,                        // 方舟类进宿主容器；改构造函数注入后可清零
+        "koin" to 20,                        // 方舟类进宿主容器；改构造函数注入后可清零
         "presentation/view/background" to 10, // BackgroundTaskView 直连方舟 panel 符号
         "domain/usecase" to 9,               // AnalyzeTaskChainUseCase 独占多数
         "presentation/view/settings" to 8,   // 成就 UI
@@ -101,7 +101,7 @@ class HostEngineIsolationContractTest {
         "remote" to 5,                       // MaaCoreServiceImpl / MaaCoreManager
         "overlay" to 3,
         "presentation/state" to 2,
-        "presentation/navigation" to 1,
+        "presentation/navigation" to 0,
         "presentation/components" to 1,      // RecruitTimeSelector / CoreCharSelector 误放
         "schedule" to 1,
         "utils" to 1,
@@ -161,7 +161,7 @@ class HostEngineIsolationContractTest {
         "com.aliothmoon.maadroid.presentation.viewmodel." to 15,
         // → 随 TaskChainState 一起迁入方舟（P2）。MaaPathConfig 已解耦（10→9），
         // 剩下的主要是 ActivityManager 对 TaskChainState 的依赖
-        "com.aliothmoon.maadroid.data.preferences." to 8,
+        "com.aliothmoon.maadroid.data.preferences." to 7,
         "com.aliothmoon.maadroid.presentation.state." to 1,
         // 已为 0：一旦出现即是新增的反向依赖
         "com.aliothmoon.maadroid.koin." to 0,
