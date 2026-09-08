@@ -113,6 +113,7 @@ compose-markdown = { group = "com.github.jeziellago", name = "compose-markdown",
 reorderable = { group = "sh.calvin.reorderable", name = "reorderable", version.ref = "reorderable" }
 opencv = { group = "org.opencv", name = "opencv", version = "4.11.0" }
 onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version = "1.20.0" }
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version = "1.10.2" }
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version = "1.10.2" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
 xzakota-focus-api = { group = "com.xzakota.hyper.notification", name = "focus-api", version.ref = "hyperNotification" }

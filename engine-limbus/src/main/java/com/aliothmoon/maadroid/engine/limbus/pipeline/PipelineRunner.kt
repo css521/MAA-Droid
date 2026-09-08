@@ -1,0 +1,171 @@
+package com.aliothmoon.maadroid.engine.limbus.pipeline
+
+import com.aliothmoon.maadroid.engine.limbus.action.ActionContext
+import com.aliothmoon.maadroid.engine.limbus.action.ActionOutcome
+import com.aliothmoon.maadroid.engine.limbus.action.ActionRegistry
+
+/**
+ * 流水线执行器。
+ *
+ * 上游用「函数栈」实现调度（`workflow/task_pipeline.py`）：栈里压的是节点的
+ * `do_action` 与 `get_next`，弹一个执行一个，动作可以往栈里压新的延续。
+ * 这里改写为显式的**步骤栈**，语义等价但可读、可测：
+ *
+ * ```
+ * 弹出 Action(节点) → 跑动作 → 按 ActionOutcome 决定压什么
+ * 弹出 Route(节点)  → 截图识别 next；命中则压 Action+Route(命中节点)
+ *                     全不命中则试 interrupt；命中则压 Action+Route(中断节点)+Route(自身)
+ *                     仍不命中 → 该分支结束
+ * ```
+ *
+ * 关键语义（都来自上游，改动会让流水线行为漂移）：
+ * - **interrupt 执行完要回到原节点继续路由**，所以压栈时多压一个 `Route(自身)`
+ * - next 按声明顺序取**第一个**识别命中的，不是取分数最高的
+ * - `inverse` 节点是「识别不中才算命中」
+ * - `rateLimit` 是单次路由的最小耗时，用于限速避免空转烧 CPU
+ * - `enable=false` 的节点在路由时直接跳过（上游 check 节点会把目标节点置 false 来"用完即弃"）
+ */
+class PipelineRunner(
+    private val registry: PipelineRegistry,
+    private val contextFactory: (PipelineNode) -> ActionContext,
+    private val recognizeGate: suspend (PipelineNode) -> Boolean,
+    private val onLog: (String) -> Unit = {},
+) {
+
+    private sealed interface Step {
+        val node: PipelineNode
+        val name: String
+
+        /** 执行该节点的动作 */
+        data class Action(override val name: String, override val node: PipelineNode) : Step
+
+        /** 对该节点做路由：识别 next / interrupt 决定下一步 */
+        data class Route(override val name: String, override val node: PipelineNode) : Step
+    }
+
+    /** 上游的 continue_run 事件；置 false 后主循环尽快退出 */
+    @Volatile
+    private var running = false
+
+    val isRunning: Boolean get() = running
+
+    fun stop() {
+        running = false
+    }
+
+    /**
+     * 从 [entry] 开始执行到栈空。
+     *
+     * @return 结束原因；正常跑完返回 null
+     */
+    suspend fun run(entry: String): String? {
+        val start = registry[entry] ?: return "入口节点未注册: $entry"
+        running = true
+        val stack = ArrayDeque<Step>()
+        // 与上游一致：先压 get_next 再压 do_action，故动作先执行、随后才路由
+        stack.addLast(Step.Route(entry, start))
+        stack.addLast(Step.Action(entry, start))
+
+        var steps = 0
+        while (running && stack.isNotEmpty()) {
+            if (++steps > MAX_STEPS) return "流水线步数超过 $MAX_STEPS，疑似死循环"
+            when (val step = stack.removeLast()) {
+                is Step.Action -> runAction(step, stack)
+                is Step.Route -> route(step, stack)
+            }
+        }
+        running = false
+        return null
+    }
+
+    private suspend fun runAction(step: Step.Action, stack: ArrayDeque<Step>) {
+        val actionName = step.node.action
+        val backend = ActionRegistry[actionName]
+        if (backend == null) {
+            // 纯路由节点（上游 45 个动作名里有 10 个没有实现体）：不是错误，直接放过
+            onLog("节点 ${step.name} 的动作 $actionName 无实现体，按纯路由处理")
+            return
+        }
+        val ctx = contextFactory(step.node)
+        onLog("节点 ${step.name} 执行动作 $actionName")
+        when (val outcome = backend.execute(ctx)) {
+            ActionOutcome.Continue -> Unit
+            ActionOutcome.RetrySelf -> {
+                // 上游用于「技能全未选中，点一下重开 p」这类重试
+                stack.addLast(Step.Action(step.name, step.node))
+            }
+            is ActionOutcome.Goto -> {
+                val target = registry[outcome.nodeName]
+                if (target == null) {
+                    onLog("节点 ${step.name} 要求跳转到未注册节点 ${outcome.nodeName}，忽略")
+                } else {
+                    stack.addLast(Step.Route(outcome.nodeName, target))
+                    stack.addLast(Step.Action(outcome.nodeName, target))
+                }
+            }
+            is ActionOutcome.Finish -> {
+                onLog("节点 ${step.name} 结束流水线: ${outcome.message ?: ""}")
+                stack.clear()
+                running = false
+            }
+        }
+    }
+
+    private suspend fun route(step: Step.Route, stack: ArrayDeque<Step>) {
+        val started = System.nanoTime()
+
+        // next 按声明顺序取第一个命中的，不是取分数最高的
+        val hitNext = firstHit(step.node.next)
+        if (hitNext != null) {
+            stack.addLast(Step.Route(hitNext, registry.require(hitNext)))
+            stack.addLast(Step.Action(hitNext, registry.require(hitNext)))
+            rateLimit(step.node, started)
+            return
+        }
+
+        // next 全不命中才试 interrupt
+        val hitInterrupt = firstHit(registry.interruptsOf(step.name))
+        if (hitInterrupt != null) {
+            val node = registry.require(hitInterrupt)
+            // 中断处理完要回到本节点继续路由 —— 先压自身的 Route，它会最后执行
+            stack.addLast(Step.Route(step.name, step.node))
+            stack.addLast(Step.Route(hitInterrupt, node))
+            stack.addLast(Step.Action(hitInterrupt, node))
+            rateLimit(step.node, started)
+            return
+        }
+
+        onLog("节点 ${step.name} 的 next 与 interrupt 均未命中，该分支结束")
+        rateLimit(step.node, started)
+    }
+
+    /** 返回第一个识别命中且未被禁用的节点名 */
+    private suspend fun firstHit(candidates: List<String>): String? {
+        for (name in candidates) {
+            val node = registry[name] ?: continue
+            if (!node.enable) continue
+            if (recognizeGate(node)) return name
+        }
+        return null
+    }
+
+    /** 补足 rateLimit 指定的最小耗时，避免识别不中时空转烧 CPU */
+    private suspend fun rateLimit(node: PipelineNode, startedNanos: Long) {
+        val elapsedSec = (System.nanoTime() - startedNanos) / 1_000_000_000.0
+        val remain = node.rateLimit - elapsedSec
+        if (remain > 0) delayer(remain)
+    }
+
+    /** 可替换的睡眠，便于单测里瞬间跑完 */
+    internal var delayer: suspend (Double) -> Unit = { seconds ->
+        kotlinx.coroutines.delay((seconds * 1000).toLong())
+    }
+
+    private companion object {
+        /**
+         * 步数上限。上游没有这道保险，实际用起来遇到识别持续不中时会无限空转；
+         * 这里给一个明确的失败而不是让用户干等。按 rateLimit 1 秒估算约两小时。
+         */
+        const val MAX_STEPS = 8000
+    }
+}
