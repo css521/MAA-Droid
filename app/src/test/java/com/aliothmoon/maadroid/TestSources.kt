@@ -82,10 +82,16 @@ internal object TestSources {
             )
             else -> error(
                 "$relativePath 在多个模块下都存在：" +
-                    distinct.joinToString { it.parentFile?.name ?: it.path } +
+                    distinct.joinToString { describe(it) } +
                     "。静默挑一个会让用例读到无关文件，请改用 inApp() 或 inModuleOwning() 明确模块。"
             )
         }
+    }
+
+    /** 用相对仓库根的路径描述候选，比父目录名可辨（父目录常是同名的包目录） */
+    private fun describe(file: File): String {
+        val root = repoRoot() ?: return file.path
+        return runCatching { file.relativeTo(root).path }.getOrDefault(file.path)
     }
 
     private fun candidates(relativePath: String): List<File> = buildList {
