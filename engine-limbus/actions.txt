@@ -1,0 +1,59 @@
+# 本 App 已实现的边狱动作白名单。
+#
+# 用途：scripts/pack_engine_resource.py 打包时与上游需要的动作对账，
+# 差集会写进资源包清单的 required_actions，App 装载时由 LimbusResourcePack
+# 的门闸拦住并提示升级 —— 从而做到「上游改流程无感跟随，上游加动作则明确报错」。
+#
+# 规则：一个动作在 ActionRegistry 里注册且实现完成后，才把它加到这里。
+# 当前基线取自上游 LALC v5.0.0：45 个动作名中 35 个需要实现体，10 个是纯路由。
+#
+# 未实现的用 # 注释保留，便于看进度。
+
+# ---- 需要实现体（35 个）----
+# back_to_init_page
+# battle_winrate
+# check_out_update
+# choose_team
+# click
+# confirm_all_coins
+# empty
+# error_cannot_operate_the_game
+# event_make_choice
+# event_pass_check
+# exp_select_stage
+# get_enkephalin_module
+# init_limbus_window
+# key
+# mirror_choose_star
+# mirror_defeat
+# mirror_gift_search
+# mirror_select_encounter_reward_card
+# mirror_select_event_effect
+# mirror_select_floor_ego_gift
+# mirror_select_initial_ego_gift
+# mirror_select_next_node
+# mirror_select_theme_pack
+# mirror_shop_enhance_ego_gifts
+# mirror_shop_fuse_ego_gifts
+# mirror_shop_heal_sinner
+# mirror_shop_replace_skill_and_purchase_ego_gifts
+# mirror_victory
+# ready_to_battle
+# recharge_enkephalin
+# report_error
+# swipe
+# thread_select_stage
+# wait_appear
+# wait_disappear
+
+# ---- 纯路由，无实现体，不需要进白名单（10 个）----
+#   (routing) battle_entry
+#   (routing) enter_enkephalin
+#   (routing) error_download_data_confirm
+#   (routing) error_handler
+#   (routing) event_entry
+#   (routing) event_entry_dark
+#   (routing) game_language_confirm
+#   (routing) main_drive_confirm
+#   (routing) main_window_confirm
+#   (routing) wait_connecting_disappear
