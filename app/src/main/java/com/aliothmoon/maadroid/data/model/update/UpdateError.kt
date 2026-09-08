@@ -10,9 +10,9 @@ import com.aliothmoon.maadroid.data.model.update.UpdateError.MirrorchyanBizError
 import com.aliothmoon.maadroid.data.model.update.UpdateError.MirrorchyanBizError.KeyMismatched
 import com.aliothmoon.maadroid.data.model.update.UpdateError.MirrorchyanBizError.ResourceNotFound
 import com.aliothmoon.maadroid.data.model.update.UpdateError.MirrorchyanBizError.ResourceQuotaExhausted
-import com.aliothmoon.maadroid.utils.i18n.UiText
-import com.aliothmoon.maadroid.utils.i18n.uiTextDynamicOr
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.uiTextDynamicOr
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 
 /**
  * 更新错误类型。

@@ -4,7 +4,7 @@ import android.content.Context
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.data.model.activity.MiniGame
 import com.aliothmoon.maadroid.data.model.activity.StageActivityInfo
-import com.aliothmoon.maadroid.utils.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.UiText
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow

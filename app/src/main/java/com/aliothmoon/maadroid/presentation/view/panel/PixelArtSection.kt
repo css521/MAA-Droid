@@ -43,7 +43,7 @@ import com.aliothmoon.maadroid.ui.components.SelectableCardButton
 import com.aliothmoon.maadroid.presentation.viewmodel.GRID_DELAY_MAX_MS
 import com.aliothmoon.maadroid.presentation.viewmodel.PixelArtDelegate
 import com.aliothmoon.maadroid.utils.Misc
-import com.aliothmoon.maadroid.utils.i18n.asString
+import com.aliothmoon.maadroid.ui.asString
 import kotlin.math.roundToInt
 
 /** SAF 文件选择器的过滤类型，比图片选择器自由，能挑到任意目录下的图 */

@@ -76,7 +76,7 @@ import com.aliothmoon.maadroid.data.model.update.UpdateSource
 import com.aliothmoon.maadroid.presentation.viewmodel.UpdateViewModel
 import com.aliothmoon.maadroid.ui.theme.MaaAnimatedVisibility
 import com.aliothmoon.maadroid.utils.Misc
-import com.aliothmoon.maadroid.utils.i18n.resolve
+import com.aliothmoon.maadroid.common.i18n.resolve
 import com.aliothmoon.maadroid.ui.components.AdaptiveTaskPromptDialog
 
 /**

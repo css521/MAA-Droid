@@ -12,7 +12,7 @@ import com.aliothmoon.maadroid.data.resource.ItemHelper
 import com.aliothmoon.maadroid.data.resource.ItemInfo
 import com.aliothmoon.maadroid.maa.task.MaaTaskParams
 import com.aliothmoon.maadroid.maa.task.MaaTaskType
-import com.aliothmoon.maadroid.utils.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.UiText
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.serialization.json.Json

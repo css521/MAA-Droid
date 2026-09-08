@@ -3,7 +3,7 @@ package com.aliothmoon.maadroid.data.notification.provider
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.data.api.HttpClientHelper
 import com.aliothmoon.maadroid.data.notification.NotificationSettingsManager
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 import kotlinx.coroutines.flow.first
 import timber.log.Timber
 import java.time.LocalDateTime

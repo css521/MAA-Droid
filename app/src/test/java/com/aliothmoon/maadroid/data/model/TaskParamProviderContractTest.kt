@@ -7,7 +7,7 @@ import com.aliothmoon.maadroid.data.resource.CharacterInfo
 import com.aliothmoon.maadroid.data.resource.ResourceDataManager
 import com.aliothmoon.maadroid.domain.service.FightDropsRefresher
 import com.aliothmoon.maadroid.maa.task.MaaTaskType
-import com.aliothmoon.maadroid.utils.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.UiText
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify

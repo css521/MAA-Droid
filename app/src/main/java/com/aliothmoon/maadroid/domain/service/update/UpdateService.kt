@@ -35,9 +35,9 @@ import com.aliothmoon.maadroid.domain.service.update.resolver.AppDownloadUrlReso
 import com.aliothmoon.maadroid.domain.service.update.resolver.ResourceDownloadUrlResolver
 import com.aliothmoon.maadroid.engine.ResourcePackSpec
 import com.aliothmoon.maadroid.maa.MaaResourcePack
-import com.aliothmoon.maadroid.utils.i18n.LocalizedException
-import com.aliothmoon.maadroid.utils.i18n.resolve
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.LocalizedException
+import com.aliothmoon.maadroid.common.i18n.resolve
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin

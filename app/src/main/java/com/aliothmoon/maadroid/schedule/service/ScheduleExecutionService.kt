@@ -18,7 +18,7 @@ import com.aliothmoon.maadroid.schedule.LaunchIntentMapper
 import com.aliothmoon.maadroid.schedule.data.ScheduleStrategyRepository
 import com.aliothmoon.maadroid.schedule.model.ExecutionResult
 import com.aliothmoon.maadroid.schedule.model.ScheduleStrategy
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob

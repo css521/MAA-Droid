@@ -13,8 +13,8 @@ import com.aliothmoon.maadroid.domain.usecase.PrepareTaskStartUseCase
 import com.aliothmoon.maadroid.domain.usecase.TaskStartContext
 import com.aliothmoon.maadroid.domain.usecase.TaskStartDecision
 import com.aliothmoon.maadroid.schedule.model.ExecutionResult
-import com.aliothmoon.maadroid.utils.i18n.UiText
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 
 /**
  * 任务链启动尾部：prepare + mute + composition.start + achievement + 可选 schedule 会话日志

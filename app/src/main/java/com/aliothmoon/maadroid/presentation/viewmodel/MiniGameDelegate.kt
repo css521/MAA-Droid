@@ -11,9 +11,9 @@ import com.aliothmoon.maadroid.domain.service.MaaCompositionService
 import com.aliothmoon.maadroid.domain.service.MaaSessionLogger
 import com.aliothmoon.maadroid.maa.task.MaaTaskParams
 import com.aliothmoon.maadroid.maa.task.MaaTaskType
-import com.aliothmoon.maadroid.utils.i18n.UiText
-import com.aliothmoon.maadroid.utils.i18n.resolve
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.resolve
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

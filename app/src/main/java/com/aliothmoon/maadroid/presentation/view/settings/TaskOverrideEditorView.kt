@@ -48,7 +48,7 @@ import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.presentation.LocalToaster
 import com.aliothmoon.maadroid.presentation.components.TopAppBar
 import com.aliothmoon.maadroid.presentation.viewmodel.TaskOverrideEditorViewModel
-import com.aliothmoon.maadroid.utils.i18n.resolve
+import com.aliothmoon.maadroid.common.i18n.resolve
 import com.dokar.sonner.ToastType
 import io.github.rosemoe.sora.event.ContentChangeEvent
 import io.github.rosemoe.sora.langs.textmate.TextMateColorScheme

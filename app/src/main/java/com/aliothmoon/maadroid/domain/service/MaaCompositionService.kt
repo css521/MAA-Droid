@@ -32,8 +32,8 @@ import com.aliothmoon.maadroid.manager.RemoteServiceManager.useRemoteService
 import com.aliothmoon.maadroid.manager.ShizukuManager
 import com.aliothmoon.maadroid.remote.PermissionGrantRequest
 import com.aliothmoon.maadroid.utils.Misc
-import com.aliothmoon.maadroid.utils.i18n.UiText
-import com.aliothmoon.maadroid.utils.i18n.resolve
+import com.aliothmoon.maadroid.common.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.resolve
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope

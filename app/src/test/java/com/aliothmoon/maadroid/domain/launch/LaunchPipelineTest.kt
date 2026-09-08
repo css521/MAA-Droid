@@ -14,7 +14,7 @@ import com.aliothmoon.maadroid.domain.state.MaaExecutionState
 import com.aliothmoon.maadroid.schedule.data.ScheduleStrategyRepository
 import com.aliothmoon.maadroid.schedule.model.ExecutionResult
 import com.aliothmoon.maadroid.schedule.service.ScheduleTriggerLogger
-import com.aliothmoon.maadroid.utils.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.UiText
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.coVerifyOrder

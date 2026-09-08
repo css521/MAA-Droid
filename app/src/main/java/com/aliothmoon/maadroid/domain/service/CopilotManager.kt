@@ -10,8 +10,8 @@ import com.aliothmoon.maadroid.data.repository.CopilotRepository
 import com.aliothmoon.maadroid.maa.task.MaaTaskParams
 import com.aliothmoon.maadroid.maa.task.MaaTaskType
 import com.aliothmoon.maadroid.utils.JsonUtils
-import com.aliothmoon.maadroid.utils.i18n.LocalizedException
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.LocalizedException
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.buildJsonArray

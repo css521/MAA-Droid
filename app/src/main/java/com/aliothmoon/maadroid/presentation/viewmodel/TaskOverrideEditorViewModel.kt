@@ -6,9 +6,9 @@ import com.alibaba.fastjson2.JSON
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.data.config.MaaPathConfig
 import com.aliothmoon.maadroid.domain.service.MaaResourceLoader
-import com.aliothmoon.maadroid.utils.i18n.UiText
-import com.aliothmoon.maadroid.utils.i18n.uiTextDynamicOr
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.uiTextDynamicOr
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted

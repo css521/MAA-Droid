@@ -5,7 +5,7 @@ import com.aliothmoon.maadroid.data.model.FightConfig
 import com.aliothmoon.maadroid.data.model.StageResetMode
 import com.aliothmoon.maadroid.data.model.TaskChainNode
 import com.aliothmoon.maadroid.data.model.stagedActivityManager
-import com.aliothmoon.maadroid.utils.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.UiText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

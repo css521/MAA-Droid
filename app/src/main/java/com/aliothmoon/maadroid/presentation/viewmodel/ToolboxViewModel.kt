@@ -28,8 +28,8 @@ import com.aliothmoon.maadroid.maa.task.MaaTaskParams
 import com.aliothmoon.maadroid.maa.task.MaaTaskType
 import com.aliothmoon.maadroid.presentation.view.panel.PanelDialogConfirmAction
 import com.aliothmoon.maadroid.presentation.view.panel.PanelDialogUiState
-import com.aliothmoon.maadroid.utils.i18n.UiText
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow

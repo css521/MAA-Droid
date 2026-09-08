@@ -1,7 +1,7 @@
 package com.aliothmoon.maadroid.data.model
 
 import com.aliothmoon.maadroid.R
-import com.aliothmoon.maadroid.utils.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.UiText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue

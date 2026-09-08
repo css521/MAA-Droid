@@ -1,7 +1,7 @@
 package com.aliothmoon.maadroid.domain.usecase
 
 import com.aliothmoon.maadroid.data.model.TaskChainNode
-import com.aliothmoon.maadroid.utils.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.UiText
 
 /**
  * 主任务链的启动决策：链分析([AnalyzeTaskChainUseCase]) + 游戏就绪性闸门([CheckGameReadinessUseCase])。

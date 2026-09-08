@@ -9,8 +9,8 @@ import com.aliothmoon.maadroid.data.model.activity.MiniGame
 import com.aliothmoon.maadroid.data.model.activity.StageActivityInfo
 import com.aliothmoon.maadroid.data.model.activity.StageActivityRoot
 import com.aliothmoon.maadroid.data.preferences.TaskChainState
-import com.aliothmoon.maadroid.utils.i18n.resolve
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.resolve
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job

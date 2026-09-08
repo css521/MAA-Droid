@@ -1,6 +1,6 @@
 package com.aliothmoon.maadroid.domain.state
 
-import com.aliothmoon.maadroid.utils.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.UiText
 
 /**
  * 资源初始化状态

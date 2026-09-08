@@ -16,8 +16,8 @@ import com.aliothmoon.maadroid.schedule.model.ScheduleHealthSnapshot
 import com.aliothmoon.maadroid.schedule.model.ScheduleStrategy
 import com.aliothmoon.maadroid.schedule.model.ScheduleType
 import com.aliothmoon.maadroid.schedule.service.ScheduleAlarmManager
-import com.aliothmoon.maadroid.utils.i18n.UiText
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow

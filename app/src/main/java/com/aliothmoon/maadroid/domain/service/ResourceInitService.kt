@@ -7,8 +7,8 @@ import com.aliothmoon.maadroid.constant.MaaFiles.OVERRIDES_ASSET_TASKS
 import com.aliothmoon.maadroid.data.config.MaaPathConfig
 import com.aliothmoon.maadroid.data.datasource.AssetExtractor
 import com.aliothmoon.maadroid.domain.state.ResourceInitState
-import com.aliothmoon.maadroid.utils.i18n.LocalizedException
-import com.aliothmoon.maadroid.utils.i18n.uiTextDynamicOr
+import com.aliothmoon.maadroid.common.i18n.LocalizedException
+import com.aliothmoon.maadroid.common.i18n.uiTextDynamicOr
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

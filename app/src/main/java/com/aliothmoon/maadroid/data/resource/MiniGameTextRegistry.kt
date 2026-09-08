@@ -2,8 +2,8 @@ package com.aliothmoon.maadroid.data.resource
 
 import androidx.annotation.StringRes
 import com.aliothmoon.maadroid.R
-import com.aliothmoon.maadroid.utils.i18n.UiText
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 
 /**
  * 小游戏文案注册表：API 本地化键 / 任务 value → 字符串资源

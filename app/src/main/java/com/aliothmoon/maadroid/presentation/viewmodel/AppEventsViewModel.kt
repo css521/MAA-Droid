@@ -7,7 +7,7 @@ import com.aliothmoon.maadroid.data.achievement.AchievementRepository
 import com.aliothmoon.maadroid.data.achievement.achievementStringResId
 import com.aliothmoon.maadroid.data.preferences.AppSettingsManager
 import com.aliothmoon.maadroid.presentation.state.UiEffect
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.mapNotNull

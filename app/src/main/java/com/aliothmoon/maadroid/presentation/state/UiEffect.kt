@@ -1,8 +1,8 @@
 package com.aliothmoon.maadroid.presentation.state
 
 import androidx.annotation.StringRes
-import com.aliothmoon.maadroid.utils.i18n.UiText
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 
 sealed interface UiEffect {
 

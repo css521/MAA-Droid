@@ -31,7 +31,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.ui.components.RainbowFlowText
 import com.aliothmoon.maadroid.presentation.viewmodel.ToolboxViewModel
-import com.aliothmoon.maadroid.utils.i18n.asString
+import com.aliothmoon.maadroid.ui.asString
 
 /**
  * 牛牛抽卡内容区（对齐 MaaWpfGui Toolbox Gacha）。

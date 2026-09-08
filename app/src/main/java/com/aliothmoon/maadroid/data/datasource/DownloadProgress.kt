@@ -1,9 +1,9 @@
 package com.aliothmoon.maadroid.data.datasource
 
 import com.aliothmoon.maadroid.R
-import com.aliothmoon.maadroid.utils.i18n.UiText
-import com.aliothmoon.maadroid.utils.i18n.uiTextDynamic
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.uiTextDynamic
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 import java.io.IOException
 import java.util.Locale
 

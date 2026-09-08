@@ -4,8 +4,8 @@ import android.content.Context
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.data.model.AssetManifest
 import com.aliothmoon.maadroid.utils.JsonUtils
-import com.aliothmoon.maadroid.utils.i18n.LocalizedException
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.LocalizedException
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay

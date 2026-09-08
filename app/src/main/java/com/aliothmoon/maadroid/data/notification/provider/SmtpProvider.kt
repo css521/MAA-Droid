@@ -3,7 +3,7 @@ package com.aliothmoon.maadroid.data.notification.provider
 import androidx.core.text.htmlEncode
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.data.notification.NotificationSettingsManager
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 import jakarta.mail.Authenticator
 import jakarta.mail.Message
 import jakarta.mail.PasswordAuthentication

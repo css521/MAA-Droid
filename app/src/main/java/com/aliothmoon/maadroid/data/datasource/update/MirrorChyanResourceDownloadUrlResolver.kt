@@ -6,8 +6,8 @@ import com.aliothmoon.maadroid.data.api.CdkRequiredException
 import com.aliothmoon.maadroid.data.api.MirrorChyanApiClient
 import com.aliothmoon.maadroid.data.preferences.AppSettingsManager
 import com.aliothmoon.maadroid.domain.service.update.resolver.ResourceDownloadUrlResolver
-import com.aliothmoon.maadroid.utils.i18n.LocalizedException
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.LocalizedException
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 
 class MirrorChyanResourceDownloadUrlResolver(
     private val apiClient: MirrorChyanApiClient,

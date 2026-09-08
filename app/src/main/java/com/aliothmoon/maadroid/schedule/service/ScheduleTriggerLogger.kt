@@ -5,8 +5,8 @@ import com.aliothmoon.maadroid.data.config.MaaPathConfig
 import com.aliothmoon.maadroid.schedule.model.ExecutionResult
 import com.aliothmoon.maadroid.schedule.model.TriggerLogEntry
 import com.aliothmoon.maadroid.utils.JsonUtils
-import com.aliothmoon.maadroid.utils.i18n.UiText
-import com.aliothmoon.maadroid.utils.i18n.resolve
+import com.aliothmoon.maadroid.common.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.resolve
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber

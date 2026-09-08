@@ -129,7 +129,7 @@ import com.aliothmoon.maadroid.ui.theme.MaaDesignTokens
 import com.aliothmoon.maadroid.utils.Misc
 import com.aliothmoon.maadroid.utils.UiScale
 import com.aliothmoon.maadroid.utils.i18n.LocaleBootstrap.resolveSelectedLanguage
-import com.aliothmoon.maadroid.utils.i18n.resolve
+import com.aliothmoon.maadroid.common.i18n.resolve
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest

@@ -3,8 +3,8 @@ package com.aliothmoon.maadroid.data.model.activity
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.data.resource.MaaCoreVersion
 import com.aliothmoon.maadroid.data.resource.MiniGameTextRegistry
-import com.aliothmoon.maadroid.utils.i18n.UiText
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 
 /**
  * 小游戏（UI 使用）

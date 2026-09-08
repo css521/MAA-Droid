@@ -1,7 +1,7 @@
 package com.aliothmoon.maadroid.domain.launch
 
 import com.aliothmoon.maadroid.schedule.model.CountdownState
-import com.aliothmoon.maadroid.utils.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.UiText
 import java.util.UUID
 
 enum class LaunchSource {

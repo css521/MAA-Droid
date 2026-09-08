@@ -84,11 +84,11 @@ import com.aliothmoon.maadroid.presentation.viewmodel.UpdateViewModel
 import com.aliothmoon.maadroid.ui.theme.LocalReduceMotion
 import com.aliothmoon.maadroid.ui.theme.MaaAnimatedVisibility
 import com.aliothmoon.maadroid.utils.Misc
-import com.aliothmoon.maadroid.utils.i18n.UiText
-import com.aliothmoon.maadroid.utils.i18n.asString
+import com.aliothmoon.maadroid.common.i18n.UiText
+import com.aliothmoon.maadroid.ui.asString
 import com.aliothmoon.maadroid.utils.i18n.overlayControlModeDisplayName
 import com.aliothmoon.maadroid.utils.i18n.remoteBackendPermissionLabel
-import com.aliothmoon.maadroid.utils.i18n.resolve
+import com.aliothmoon.maadroid.common.i18n.resolve
 import com.aliothmoon.maadroid.utils.i18n.runModeDisplayName
 import com.aliothmoon.maadroid.presentation.components.MaaMarkdownText
 import kotlinx.coroutines.flow.collectLatest

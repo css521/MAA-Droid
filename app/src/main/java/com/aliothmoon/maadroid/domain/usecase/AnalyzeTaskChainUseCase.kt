@@ -21,7 +21,7 @@ import com.aliothmoon.maadroid.domain.service.FightDropsRefresher
 import com.aliothmoon.maadroid.maa.task.MaaTaskParams
 import com.aliothmoon.maadroid.maa.task.MaaTaskType
 import com.aliothmoon.maadroid.maa.task.TaskSlot
-import com.aliothmoon.maadroid.utils.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.UiText
 import kotlinx.coroutines.flow.first
 import timber.log.Timber
 import java.time.DayOfWeek

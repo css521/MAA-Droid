@@ -1,7 +1,7 @@
 package com.aliothmoon.maadroid
 
 import com.aliothmoon.maadroid.data.resource.MiniGameTextRegistry
-import com.aliothmoon.maadroid.utils.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.UiText
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

@@ -7,7 +7,7 @@ import com.aliothmoon.maadroid.domain.models.putReportFields
 import com.aliothmoon.maadroid.maa.task.MaaTaskParams
 import com.aliothmoon.maadroid.maa.task.MaaTaskType
 import com.aliothmoon.maadroid.maa.task.TaskSlot
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put

@@ -6,7 +6,7 @@ import com.aliothmoon.maadroid.domain.models.DropTarget
 import com.aliothmoon.maadroid.maa.task.MaaTaskParams
 import com.aliothmoon.maadroid.maa.task.MaaTaskType
 import com.aliothmoon.maadroid.maa.task.TaskSlot
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 import kotlinx.serialization.Serializable
 
 /** 库存保持计划：把 dropId 刷到 dropCount。 */

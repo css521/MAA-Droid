@@ -76,7 +76,7 @@ import com.aliothmoon.maadroid.schedule.model.ScheduleType
 import com.aliothmoon.maadroid.schedule.service.ExactAlarmSettings
 import com.aliothmoon.maadroid.schedule.service.OemPowerHints
 import com.aliothmoon.maadroid.ui.theme.MaaDesignTokens
-import com.aliothmoon.maadroid.utils.i18n.asString
+import com.aliothmoon.maadroid.ui.asString
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel

@@ -29,7 +29,7 @@ import com.aliothmoon.maadroid.schedule.data.ScheduleStrategyRepository
 import com.aliothmoon.maadroid.schedule.service.ScheduleAlarmManager
 import com.aliothmoon.maadroid.utils.Misc
 import com.aliothmoon.maadroid.utils.i18n.remoteBackendPermissionLabel
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow

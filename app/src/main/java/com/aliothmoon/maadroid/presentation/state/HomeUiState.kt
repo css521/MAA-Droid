@@ -4,7 +4,7 @@ import com.aliothmoon.maadroid.data.model.update.UpdateProcessState
 import com.aliothmoon.maadroid.domain.models.OverlayControlMode
 import com.aliothmoon.maadroid.domain.models.RunMode
 import com.aliothmoon.maadroid.domain.state.ResourceInitState
-import com.aliothmoon.maadroid.utils.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.UiText
 
 data class HomeUiState(
     val isShowControlOverlay: Boolean = false,

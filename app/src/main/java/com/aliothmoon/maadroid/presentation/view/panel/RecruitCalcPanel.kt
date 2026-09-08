@@ -36,7 +36,7 @@ import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.data.model.toolbox.RecruitCalcResult
 import com.aliothmoon.maadroid.presentation.components.RecruitTimeSelector
 import com.aliothmoon.maadroid.presentation.viewmodel.ToolboxViewModel
-import com.aliothmoon.maadroid.utils.i18n.asString
+import com.aliothmoon.maadroid.ui.asString
 import org.koin.compose.koinInject
 
 @Composable

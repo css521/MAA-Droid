@@ -11,11 +11,11 @@ import com.aliothmoon.maadroid.domain.usecase.TaskStartDecisionReason
 import com.aliothmoon.maadroid.presentation.view.panel.PanelDialogConfirmAction
 import com.aliothmoon.maadroid.presentation.view.panel.PanelDialogType
 import com.aliothmoon.maadroid.presentation.view.panel.PanelDialogUiState
-import com.aliothmoon.maadroid.utils.i18n.UiText
-import com.aliothmoon.maadroid.utils.i18n.uiTextDynamic
-import com.aliothmoon.maadroid.utils.i18n.uiTextJoin
-import com.aliothmoon.maadroid.utils.i18n.uiTextLines
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.uiTextDynamic
+import com.aliothmoon.maadroid.common.i18n.uiTextJoin
+import com.aliothmoon.maadroid.common.i18n.uiTextLines
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 
 // 需用户确认的警告文案（手动模式），按确认项区分。各启动入口共享。
 internal fun Context.resolveTaskStartConfirmationMessage(ack: TaskStartAcknowledgement): UiText =

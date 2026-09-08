@@ -61,7 +61,7 @@ import com.aliothmoon.maadroid.schedule.ui.ScheduleEditView
 import com.aliothmoon.maadroid.schedule.ui.ScheduleTriggerLogView
 import com.aliothmoon.maadroid.ui.theme.LocalReduceMotion
 import com.aliothmoon.maadroid.ui.theme.MaaMotion
-import com.aliothmoon.maadroid.utils.i18n.resolve
+import com.aliothmoon.maadroid.common.i18n.resolve
 import com.dokar.sonner.ToastType
 import com.dokar.sonner.Toaster
 import com.dokar.sonner.rememberToasterState

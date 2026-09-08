@@ -16,7 +16,7 @@ core/
   bridge/               native 截图桥、AIDL 契约、输入注入
   remote/               提权进程实现、虚拟显示器、设备侧抽象实现
   ui/                   引擎与宿主共用的 Compose 组件与主题
-  common/               偏好、日志、通知、定时、更新框架   ← 待拆，现仍在 :app
+  common/               与 UI 无关的通用能力（i18n 文本模型；偏好/通知/更新框架待拆）
 hidden-api/             framework 隐藏 API 桩，仅编译期
 tooling/
   annotation-api/       偏好 KSP 的注解
@@ -49,7 +49,7 @@ Gradle 路径与目录一致：`:engine:limbus`、`:core:bridge`、`:tooling:ksp
 |---|---|---|---|
 | `presentation.components.` | 76 | **4** | `core:ui`（已下沉；残留 4 处是误放在宿主的方舟组件）|
 | `theme.` | 22 | **2** | `core:ui`（已下沉；残留 2 处是日志色板，依赖宿主日志模型）|
-| `utils.i18n.` | 20 | 20 | `core:common` |
+| `utils.i18n.` | 20 | **4** | `core:common`（已下沉；残留 4 处是方舟专属文案）|
 | `presentation.viewmodel.` | 15 | 15 | 方舟改构造函数注入即可消除，非前置 |
 | `data.preferences.` | 10 | 10 | 随 `TaskChainState` 迁入方舟 |
 
@@ -67,6 +67,25 @@ theme 同理：22 次引用里 19 次只指向 `MaaMotion.kt` 一个文件。
 最终 `core:ui` = 13 个组件文件 + theme（除 `LogColors.kt`）+ 6 条通用文案，约 2.4k 行。
 `LogColors.kt` 留在 `:app`：它依赖 `data/model` 里的日志模型，那批东西的去处是
 `core:common`，把它塞进 UI 模块是错误的分层。
+
+### `core:common` 为什么不依赖 Compose
+
+`UiText` 的类型与 `resolve(Context)` 在 `core:common`，而 `@Composable` 的取值器
+`asString()` 在 `core:ui`。这个拆分不是洁癖：`FightConfig`、`ActivityManager`、
+`CopilotManager` 这些**非 UI 类**都在构造 `UiText`（配置校验、资源加载、异常原因都要产出
+面向用户的文案，而那时拿不到 Context 也不知当前语言），若把整个 `UiText` 放进 `core:ui`，
+它们就得为一个数据类型背上 Compose 依赖。
+
+同时纠正两处原先的判断 —— 它们看着像通用模型，实则是方舟的：
+
+- `data/model/LogLevel.kt` 与 `LogColorRole.kt` 的取值大半是**公招星级**（`RECRUIT_STAR_1..6`）
+  与**肉鸽事件**（`ROGUELIKE_*`），是伪装成通用日志模型的方舟枚举，该随
+  `engine/arknights` 走而非进 `core:common`。只有 `LogSeverity`（TRACE/MESSAGE/INFO/
+  WARNING/ERROR）是真通用，但它仅 2 处使用，暂不搬。
+- `formatToolboxSyncTime` 只有方舟三个面板在用，同样归方舟。
+
+`LogSeverity` 与 `EngineEvent.LogLevel` **刻意不合并**：后者是引擎→宿主的事件词汇，
+前者是宿主**持久化**的过滤级别（改动取值会让已存日志读不出来），两者分属不同层。
 
 一处解耦值得记下：`ThemeMode` 原本是 `AppSettingsManager` 的嵌套枚举，于是 `Theme.kt`
 想下沉就得连整个设置管理器一起拖走。主题模式本就属于主题，故提到 `core:ui`；

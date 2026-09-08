@@ -7,7 +7,7 @@ import com.aliothmoon.maadroid.data.resource.ItemHelper
 import com.aliothmoon.maadroid.data.resource.ResourceDataManager
 import com.aliothmoon.maadroid.domain.models.ReportOptions
 import com.aliothmoon.maadroid.domain.service.FightDropsRefresher
-import com.aliothmoon.maadroid.utils.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.UiText
 
 /**
  * 展开环境：只读世界状态 + 本趟 [appendLog] / [FightDropsRefresher.stage]。

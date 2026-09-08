@@ -53,7 +53,7 @@ import com.aliothmoon.maadroid.data.model.toolbox.OperBoxOperator
 import com.aliothmoon.maadroid.domain.service.ToolboxExportFileType
 import com.aliothmoon.maadroid.presentation.viewmodel.ToolboxViewModel
 import com.aliothmoon.maadroid.ui.theme.MaaAnimatedVisibility
-import com.aliothmoon.maadroid.utils.i18n.asString
+import com.aliothmoon.maadroid.ui.asString
 import com.aliothmoon.maadroid.utils.i18n.formatToolboxSyncTime
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject

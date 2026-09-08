@@ -5,8 +5,8 @@ import com.aliothmoon.maadroid.data.model.FightConfig
 import com.aliothmoon.maadroid.data.model.MallConfig
 import com.aliothmoon.maadroid.data.model.TaskChainNode
 import com.aliothmoon.maadroid.data.resource.ActivityManager
-import com.aliothmoon.maadroid.utils.i18n.UiText
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 import timber.log.Timber
 
 

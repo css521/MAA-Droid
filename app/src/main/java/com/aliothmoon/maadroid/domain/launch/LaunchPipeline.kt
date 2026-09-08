@@ -16,8 +16,8 @@ import com.aliothmoon.maadroid.domain.usecase.TaskStartMode
 import com.aliothmoon.maadroid.schedule.data.ScheduleStrategyRepository
 import com.aliothmoon.maadroid.schedule.model.ExecutionResult
 import com.aliothmoon.maadroid.schedule.service.ScheduleTriggerLogger
-import com.aliothmoon.maadroid.utils.i18n.UiText
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job

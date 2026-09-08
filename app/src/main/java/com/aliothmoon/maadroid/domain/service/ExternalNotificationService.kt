@@ -4,9 +4,9 @@ import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.data.notification.NotificationSettingsManager
 import com.aliothmoon.maadroid.data.notification.provider.NotificationProvider
 import com.aliothmoon.maadroid.data.notification.provider.NotificationSendResult
-import com.aliothmoon.maadroid.utils.i18n.UiText
-import com.aliothmoon.maadroid.utils.i18n.uiTextJoin
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.uiTextJoin
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob

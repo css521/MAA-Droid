@@ -4,7 +4,7 @@ import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.data.api.HttpClientHelper
 import com.aliothmoon.maadroid.data.notification.NotificationSettingsManager
 import com.aliothmoon.maadroid.utils.JsonUtils
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable

@@ -1,13 +1,19 @@
-package com.aliothmoon.maadroid.utils.i18n
+package com.aliothmoon.maadroid.common.i18n
 
 import android.content.Context
 import androidx.annotation.StringRes
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Immutable
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 
-@Immutable
+/**
+ * 可延迟解析的界面文本。
+ *
+ * 存在的理由：非 UI 层也需要产出面向用户的文案（配置校验、资源加载、异常原因），
+ * 但那时拿不到 Context、也不知道当前语言 —— 直接存字符串会让语言切换后文案不更新。
+ * 于是先存「资源 id + 参数」，到 UI 层再 [resolve]。
+ *
+ * 放在 core:common 而非 core:ui：`FightConfig`、`ActivityManager`、`CopilotManager`
+ * 这些非 UI 类都在构造 UiText，不该为此背上 Compose 依赖。
+ * @Composable 的取值器在 core:ui（见 `UiTextCompose.kt`）。
+ */
 sealed interface UiText {
     data object Empty : UiText
 
@@ -68,11 +74,3 @@ fun UiText?.resolve(context: Context): String {
         }
     }
 }
-
-@Composable
-fun UiText?.asString(): String {
-    LocalConfiguration.current
-    val context = LocalContext.current
-    return resolve(context)
-}
-

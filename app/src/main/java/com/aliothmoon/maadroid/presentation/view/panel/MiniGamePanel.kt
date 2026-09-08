@@ -31,7 +31,7 @@ import com.aliothmoon.maadroid.data.resource.MiniGameTextRegistry
 import com.aliothmoon.maadroid.ui.components.SelectableCardButton
 import com.aliothmoon.maadroid.presentation.viewmodel.MiniGameDelegate
 import com.aliothmoon.maadroid.presentation.viewmodel.PixelArtDelegate
-import com.aliothmoon.maadroid.utils.i18n.asString
+import com.aliothmoon.maadroid.ui.asString
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

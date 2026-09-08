@@ -3,7 +3,7 @@ package com.aliothmoon.maadroid.presentation.view.panel
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Stable
 import com.aliothmoon.maadroid.R
-import com.aliothmoon.maadroid.utils.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.UiText
 
 /**
  * 面板 Tab 类型

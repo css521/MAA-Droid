@@ -7,8 +7,8 @@ import com.aliothmoon.maadroid.data.api.model.GitHubRelease
 import com.aliothmoon.maadroid.data.model.update.UpdateChannel
 import com.aliothmoon.maadroid.domain.service.update.resolver.AppDownloadUrlResolver
 import com.aliothmoon.maadroid.utils.JsonUtils
-import com.aliothmoon.maadroid.utils.i18n.LocalizedException
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.LocalizedException
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 import timber.log.Timber
 
 class GitHubAppDownloadUrlResolver(

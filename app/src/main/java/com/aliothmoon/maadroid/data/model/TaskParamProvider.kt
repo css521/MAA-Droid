@@ -1,7 +1,7 @@
 package com.aliothmoon.maadroid.data.model
 
 import com.aliothmoon.maadroid.maa.task.MaaTaskParams
-import com.aliothmoon.maadroid.utils.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.UiText
 import kotlinx.serialization.Serializable
 
 @Serializable

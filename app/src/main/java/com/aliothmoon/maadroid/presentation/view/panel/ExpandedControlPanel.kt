@@ -46,8 +46,8 @@ import com.aliothmoon.maadroid.presentation.view.panel.PanelDialogType.SUCCESS
 import com.aliothmoon.maadroid.presentation.viewmodel.CopilotViewModel
 import com.aliothmoon.maadroid.presentation.viewmodel.ExpandedControlPanelViewModel
 import com.aliothmoon.maadroid.presentation.viewmodel.ToolboxViewModel
-import com.aliothmoon.maadroid.utils.i18n.asString
-import com.aliothmoon.maadroid.utils.i18n.resolve
+import com.aliothmoon.maadroid.ui.asString
+import com.aliothmoon.maadroid.common.i18n.resolve
 import org.koin.compose.koinInject
 
 

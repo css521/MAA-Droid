@@ -143,8 +143,10 @@ class HostEngineIsolationContractTest {
         // LocalLogPalette + themedColor(2) 是日志色板，依赖宿主的日志模型（待 core:common）
         "com.aliothmoon.maadroid.presentation.components." to 4,
         "com.aliothmoon.maadroid.theme." to 2,
-        // → core:common
-        "com.aliothmoon.maadroid.utils.i18n." to 20,
+        // → core:common。UiText 主体已下沉（20→4）。残留 4 处是**方舟专属**的：
+        // formatToolboxSyncTime(3) 只有方舟三个面板在用、wakeUpClientTypeDisplayName(1)
+        // 是「开始唤醒」的服务器名 —— 都该随 engine/arknights 走，不是 core:common 的欠账
+        "com.aliothmoon.maadroid.utils.i18n." to 4,
         // → 方舟侧改构造函数注入即可消除，非前置
         "com.aliothmoon.maadroid.presentation.viewmodel." to 15,
         // → 随 TaskChainState 一起迁入方舟（P2）

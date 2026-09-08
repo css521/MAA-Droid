@@ -4,7 +4,7 @@ import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.data.api.HttpClientHelper
 import com.aliothmoon.maadroid.data.notification.NotificationSettings
 import com.aliothmoon.maadroid.data.notification.NotificationSettingsManager
-import com.aliothmoon.maadroid.utils.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.UiText
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.flowOf

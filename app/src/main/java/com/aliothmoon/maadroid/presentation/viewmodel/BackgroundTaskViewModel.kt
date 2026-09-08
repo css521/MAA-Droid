@@ -35,8 +35,8 @@ import com.aliothmoon.maadroid.presentation.view.panel.PanelDialogConfirmAction
 import com.aliothmoon.maadroid.presentation.view.panel.PanelDialogUiState
 import com.aliothmoon.maadroid.presentation.view.panel.PanelTab
 import com.aliothmoon.maadroid.schedule.model.CountdownState
-import com.aliothmoon.maadroid.utils.i18n.UiText
-import com.aliothmoon.maadroid.utils.i18n.resolve
+import com.aliothmoon.maadroid.common.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.resolve
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow

@@ -60,7 +60,7 @@ import com.aliothmoon.maadroid.ui.components.CheckBoxWithLabel
 import com.aliothmoon.maadroid.ui.components.tip.ExpandableTipContent
 import com.aliothmoon.maadroid.ui.components.tip.ExpandableTipIcon
 import com.aliothmoon.maadroid.ui.theme.MaaAnimatedVisibility
-import com.aliothmoon.maadroid.utils.i18n.asString
+import com.aliothmoon.maadroid.ui.asString
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 

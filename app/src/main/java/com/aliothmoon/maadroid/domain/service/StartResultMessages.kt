@@ -1,8 +1,8 @@
 package com.aliothmoon.maadroid.domain.service
 
 import com.aliothmoon.maadroid.R
-import com.aliothmoon.maadroid.utils.i18n.UiText
-import com.aliothmoon.maadroid.utils.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 
 /** 将 [MaaCompositionService.StartResult] 映射为可读的 i18n 文案；Success 返回 null */
 fun resolveStartResultMessage(result: MaaCompositionService.StartResult): UiText? =

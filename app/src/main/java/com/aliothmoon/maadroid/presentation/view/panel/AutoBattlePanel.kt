@@ -98,8 +98,8 @@ import com.aliothmoon.maadroid.presentation.viewmodel.CopilotTabs
 import com.aliothmoon.maadroid.presentation.viewmodel.CopilotViewModel
 import com.aliothmoon.maadroid.ui.theme.MaaAnimatedVisibility
 import com.aliothmoon.maadroid.utils.Misc
-import com.aliothmoon.maadroid.utils.i18n.UiText
-import com.aliothmoon.maadroid.utils.i18n.asString
+import com.aliothmoon.maadroid.common.i18n.UiText
+import com.aliothmoon.maadroid.ui.asString
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
