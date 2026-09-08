@@ -189,7 +189,7 @@ kotlin {
 }
 
 dependencies {
-    api(project(":core-bridge"))
+    api(project(":core-remote"))
     compileOnly(project(":hidden-api"))
     implementation(project(":annotation-api"))
     ksp(project(":ksp-processor"))

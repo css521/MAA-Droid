@@ -33,6 +33,8 @@ class PersistentUiTextContractTest {
             // native 与 third/ 已拆到 core-bridge
             File("core-bridge/$relativePath"),
             File("../core-bridge/$relativePath"),
+            File("core-remote/$relativePath"),
+            File("../core-remote/$relativePath"),
         )
         val file = candidates.firstOrNull { it.isFile }
         checkNotNull(file) { "Source file not found for test: $relativePath" }

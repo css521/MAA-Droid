@@ -28,7 +28,8 @@
 -dontwarn java.awt.**
 
 # Shizuku / Root 按类名拉起
--keep class com.aliothmoon.maadroid.remote.RemoteServiceImpl { <init>(); }
+# 提权进程反射实例化的引擎装配子类（父类 RemoteServiceImpl 在 core-remote）
+-keep class com.aliothmoon.maadroid.remote.MaaDroidRemoteService { <init>(); }
 -keep class com.aliothmoon.maadroid.remote.LogcatCaptureServiceImpl { <init>(); }
 -keep class com.aliothmoon.maadroid.root.RootServiceStarter {
     public static void main(java.lang.String[]);

@@ -40,7 +40,14 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.system.exitProcess
 
-class RemoteServiceImpl : RemoteService.Stub() {
+/**
+ * 提权进程的服务实现，游戏无关。
+ *
+ * 引擎不在此装配 —— core-remote 不允许依赖 engine-*，否则依赖方向倒挂。
+ * 由 `:app`（唯一依赖全部引擎的模块）继承本类并在其 init 中调用
+ * [RemoteEngineRegistry.register] 装上各引擎工厂，再把子类名作为 `--class=` 传给 launcher。
+ */
+open class RemoteServiceImpl : RemoteService.Stub() {
 
     companion object {
         private const val TAG = "RemoteService"
@@ -62,10 +69,6 @@ class RemoteServiceImpl : RemoteService.Stub() {
     }
 
     init {
-        // 引擎装配点。提权进程由 RootUserService 反射实例化本类，此处把所有引擎工厂
-        // 装进注册表；getEngineService 之后只查表。新增游戏在此追加一行。
-        // 注：本类将随 core-remote 拆出，届时注册移到 :app 提供的子类里（见方案步骤 2）。
-        RemoteEngineRegistry.register(com.aliothmoon.maadroid.maa.ArknightsRemoteEngineFactory)
         RemoteBootTrace.mark("CTOR_START")
         Runtime.getRuntime().addShutdownHook(Thread {
             runCatching { performEmergencyCleanup() }
@@ -110,11 +113,10 @@ class RemoteServiceImpl : RemoteService.Stub() {
         engineId?.let { RemoteEngineRegistry.get(it) }
 
     override fun version(): String {
-        val maaVersion = MaaCoreManager.MaaContext?.AsstGetVersion() ?: "Not loaded"
         return """
             ==== Build Info ====
             BridgeInfo: ${NativeBridgeLib.ping()}
-            MaaCore Version: $maaVersion
+            Engines: ${RemoteEngineRegistry.versionSummary()}
             =====================
         """.trimIndent()
     }
@@ -137,17 +139,11 @@ class RemoteServiceImpl : RemoteService.Stub() {
             return SetupResult.ERR_USER_DIR_INACCESSIBLE
         }
         RemoteBootTrace.bindUserDir(dir)
-        val ctx = MaaCoreManager.MaaContext ?: run {
-            Ln.e("$TAG: setup failed - MaaContext is null")
-            return SetupResult.ERR_CORE_NOT_LOADED
-        }
         Ln.i("NativeBridgeLib ping ${NativeBridgeLib.ping()}")
-        with(ctx) {
-            if (!AsstSetUserDir(dir.path)) {
-                Ln.e("$TAG: setup failed - AsstSetUserDir($dir) returned false")
-                return SetupResult.ERR_SET_USER_DIR
-            }
-            Ln.i("MaaCore ${AsstGetVersion()} userDir=$dir")
+        // 引擎自己完成初始化：core-remote 不认识任何引擎，故不能在此直接调 MaaCore
+        RemoteEngineRegistry.setupAll(dir)?.let { err ->
+            Ln.e("$TAG: setup failed - $err")
+            return SetupResult.ERR_SET_USER_DIR
         }
         PermissionGrantHelper.disablePhantomProcessKiller()
         setup = true

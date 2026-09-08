@@ -32,6 +32,25 @@ object RemoteEngineRegistry {
 
     fun registeredIds(): Set<String> = factories.keys.toSet()
 
+    /**
+     * 通用 setup 之后逐个初始化引擎。会触发 [get] 从而创建引擎实例。
+     * @return 第一个失败引擎的原因；全部成功返回 null
+     */
+    fun setupAll(userDir: java.io.File): String? {
+        for (id in factories.keys) {
+            get(id) ?: return "engine $id create failed"
+            val err = runCatching { factories.getValue(id).onRemoteSetup(userDir) }
+                .getOrElse { "engine $id setup threw: ${it.message}" }
+            if (err != null) return err
+        }
+        return null
+    }
+
+    /** 各引擎自报版本，供提权进程的 version() 汇总 */
+    fun versionSummary(): String = factories.values
+        .mapNotNull { f -> runCatching { f.versionInfo() }.getOrNull()?.let { "${f.engineId}: $it" } }
+        .joinToString("\n") .ifEmpty { "no engine loaded" }
+
     /** 进程退出与紧急清理时逐个释放；只关已经创建出来的，未加载的引擎不去触碰 */
     fun closeAll() {
         instances.keys.toList().forEach { id ->
@@ -53,4 +72,18 @@ interface RemoteEngineFactory {
 
     /** 释放引擎持有的原生资源；未被创建过时不会调用 */
     fun close() {}
+
+    /**
+     * 通用 setup 完成后由提权进程回调，让引擎做自己的初始化（如设置用户目录、加载核心）。
+     *
+     * 存在的原因：原先 RemoteServiceImpl.setup() 里直接调了 MaaCore 的 AsstSetUserDir，
+     * 把方舟写进了游戏无关的提权服务。改由引擎自述，core-remote 便无需认识任何引擎。
+     *
+     * @param userDir 提权进程为引擎准备好的数据目录
+     * @return null 表示成功；非空为失败原因，提权侧据此返回 setup 错误码
+     */
+    fun onRemoteSetup(userDir: java.io.File): String? = null
+
+    /** 供 version() 汇总，形如 "MaaCore v6.17.2"；不可用时返回 null */
+    fun versionInfo(): String? = null
 }

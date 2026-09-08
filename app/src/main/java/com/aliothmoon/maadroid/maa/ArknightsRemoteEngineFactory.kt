@@ -4,6 +4,7 @@ import android.os.IBinder
 import com.aliothmoon.maadroid.remote.EngineIds
 import com.aliothmoon.maadroid.remote.MaaCoreManager
 import com.aliothmoon.maadroid.remote.RemoteEngineFactory
+import com.aliothmoon.maadroid.third.Ln
 
 /**
  * 明日方舟引擎在提权进程侧的工厂。
@@ -23,4 +24,15 @@ object ArknightsRemoteEngineFactory : RemoteEngineFactory {
     override fun create(): IBinder = MaaCoreManager.maaService
 
     override fun close() = MaaCoreManager.destroy()
+
+    /** MaaCore 的用户目录必须在跑任务前设好，原先这段写在 RemoteServiceImpl.setup 里 */
+    override fun onRemoteSetup(userDir: java.io.File): String? {
+        val ctx = MaaCoreManager.MaaContext ?: return "MaaContext is null (libMaaCore.so 未加载)"
+        if (!ctx.AsstSetUserDir(userDir.path)) return "AsstSetUserDir($userDir) returned false"
+        Ln.i("MaaCore ${ctx.AsstGetVersion()} userDir=$userDir")
+        return null
+    }
+
+    override fun versionInfo(): String? =
+        MaaCoreManager.MaaContext?.AsstGetVersion()
 }

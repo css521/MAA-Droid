@@ -28,6 +28,8 @@ class NativeBuildLocalOptContractTest {
         val candidates = listOf(
             File("core-bridge/$relativePath"),
             File("../core-bridge/$relativePath"),
+            File("core-remote/$relativePath"),
+            File("../core-remote/$relativePath"),
         )
         val file = candidates.firstOrNull { it.isFile }
         checkNotNull(file) { "File not found for test: core-bridge/$relativePath" }
@@ -42,6 +44,8 @@ class NativeBuildLocalOptContractTest {
             // native 与 third/ 已拆到 core-bridge
             File("core-bridge/$relativePath"),
             File("../core-bridge/$relativePath"),
+            File("core-remote/$relativePath"),
+            File("../core-remote/$relativePath"),
         )
         val file = candidates.firstOrNull { it.isFile }
         checkNotNull(file) { "File not found for test: $relativePath" }

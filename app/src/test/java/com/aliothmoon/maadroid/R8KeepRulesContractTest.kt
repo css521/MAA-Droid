@@ -30,7 +30,7 @@ class R8KeepRulesContractTest {
             "com.sun.jna.*",
             "com.sun.jna.Structure",
             "com.sun.jna.Callback",
-            "com.aliothmoon.maadroid.remote.RemoteServiceImpl",
+            "com.aliothmoon.maadroid.remote.MaaDroidRemoteService",
             "com.aliothmoon.maadroid.remote.LogcatCaptureServiceImpl",
             "com.aliothmoon.maadroid.root.RootServiceStarter",
             "touchDown",
@@ -69,6 +69,8 @@ class R8KeepRulesContractTest {
             // native 与 third/ 已拆到 core-bridge
             File("core-bridge/$relativePath"),
             File("../core-bridge/$relativePath"),
+            File("core-remote/$relativePath"),
+            File("../core-remote/$relativePath"),
         )
         val file = candidates.firstOrNull { it.isFile }
         checkNotNull(file) { "File not found for test: $relativePath" }

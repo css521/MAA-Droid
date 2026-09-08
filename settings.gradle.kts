@@ -31,6 +31,7 @@ dependencyResolutionManagement {
 rootProject.name = "MaaDroid"
 include(":app")
 include(":core-bridge")
+include(":core-remote")
 include(":hidden-api")
 include(":annotation-api")
 include(":ksp-processor")
