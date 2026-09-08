@@ -6,6 +6,7 @@ import com.aliothmoon.maadroid.engine.arknights.enums.RoguelikeMode
 import com.aliothmoon.maadroid.engine.arknights.enums.UiUsageConstants
 import com.aliothmoon.maadroid.maa.task.MaaTaskParams
 import com.aliothmoon.maadroid.maa.task.MaaTaskType
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
@@ -16,7 +17,19 @@ import kotlinx.serialization.json.put
  * 自动肉鸽配置 - 迁移自 WPF RoguelikeSettingsUserControlModel
  * 默认值对齐 WPF RoguelikeTask.cs
  */
+/**
+ * 判别符固定为**当前**全限定类名。
+ *
+ * 这串字符不是包引用，而是**已经写进用户设备存档**的值：`TaskChainNode.config` 是
+ * sealed 类型，kotlinx 默认用全限定类名做多态判别符。不显式钉住的话，此类一旦随
+ * `engine/arknights` 换包，所有已装用户的任务链与配置档都会读不出来（表现为任务链
+ * 变空，用户以为配置丢了）。钉住之后类可以自由挪动。
+ *
+ * 因此**不要**把它改成短名或跟着新包名更新 —— 那等于同样的数据丢失。
+ * 契约由 TaskConfigWireFormatTest 钉住。
+ */
 @Serializable
+@SerialName("com.aliothmoon.maadroid.data.model.RoguelikeConfig")
 data class RoguelikeConfig(
     // 基础设置
     val theme: String = "Phantom",  // 主题：Phantom/Mizuki/Sami/Sarkaz/JieGarden/BlackFlow

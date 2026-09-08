@@ -68,6 +68,29 @@ theme 同理：22 次引用里 19 次只指向 `MaaMotion.kt` 一个文件。
 `LogColors.kt` 留在 `:app`：它依赖 `data/model` 里的日志模型，那批东西的去处是
 `core:common`，把它塞进 UI 模块是错误的分层。
 
+### 抽方舟前必须先解开的一个数据陷阱
+
+`TaskChainNode.config` 的类型是 sealed 的 `TaskParamProvider`，而 kotlinx 的多态判别符
+**默认取全限定类名**。十个配置类都没有 `@SerialName`，`JsonUtils.common` 也没设
+`classDiscriminator` —— 于是用户设备上的存档里写着：
+
+```json
+{ "config": { "type": "com.aliothmoon.maadroid.data.model.FightConfig" } }
+```
+
+**包名进了存档。** 把这些类挪进 `engine/arknights` 会让所有已装用户的任务链与配置档
+读不出来，表现为任务链变空、用户以为配置丢了。
+
+解法是把判别符与包名解绑：给十个类各加 `@SerialName`，值**固定为旧的全限定名**。
+它现在是一个持久化字符串而不是包引用，所以：
+
+- 不要改成短名 —— 同样等于数据丢失
+- 不要跟着新包名更新 —— 同上
+
+`TaskConfigWireFormatTest` 钉住了这件事，也顺带定义了迁移的验收标准：
+**方案正确的判据是那几条断言一条都不用改**。已做变异验证 —— 去掉任一 `@SerialName`
+或把它改成短名，用例都会失败。
+
 ### `core:common` 为什么不依赖 Compose
 
 `UiText` 的类型与 `resolve(Context)` 在 `core:common`，而 `@Composable` 的取值器
