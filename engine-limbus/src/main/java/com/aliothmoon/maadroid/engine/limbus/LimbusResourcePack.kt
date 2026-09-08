@@ -16,7 +16,7 @@ import java.io.File
  *
  * feed 来源是本仓库自己的 Release，而不是上游 —— 上游 LALC 只发一个 249 MB 的 Windows
  * 整包（含 Python 运行时、无清单、无逐文件 sha256），无法增量。由 CI 从其 tag 取
- * config/task、config/language、img、ai/model 四份重打包成约 25 MB 的包，
+ * config/task、config/language、img、ai/model、recognize/models 五份重打包成约 43 MB 的包，
  * 见 scripts/pack_engine_resource.py。
  */
 object LimbusResourcePack : ResourcePackSpec {
@@ -28,7 +28,8 @@ object LimbusResourcePack : ResourcePackSpec {
     override val relativeRoot: String = "engines/limbus"
 
     /**
-     * 不内置于 APK：25 MB 素材进包会让 APK 明显变大，而首启必然要联网校验更新，
+     * 不内置于 APK：43 MB 素材（含 20 MB OCR 模型）进包会让 APK 明显变大，
+     * 而首启必然要联网校验更新，
      * 不如统一走热更。首次使用前宿主会引导下载。
      */
     override val bundledAssetPrefix: String? = null
@@ -49,9 +50,13 @@ object LimbusResourcePack : ResourcePackSpec {
     override fun mapZipEntry(entryName: String): String? = when {
         entryName.endsWith("/") -> null
         entryName == MANIFEST_NAME -> MANIFEST_NAME
+        // 白名单必须与 scripts/pack_engine_resource.py 的 include 列表一致。
+        // 两侧任一漏一项，文件会「在包里但落不了盘」，而 OCR/识别失败表现为
+        // 「返回空表」而非报错 —— 症状是某些步骤莫名走兜底分支，极难溯源
         entryName.startsWith("config/") -> entryName
         entryName.startsWith("img/") -> entryName
         entryName.startsWith("ai/") -> entryName
+        entryName.startsWith("recognize/models/") -> entryName
         else -> null
     }
 

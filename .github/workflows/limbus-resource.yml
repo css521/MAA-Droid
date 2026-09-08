@@ -3,7 +3,7 @@ name: 边狱资源包（跟随 LALC 上游）
 # 为什么需要这条流水线：
 # 上游 LALC 没有资源专用 feed —— 它只发一个 249 MB 的 Windows 整包（含 Python 运行时、
 # 无清单、无逐文件 sha256），App 无法据此做增量热更。故由本流水线盯它的 tag，
-# 只取 config/task、config/language、img、ai/model 四份重打包成约 25 MB 带 sha256
+# 只取 config/task、config/language、img、ai/model、recognize/models 五份重打包成约 43 MB 带 sha256
 # 清单的资源包发 Release，App 只订阅这一条 feed。
 #
 # 效果：上游改流程 / 模板 / 阈值 → 用户靠热更无感跟随，不必发 APK；
@@ -114,5 +114,5 @@ jobs:
             --title "边狱资源包 ${{ steps.upstream.outputs.ref }}" \
             --notes "自动跟随上游 [LALC ${{ steps.upstream.outputs.ref }}](https://github.com/HSLix/LixAssistantLimbusCompany/releases/tag/${{ steps.upstream.outputs.ref }}) 重打包。
 
-            仅含 config/task、config/language、img、ai/model 四份，不含 Python 运行时。
+            仅含 config/task、config/language、img、ai/model、recognize/models 五份，不含 Python 运行时。
             清单带逐文件 sha256 与 required_actions，App 装载前会做兼容门闸校验。"

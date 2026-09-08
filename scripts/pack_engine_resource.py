@@ -43,7 +43,17 @@ ENGINES = {
     "limbus": {
         "repo": "HSLix/LixAssistantLimbusCompany",
         "resource_root": "lalc_backend",
-        "include": ["config/task", "config/language", "img", "ai/model"],
+        # recognize/models 是 OCR(PP-OCRv5 det+rec,约 20 MB)所在目录。
+        # 漏收它会让 OCR 永远拿不到模型 —— 上游把它放在 recognize/ 而不是 ai/model/,
+        # 只按 ai/model 收会静默少两个文件,且因为 OCR 失败是"返回空表"而非报错,
+        # 症状会表现为"镜牢商店与选饰品莫名走兜底分支"，极难溯源。
+        "include": [
+            "config/task",
+            "config/language",
+            "img",
+            "ai/model",
+            "recognize/models",
+        ],
         # 流水线 JSON 所在目录(相对资源根),用于引用校验
         "pipeline_dir": "config/task",
         "template_dir": "img",

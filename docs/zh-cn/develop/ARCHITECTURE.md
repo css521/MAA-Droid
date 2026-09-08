@@ -55,7 +55,7 @@ app                宿主：导航、游戏切换、资源中心、定时、通�
 | | 明日方舟 | 边狱公司 |
 |---|---|---|
 | 上游发布形态 | 直接发布 `MaaResource`（GitHub + MirrorChyan） | 只发 249 MB Windows 整包，无清单、无逐文件校验 |
-| 我们怎么做 | 沿用既有下载链路，只做声明 | CI 从其 tag 重打包成约 25 MB 带 sha256 清单的包 |
+| 我们怎么做 | 沿用既有下载链路，只做声明 | CI 从其 tag 重打包成约 43 MB 带 sha256 清单的包 |
 | 内置于 APK | 是（`assets/MaaSync/MaaResource`） | 否，首次使用时下载 |
 | 兼容门闸 | 由 MaaCore 版本 stamp 保证 | 清单协议版本 + `min_engine_version` + `required_actions` |
 
