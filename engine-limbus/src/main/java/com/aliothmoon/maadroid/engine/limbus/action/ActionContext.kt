@@ -4,6 +4,7 @@ import com.aliothmoon.maadroid.engine.InputSink
 import com.aliothmoon.maadroid.engine.limbus.pipeline.PipelineNode
 import com.aliothmoon.maadroid.engine.limbus.recognize.Recognizer
 import com.aliothmoon.maadroid.engine.limbus.recognize.TemplateIndex
+import kotlinx.serialization.json.JsonElement
 
 /**
  * 动作执行上下文。
@@ -88,4 +89,13 @@ interface LimbusConfig {
 
     /** [key] 下有多少组，供 [ActionContext.counterOf] 取模做轮换 */
     fun groupCount(section: String, key: String): Int
+
+    /**
+     * 取原始 JSON。
+     *
+     * 逃生口，给形状不规则的键用 —— 例如 `mirror_replace_skill` 每组是
+     * 「罪人名 → 技能顺序」的字典（`{"Faust": [3,2,1], …}`），既不是标量也不是字符串表。
+     * 上游这类结构会随版本增减，为它们各加一个专用取值方法只会让契约随上游膨胀。
+     */
+    fun rawAt(section: String, key: String, index: Int): JsonElement?
 }

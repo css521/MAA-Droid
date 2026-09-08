@@ -4,6 +4,9 @@ import com.aliothmoon.maadroid.engine.limbus.action.InputHelper.click
 import com.aliothmoon.maadroid.engine.limbus.action.InputHelper.keyPress
 import com.aliothmoon.maadroid.engine.limbus.action.InputHelper.swipe
 import com.aliothmoon.maadroid.engine.limbus.recognize.Crop
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * 镜牢（Mirror Dungeon）全部 14 个动作。
@@ -58,6 +61,13 @@ private val REPLACE_SKILL_MAP = mapOf(
 
 /** 连续两次因缺钱失败就停手，照抄上游 —— 再试下去只是白点 */
 private const val MAX_MONEY_FAILURES = 2
+
+/** 罪人名在头像下方，要往上偏才点到头像本身 */
+private const val REPLACE_NAME_TO_PORTRAIT_DY = 80
+
+/** OCR 认不准的罪人名，只比对前缀 */
+private const val OCR_UNSTABLE_SINNER = "Ryoshu"
+private const val OCR_UNSTABLE_SINNER_PREFIX = "Ry"
 
 private val SHOP_PURCHASE_PLACES = listOf(
     620 to 270, 780 to 270, 940 to 270, 1100 to 270,
@@ -364,7 +374,7 @@ private object ShopReplacePurchaseAction : ActionBackend {
         val leftMoneyForEnhance = ctx.config.int(cfgType, "mirror_stop_purchase_gift_money", 0)
         val preferStyles = ctx.config.listAt(cfgType, "mirror_team_ego_gift_styles", cfgIndex)
         val teamStyle = ctx.config.strAt(cfgType, "mirror_team_styles", cfgIndex, "Burn")
-        val needReplace = ctx.config.listAt(cfgType, "mirror_replace_skill", cfgIndex)
+        val replaceMap = ctx.config.rawAt(cfgType, "mirror_replace_skill", cfgIndex) as? JsonObject
 
         var loopCount = 0
         while (true) {
@@ -375,7 +385,7 @@ private object ShopReplacePurchaseAction : ActionBackend {
             ).isNotEmpty()
 
             if (!isPurchased) {
-                if (tryReplaceSkill(ctx, needReplace)) continue
+                if (tryReplaceSkill(ctx, replaceMap)) continue
             }
 
             val canPurchase = purchaseEgoGifts(ctx, preferGifts, allGiftNames)
@@ -402,30 +412,46 @@ private object ShopReplacePurchaseAction : ActionBackend {
         return ActionOutcome.Continue
     }
 
-    private suspend fun tryReplaceSkill(ctx: ActionContext, needReplace: List<String>): Boolean {
-        if (needReplace.isEmpty()) return false
+    /**
+     * 技能替换。
+     *
+     * 配置形状是「罪人名 → 技能槽顺序」的字典，例如 `{"Faust": [3,2,1]}`。
+     * 两处上游细节不可改：
+     * - 点击顺序要把配置**反序**（上游 `skill_order[::-1]`）—— 界面上后点的排在前面
+     * - Ryoshu 只用前两个字母 "Ry" 比对：OCR 常把这个名字后半截认错
+     */
+    private suspend fun tryReplaceSkill(ctx: ActionContext, replaceMap: JsonObject?): Boolean {
+        if (replaceMap.isNullOrEmpty()) return false
 
         val nameOcr = ctx.recognize.detectText(Crop(535, 320, 165, 50))
-        if (nameOcr.isEmpty()) return false
-
+        if (nameOcr.isEmpty()) {
+            ctx.log("替换技能的罪人名识别异常，跳过技能替换")
+            return false
+        }
         val detected = nameOcr[0].text
-        for (name in needReplace) {
-            val checkName = if (name == "Ryoshu") "Ry" else name
-            if (checkName in detected) {
-                click(ctx.input, nameOcr[0].x, nameOcr[0].y - 80)
-                ctx.delay(1.0)
-                // 技能替换顺序（简化：按 1,2,3 顺序）
-                for (i in listOf(1, 2, 3)) {
-                    val pos = REPLACE_SKILL_MAP[i] ?: continue
-                    click(ctx.input, pos.first, pos.second)
-                }
-                ctx.delay(1.0)
-                click(ctx.input, 790, 535)
-                ctx.delay(1.0)
-                click(ctx.input, 790, 535)
-                waitConnectingDisappear(ctx)
-                return true
+
+        for ((sinner, slotsJson) in replaceMap) {
+            val probe = if (sinner == OCR_UNSTABLE_SINNER) OCR_UNSTABLE_SINNER_PREFIX else sinner
+            if (probe !in detected) continue
+
+            val slots = runCatching {
+                slotsJson.jsonArray.mapNotNull { it.jsonPrimitive.content.toIntOrNull() }
+            }.getOrDefault(emptyList())
+            if (slots.isEmpty()) continue
+
+            ctx.log("罪人 $sinner 可做技能替换，顺序 $slots")
+            click(ctx.input, nameOcr[0].x, nameOcr[0].y - REPLACE_NAME_TO_PORTRAIT_DY)
+            ctx.delay(1.0)
+
+            for (slot in slots.reversed()) {
+                REPLACE_SKILL_MAP[slot]?.let { click(ctx.input, it.first, it.second) }
             }
+            ctx.delay(1.0)
+            click(ctx.input, 790, 535)
+            ctx.delay(1.0)
+            click(ctx.input, 790, 535)
+            waitConnectingDisappear(ctx)
+            return true
         }
         return false
     }

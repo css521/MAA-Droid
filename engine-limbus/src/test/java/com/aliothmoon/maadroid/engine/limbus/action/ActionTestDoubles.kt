@@ -8,6 +8,7 @@ import com.aliothmoon.maadroid.engine.limbus.recognize.Recognizer
 import com.aliothmoon.maadroid.engine.limbus.recognize.TemplateIndex
 import com.aliothmoon.maadroid.engine.limbus.recognize.TextMatch
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 
 /**
@@ -161,6 +162,15 @@ class FakeConfig : LimbusConfig {
 
     override fun groupCount(section: String, key: String) =
         groups[key(section, key)]?.size ?: 0
+
+    /** 形状不规则的键（如 mirror_replace_skill 的罪人名→技能顺序字典）直接塞 JSON */
+    override fun rawAt(section: String, key: String, index: Int): JsonElement? =
+        groups[key(section, key)]?.getOrNull(index) as? JsonElement
+
+    /** 便捷：按 JSON 字面量放一组不规则配置 */
+    fun putRawGroups(section: String, k: String, vararg json: String) = apply {
+        groups[key(section, k)] = json.map { Json.parseToJsonElement(it) }
+    }
 }
 
 class FakeTemplateIndex(private val byTag: Map<String, List<String>> = emptyMap()) : TemplateIndex {
