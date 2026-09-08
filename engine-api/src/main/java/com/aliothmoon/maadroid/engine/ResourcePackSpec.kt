@@ -28,6 +28,18 @@ interface ResourcePackSpec {
     val bundledAssetPrefix: String?
 
     /**
+     * 资源是否需要额外投递到**提权进程**的数据目录。
+     *
+     * 取决于该引擎跑在哪个进程（见 AutomationEngine 的说明）：
+     * - 方舟的 MaaCore 是 native、跑在提权进程，资源必须送到那边它才读得到 → true
+     * - 边狱跑在 App 进程、直接读自己的资源目录 → false
+     *
+     * 是引擎的**执行位置**决定的属性，不是某个游戏的特例，所以放在契约里而不是
+     * 让更新服务去认游戏 id。
+     */
+    val requiresPrivilegedDelivery: Boolean
+
+    /**
      * 读取已落盘资源的版本。
      *
      * 方舟读 `version.json` 的 `last_updated`；边狱读我们清单里的 `revision`。
@@ -42,6 +54,17 @@ interface ResourcePackSpec {
      * 而我们自己的包又是另一种布局。两侧（App 解包与提权进程落盘）必须用同一套规则。
      */
     fun mapZipEntry(entryName: String): String?
+
+    /**
+     * 让已落盘资源重新被视作「未装载」。
+     *
+     * 解压中途失败时资源目录处于残缺状态，必须抹掉版本标记，否则下次检查会认为
+     * 已是最新而不再补齐 —— 用户会拿着一份缺文件的资源包一直跑。
+     *
+     * 实现应删掉 [readInstalledVersion] 依赖的那个文件：方舟是 `version.json`，
+     * 边狱是我们清单的 `manifest.json`。
+     */
+    fun invalidateInstalledVersion(resourceDir: File)
 
     /**
      * 装载前的兼容门闸。

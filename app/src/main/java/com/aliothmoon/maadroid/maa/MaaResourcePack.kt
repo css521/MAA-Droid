@@ -40,8 +40,16 @@ object MaaResourcePack : ResourcePackSpec {
      * 复用既有规则：GitHub 归档带一层顶层目录（MaaResource-main/），镜像源可能没有，
      * 两侧（App 解包与提权进程落盘）必须用同一套映射。
      */
+    /** MaaCore 跑在提权进程，资源必须投递过去它才读得到 */
+    override val requiresPrivilegedDelivery: Boolean = true
+
     override fun mapZipEntry(entryName: String): String? =
         CoreDataDir.hotUpdateEntryToRelPath(entryName)
+
+    /** 抹掉 version.json，与既有 UpdateService 失败分支的做法一致 */
+    override fun invalidateInstalledVersion(resourceDir: File) {
+        File(resourceDir, MaaFiles.VERSION_FILE).delete()
+    }
 
     /**
      * 方舟侧没有「动作白名单」这类门闸 —— MaaCore 自己解析 tasks.json，

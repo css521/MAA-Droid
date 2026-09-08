@@ -33,6 +33,9 @@ object LimbusResourcePack : ResourcePackSpec {
      */
     override val bundledAssetPrefix: String? = null
 
+    /** 边狱引擎跑在 App 进程，直接读自己的资源目录，无需投递到提权侧 */
+    override val requiresPrivilegedDelivery: Boolean = false
+
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
     /** 我们自己的清单以 revision（对全部文件 path+sha256 求的稳定摘要）作版本 */
@@ -79,6 +82,11 @@ object LimbusResourcePack : ResourcePackSpec {
                 "（${missing.take(3).joinToString("、")}${if (missing.size > 3) "…" else ""}），请升级 App"
         }
         return null
+    }
+
+    /** 抹掉清单即视作未装载：readInstalledVersion 读的就是它的 revision */
+    override fun invalidateInstalledVersion(resourceDir: File) {
+        manifestFile(resourceDir).delete()
     }
 
     fun manifestFile(resourceDir: File): File = File(resourceDir, MANIFEST_NAME)

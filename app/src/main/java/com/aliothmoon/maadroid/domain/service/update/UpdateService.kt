@@ -33,7 +33,8 @@ import com.aliothmoon.maadroid.domain.service.update.checker.AppVersionChecker
 import com.aliothmoon.maadroid.domain.service.update.checker.ResourceVersionChecker
 import com.aliothmoon.maadroid.domain.service.update.resolver.AppDownloadUrlResolver
 import com.aliothmoon.maadroid.domain.service.update.resolver.ResourceDownloadUrlResolver
-import com.aliothmoon.maadroid.remote.CoreDataDir
+import com.aliothmoon.maadroid.engine.ResourcePackSpec
+import com.aliothmoon.maadroid.maa.MaaResourcePack
 import com.aliothmoon.maadroid.utils.i18n.LocalizedException
 import com.aliothmoon.maadroid.utils.i18n.resolve
 import com.aliothmoon.maadroid.utils.i18n.uiTextOf
@@ -259,10 +260,20 @@ class UpdateService(
         return resourceVersionChecker.check(currentVersion)
     }
 
+    /**
+     * 下载并解包一个资源包。
+     *
+     * [pack] 决定 zip 条目怎么落盘、失败时抹哪个版本标记 —— 两个引擎的上游打包布局
+     * 不同（方舟的 MaaResource 带顶层目录，我们给边狱重打的包是平铺的），
+     * 靠 [ResourcePackSpec] 吸收差异，这里不认识任何具体游戏。
+     *
+     * 缺省是方舟包，保持既有调用方与行为不变。
+     */
     suspend fun downloadResource(
         source: UpdateSource,
         currentVersion: String,
-        target: File
+        target: File,
+        pack: ResourcePackSpec = MaaResourcePack,
     ): Result<Unit> {
         if (!resourceDownloading.compareAndSet(false, true)) {
             return Result.success(Unit)   // 已在进行中，幂等跳过
@@ -304,7 +315,7 @@ class UpdateService(
                 return Result.failure(e)
             }
             Timber.i("downloadResource resolved URL: host=%s", safeHost(url))
-            val result = downloadAndExtractResource(target, url)
+            val result = downloadAndExtractResource(target, url, pack)
             achievementRepository.report {
                 event =
                     if (result.isSuccess) AchievementEvents.UPDATE_COMPLETED else AchievementEvents.UPDATE_FAILED
@@ -331,7 +342,11 @@ class UpdateService(
         _resourceProcessState.value = UpdateProcessState.Idle
     }
 
-    private suspend fun downloadAndExtractResource(target: File, url: String): Result<Unit> {
+    private suspend fun downloadAndExtractResource(
+        target: File,
+        url: String,
+        pack: ResourcePackSpec,
+    ): Result<Unit> {
         val downloadResult = resourceDownloader.downloadToTempFile(url) { progress ->
             _resourceProcessState.value = UpdateProcessState.Downloading(
                 progress = progress.progress,
@@ -360,7 +375,7 @@ class UpdateService(
         val extractResult = extractor.extract(
             zipFile = tempFile,
             destDir = target,
-            pathFilter = CoreDataDir::hotUpdateEntryToRelPath,
+            pathFilter = pack::mapZipEntry,
             onProgress = { progress ->
                 _resourceProcessState.value = UpdateProcessState.Extracting(
                     progress = progress.progress,
@@ -370,8 +385,9 @@ class UpdateService(
             }
         )
 
-        // 留档供独立目录投递
-        if (extractResult.isSuccess) {
+        // 留档供独立目录投递。只有引擎跑在提权进程的包才需要 ——
+        // 跑在 App 进程的引擎直接读自己的资源目录，留一份 zip 纯属占空间
+        if (extractResult.isSuccess && pack.requiresPrivilegedDelivery) {
             val keep = File(target.parentFile, MaaFiles.LAST_RESOURCE_UPDATE_ZIP)
             runCatching { if (!tempFile.renameTo(keep)) tempFile.copyTo(keep, overwrite = true) }
                 .onFailure { Timber.w(it, "keep last resource update zip failed") }
@@ -381,13 +397,13 @@ class UpdateService(
         return extractResult.fold(
             onSuccess = {
                 _resourceProcessState.value = UpdateProcessState.Success
-                Timber.i("Resource update completed")
-                coreDataPusher.pushHotUpdateIfNeeded()
+                Timber.i("Resource update completed: %s", pack.packId)
+                if (pack.requiresPrivilegedDelivery) coreDataPusher.pushHotUpdateIfNeeded()
                 Result.success(Unit)
             },
             onFailure = { e ->
-                // 解压中途失败时资源目录处于残缺状态，删除 version.json 让下次重新触发完整更新
-                File(target, MaaFiles.VERSION_FILE).delete()
+                // 解压中途失败时资源目录处于残缺状态，抹掉版本标记让下次重新触发完整更新
+                pack.invalidateInstalledVersion(target)
                 _resourceProcessState.value =
                     UpdateProcessState.Failed(
                         UpdateError.UnknownError(uiTextOf(R.string.update_error_extract_failed))

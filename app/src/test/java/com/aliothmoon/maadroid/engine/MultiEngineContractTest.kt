@@ -2,10 +2,13 @@ package com.aliothmoon.maadroid.engine
 
 import com.aliothmoon.maadroid.remote.EngineIds
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import kotlin.io.path.createTempDirectory
 
 /**
  * 多引擎共存契约。
@@ -60,5 +63,52 @@ class MultiEngineContractTest {
         // 方舟有抄作业生态，边狱没有；宿主据此裁剪入口而不是显示空白页
         assertTrue(Capability.COPILOT in ark)
         assertTrue(Capability.COPILOT !in limbus)
+    }
+
+    @Test
+    fun eachPackMapsItsOwnZipLayout() {
+        // 两个上游的打包布局不同：MaaResource 带一层顶层目录，我们给边狱重打的包是平铺的。
+        // 更新服务用 pack.mapZipEntry 落盘，所以两者必须各自认得自己的条目、
+        // 且不认得对方的 —— 混用会把文件解到错误位置或整包被过滤掉
+        val ark = EngineRegistry.allResourcePacks().first { it.engineId == EngineIds.ARKNIGHTS }
+        val limbus = EngineRegistry.allResourcePacks().first { it.engineId == EngineIds.LIMBUS }
+
+        assertNotNull("边狱包应认得自己的 config/task 条目", limbus.mapZipEntry("config/task/main.json"))
+        assertNull("边狱包不该收下无关条目", limbus.mapZipEntry("some/other/file.txt"))
+        // 目录条目一律忽略，否则会在资源目录里建出空目录
+        assertNull(limbus.mapZipEntry("config/"))
+
+        // 方舟的条目形态与边狱不同，互相不该认
+        assertNull("方舟包不该认得边狱的平铺条目", ark.mapZipEntry("config/task/main.json"))
+    }
+
+    @Test
+    fun privilegedDeliveryFollowsWhereTheEngineRuns() {
+        val ark = EngineRegistry.allResourcePacks().first { it.engineId == EngineIds.ARKNIGHTS }
+        val limbus = EngineRegistry.allResourcePacks().first { it.engineId == EngineIds.LIMBUS }
+        // MaaCore 是 native、跑在提权进程，资源必须投递过去；边狱跑在 App 进程直接读。
+        // 这个开关错了：方舟侧会读不到新资源，边狱侧会白留一份 zip 并触发无用的推送
+        assertTrue("方舟资源需要投递到提权进程", ark.requiresPrivilegedDelivery)
+        assertFalse("边狱资源不需要投递", limbus.requiresPrivilegedDelivery)
+    }
+
+    @Test
+    fun invalidatingVersionForcesFullRedownload() {
+        val ark = EngineRegistry.allResourcePacks().first { it.engineId == EngineIds.ARKNIGHTS }
+        val limbus = EngineRegistry.allResourcePacks().first { it.engineId == EngineIds.LIMBUS }
+        val dir = createTempDirectory("pack-invalidate").toFile()
+        try {
+            // 解压中途失败时靠它抹掉版本标记，否则下次检查会认为已最新、
+            // 用户会拿着一份缺文件的资源包一直跑
+            for (pack in listOf(ark, limbus)) {
+                pack.invalidateInstalledVersion(dir)
+                assertNull(
+                    "抹除后应读不出版本: ${pack.packId}",
+                    pack.readInstalledVersion(dir),
+                )
+            }
+        } finally {
+            dir.deleteRecursively()
+        }
     }
 }
