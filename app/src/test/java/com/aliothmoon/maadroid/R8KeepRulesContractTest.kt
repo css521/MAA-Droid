@@ -61,19 +61,10 @@ class R8KeepRulesContractTest {
         assertTrue(keepXml.contains("@string/achievement_*"))
     }
 
-    private fun resolve(relativePath: String): File {
-        val candidates = listOf(
-            File(relativePath),
-            File("app/$relativePath"),
-            File("../app/$relativePath"),
-            // native 与 third/ 已拆到 core-bridge
-            File("core-bridge/$relativePath"),
-            File("../core-bridge/$relativePath"),
-            File("core-remote/$relativePath"),
-            File("../core-remote/$relativePath"),
-        )
-        val file = candidates.firstOrNull { it.isFile }
-        checkNotNull(file) { "File not found for test: $relativePath" }
-        return file
-    }
+    /**
+     * R8 规则、keep.xml 与 minify 配置都是**宿主自己的**，故明确落在 app。
+     * 用 TestSources.resolve 会因 build.gradle.kts 多模块同名而报歧义。
+     */
+    private fun resolve(relativePath: String): File =
+        TestSources.inApp(relativePath)
 }

@@ -3,6 +3,7 @@ package com.aliothmoon.maadroid.third
 import java.io.File
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.aliothmoon.maadroid.TestSources
 
 class FakeContextContractTest {
 
@@ -13,19 +14,7 @@ class FakeContextContractTest {
         assertTrue(src.contains("acquireProvider(Context"))
     }
 
-    private fun resolve(relativePath: String): File {
-        val candidates = listOf(
-            File(relativePath),
-            File("app/$relativePath"),
-            File("../app/$relativePath"),
-            // native 与 third/ 已拆到 core-bridge
-            File("core-bridge/$relativePath"),
-            File("../core-bridge/$relativePath"),
-            File("core-remote/$relativePath"),
-            File("../core-remote/$relativePath"),
-        )
-        val file = candidates.firstOrNull { it.isFile }
-        checkNotNull(file) { "File not found: $relativePath" }
-        return file
-    }
+    /** 统一走 [TestSources]：模块目录名不写死，挪模块时不必回来改 */
+    private fun resolve(relativePath: String): File =
+        TestSources.resolve(relativePath)
 }

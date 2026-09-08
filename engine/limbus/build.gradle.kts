@@ -22,7 +22,7 @@ android {
 }
 
 dependencies {
-    api(project(":engine-api"))
+    api(project(":engine:api"))
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.annotation)
     // 模板匹配与图像预处理（上游全部识别都建立在 OpenCV 之上）

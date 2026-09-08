@@ -207,12 +207,12 @@ kotlin {
 }
 
 dependencies {
-    api(project(":core-remote"))
+    api(project(":core:remote"))
     // 各游戏引擎。:app 是唯一依赖全部引擎的模块（装配点）
-    implementation(project(":engine-limbus"))
+    implementation(project(":engine:limbus"))
     compileOnly(project(":hidden-api"))
-    implementation(project(":annotation-api"))
-    ksp(project(":ksp-processor"))
+    implementation(project(":tooling:annotation-api"))
+    ksp(project(":tooling:ksp-processor"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.core.splashscreen)

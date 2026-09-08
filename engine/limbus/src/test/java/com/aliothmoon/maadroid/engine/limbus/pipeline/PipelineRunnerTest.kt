@@ -245,6 +245,9 @@ class PipelineRunnerTest {
             override suspend fun classify(model: String, regions: List<Crop>) =
                 error("调度用例不应做识别")
 
+            override suspend fun classifyMultiLabel(model: String, regions: List<Crop>) =
+                error("调度用例不应做识别")
+
             override suspend fun colorTemplateMatch(template: String, threshold: Double, crop: Crop?) =
                 error("调度用例不应做识别")
 

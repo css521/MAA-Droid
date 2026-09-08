@@ -29,12 +29,27 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "MaaDroid"
+
+// 模块按层分组，目录结构即依赖方向：
+//   app -> engine:* -> engine:api -> core:* -> hidden-api
+//
+// 接入一个新游戏 = 在 engine/ 下加一个目录，照 engine/limbus 的样子实现
+// GameProfile / AutomationEngine / EngineUi / ResourcePackSpec，
+// 然后在 EngineSetup 里加一行 register。core:* 与既有引擎都不需要改动。
 include(":app")
-include(":core-bridge")
-include(":core-remote")
-include(":engine-api")
-include(":engine-limbus")
+
+// 游戏引擎层：每个游戏一个模块，彼此不相依
+include(":engine:api")
+include(":engine:limbus")
+
+// 平台能力层：与游戏无关，不得反向依赖 engine:*（由 ModuleBoundaryContractTest 钉住）
+include(":core:bridge")
+include(":core:remote")
+
+// framework 隐藏 API 桩，只在编译期使用
 include(":hidden-api")
-include(":annotation-api")
-include(":ksp-processor")
+
+// 构建期代码生成（偏好 KSP），不参与运行时依赖
+include(":tooling:annotation-api")
+include(":tooling:ksp-processor")
  

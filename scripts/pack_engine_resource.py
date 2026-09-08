@@ -191,9 +191,24 @@ def upstream_revision(upstream: str) -> tuple[str, str]:
     return git("describe", "--tags", "--abbrev=0"), git("rev-parse", "HEAD")
 
 
+def action_allowlist_path(repo_root: str, engine: str) -> str:
+    """
+    白名单文件路径。模块已按层分组(engine/<名字>/),旧的平铺路径(engine-<名字>/)
+    一并兼容,便于在老分支上跑同一份脚本。
+    """
+    candidates = [
+        os.path.join(repo_root, "engine", engine, "actions.txt"),
+        os.path.join(repo_root, f"engine-{engine}", "actions.txt"),
+    ]
+    for path in candidates:
+        if os.path.isfile(path):
+            return path
+    return candidates[0]
+
+
 def read_action_allowlist(repo_root: str, engine: str) -> set[str] | None:
-    """仓库内已实现的 action 白名单;文件不存在返回 None(骨架阶段尚未创建)。"""
-    path = os.path.join(repo_root, f"engine-{engine}", "actions.txt")
+    """仓库内已实现的 action 白名单;文件不存在返回 None。"""
+    path = action_allowlist_path(repo_root, engine)
     if not os.path.isfile(path):
         return None
     with open(path, encoding="utf-8") as f:
@@ -206,6 +221,11 @@ def read_action_allowlist(repo_root: str, engine: str) -> set[str] | None:
 def main() -> int:
     ap = argparse.ArgumentParser(description="重打包上游资源为引擎资源包")
     ap.add_argument("--engine", required=True, choices=sorted(ENGINES))
+    ap.add_argument(
+        "--allow-missing-actions",
+        action="store_true",
+        help="允许动作白名单缺失(仅引擎骨架阶段);默认缺失即失败",
+    )
     ap.add_argument("--upstream", required=True, help="上游仓库本地路径(CI 里是 checkout 出的 tag)")
     ap.add_argument("--out", required=True, help="产物输出目录")
     ap.add_argument("--tag", default="", help="覆盖上游 tag(非 git 目录时用)")
@@ -256,8 +276,17 @@ def main() -> int:
     print(f"模板        引用 {len(refs)} / 基名 {len(have)};语言目录 {sorted(lang_dirs)}")
 
     allow = read_action_allowlist(repo_root, args.engine)
-    if allow is None:
-        print(f"[提示] engine-{args.engine}/actions.txt 不存在(骨架阶段),跳过白名单对账")
+    if allow is None and args.allow_missing_actions:
+        print(f"[提示] 按 --allow-missing-actions 跳过白名单对账")
+    elif allow is None:
+        # 不能静默跳过：白名单是兼容门闸 required_actions 的对账依据,漏掉它就会发布一个
+        # 「App 装载时才发现动作缺失」的包。模块路径调整过后尤其容易踩到这条,故直接失败。
+        expected = action_allowlist_path(repo_root, args.engine)
+        raise SystemExit(
+            f"[错误] 找不到动作白名单 {expected}\n"
+            f"       它是资源包 required_actions 的对账依据,缺失时无法保证门闸有效。\n"
+            f"       若确为引擎骨架阶段(尚无任何实现),显式传 --allow-missing-actions。"
+        )
     else:
         unimplemented = sorted(set(required) - allow)
         stale = sorted(allow - set(required))

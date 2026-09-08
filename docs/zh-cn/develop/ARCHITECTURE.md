@@ -4,21 +4,46 @@
 
 ## 模块
 
+目录结构即依赖方向，分层一眼可见：
+
 ```
-app                宿主：导航、游戏切换、资源中心、定时、通知、引擎装配
-├─ engine-arknights   明日方舟（MaaCore）        ┐
-├─ engine-limbus      边狱公司（移植自 LALC）    ┘ 各游戏一个模块
-├─ engine-api      插件契约
-├─ core-ui         Compose 组件、主题、悬浮窗
-├─ core-common     偏好、日志、通知、定时、更新框架
-├─ core-remote     提权进程实现、虚拟显示器、设备侧抽象实现
-├─ core-bridge     native 截图桥、AIDL 契约、输入注入
-└─ hidden-api      framework 隐藏 API 桩
+app/                    宿主：导航、游戏切换、资源中心、定时、通知、引擎装配
+engine/
+  api/                  插件契约：GameProfile / AutomationEngine / EngineUi / ResourcePackSpec
+  arknights/            明日方舟（MaaCore）        ┐ 待抽出，现仍在 :app
+  limbus/               边狱公司（移植自 LALC）    ┘ 每个游戏一个模块
+core/
+  bridge/               native 截图桥、AIDL 契约、输入注入
+  remote/               提权进程实现、虚拟显示器、设备侧抽象实现
+  common/               偏好、日志、通知、定时、更新框架   ┐ 待拆，现仍在 :app
+  ui/                   Compose 组件、主题、悬浮窗        ┘
+hidden-api/             framework 隐藏 API 桩，仅编译期
+tooling/
+  annotation-api/       偏好 KSP 的注解
+  ksp-processor/        偏好 KSP 的处理器
+build-logic/            构建约定插件
 ```
 
-依赖方向**严格单向**：`app / engine-* → engine-api → core-* → hidden-api`。
+Gradle 路径与目录一致：`:engine:limbus`、`:core:bridge`、`:tooling:ksp-processor`。
 
-`core-*` 不得引用任何 `engine-*` 或应用层 —— 整个可扩展性建立在这一条上，而倒挂只需一次「顺手 import」就会发生，故由 `ModuleBoundaryContractTest` 扫描源码钉住。
+依赖方向**严格单向**：`app → engine:<游戏> → engine:api → core:* → hidden-api`。
+
+四条边界由 `ModuleBoundaryContractTest` 钉住，且它**动态发现模块目录**（不写死名字，
+挪模块与加引擎都不必回来改）：
+
+| 规则 | 破了会怎样 |
+|---|---|
+| `core:*` 不得依赖具体引擎或宿主 | 第二个游戏再也接不进来 |
+| 引擎之间不得互相依赖 | 引擎无法独立增删 |
+| 引擎不得依赖宿主应用层 | 该能力本应下沉到 `core:*` |
+| `engine:api` 不得认识具体引擎 | 契约不再通用 |
+
+注意区分 `engine.*`（契约所在包，`core:remote` 依赖它是设计如此）与
+`engine.<游戏>.*`（具体引擎，禁止被 core 引用）。规则只禁后者。
+
+第三条规则同时**编码了抽取 `engine/arknights` 的前置条件**：方舟代码现在用着仍在
+`:app` 里的偏好、通知与 Compose 组件，直接搬过去会立刻触犯它 —— 也就是必须先把这些
+通用能力下沉到 `core:common` / `core:ui`，顺序不能颠倒。
 
 ## 两层引擎注册
 
@@ -61,7 +86,7 @@ app                宿主：导航、游戏切换、资源中心、定时、通�
 
 边狱的门闸解决的是这个问题：**上游改流程 / 模板 / 阈值应当无感跟随，但上游若新增了本 App 未实现的动作，必须在装载前拒绝并提示升级**，而不是挂机到一半崩在某个节点上。
 
-相关文件：`scripts/pack_engine_resource.py`、`.github/workflows/limbus-resource.yml`、`engine-limbus/actions.txt`。
+相关文件：`scripts/pack_engine_resource.py`、`.github/workflows/limbus-resource.yml`、`engine/limbus/actions.txt`。
 
 ## 边狱引擎：为什么照抄上游的数据结构
 
@@ -108,10 +133,13 @@ app                宿主：导航、游戏切换、资源中心、定时、通�
 
 ## 接入一个新游戏
 
-1. 新建 `engine-<游戏>` 模块，依赖 `engine-api`
+1. 在 `engine/` 下新建目录 `engine/<游戏>/`，在 `settings.gradle.kts` 加
+   `include(":engine:<游戏>")`，依赖 `:engine:api`
 2. 实现 `GameProfile`（包名候选、`DisplaySpec`、`Capability`、资源包）
-3. 实现 `AutomationEngine`；跑在 App 进程就用 `DeviceHandle` 取帧与注入，跑在提权进程则额外实现 `RemoteEngineFactory`
+3. 实现 `AutomationEngine`；跑在 App 进程就用 `DeviceHandle` 取帧与注入，
+   跑在提权进程则额外实现 `RemoteEngineFactory`
 4. 实现 `EngineUi` 提供任务面板
 5. 在 `EngineIds` 加常量，在 `EngineSetup` 加一行 `register`
 
-`core-*` 与既有引擎均不需要改动。
+`core:*` 与既有引擎均不需要改动 —— 这一条由上面的边界契约保证，不是靠约定。
+照 `engine/limbus/` 的目录形状抄即可。

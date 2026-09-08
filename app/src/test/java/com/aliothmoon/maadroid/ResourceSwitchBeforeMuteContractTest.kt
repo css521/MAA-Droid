@@ -54,19 +54,7 @@ class ResourceSwitchBeforeMuteContractTest {
         )
     }
 
-    private fun resolve(relativePath: String): File {
-        val candidates = listOf(
-            File(relativePath),
-            File("app/$relativePath"),
-            File("../app/$relativePath"),
-            // native 与 third/ 已拆到 core-bridge
-            File("core-bridge/$relativePath"),
-            File("../core-bridge/$relativePath"),
-            File("core-remote/$relativePath"),
-            File("../core-remote/$relativePath"),
-        )
-        val file = candidates.firstOrNull { it.isFile }
-        checkNotNull(file) { "File not found for test: $relativePath" }
-        return file
-    }
+    /** 统一走 [TestSources]：模块目录名不写死，挪模块时不必回来改 */
+    private fun resolve(relativePath: String): File =
+        TestSources.resolve(relativePath)
 }
