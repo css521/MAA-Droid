@@ -94,6 +94,35 @@ class JsonLimbusConfig(private val sections: Map<String, JsonObject>) : LimbusCo
             return JsonLimbusConfig(loaded)
         }
 
+        /**
+         * 从「分节表」JSON 构造：顶层每个键是一个分节名，值是该分节的配置对象。
+         *
+         * ```json
+         * { "mirror": {...}, "theme_pack": {...}, "other_task": {...} }
+         * ```
+         *
+         * 必须支持多分节，不能一个任务只带自己同名的那一节 —— 实测镜牢的动作要同时读
+         * `mirror`、`theme_pack`、`other_task` 三节（卡包权重与 ego 开关分别在后两节）。
+         * 只给 `mirror` 一节会让卡包退化成随机选、`ego_enable` 恒为 false，
+         * 而这两者都不报错，只是静默变成另一种行为。
+         *
+         * 非对象的值直接跳过：宿主原样存储面板产出的 JSON，多一个版本号之类的标量字段
+         * 不该让整份配置解析失败。
+         */
+        fun fromSectionsJson(paramsJson: String): JsonLimbusConfig =
+            JsonLimbusConfig(sectionsOf(paramsJson))
+
+        /** 只解析出分节表，供多任务合并配置时用 */
+        fun sectionsOf(paramsJson: String): Map<String, JsonObject> {
+            val root = runCatching { json.parseToJsonElement(paramsJson) as? JsonObject }
+                .getOrNull() ?: return emptyMap()
+            val loaded = LinkedHashMap<String, JsonObject>()
+            for ((section, value) in root) {
+                (value as? JsonObject)?.let { loaded[section] = it }
+            }
+            return loaded
+        }
+
         fun fromJsonStrings(raw: Map<String, String>): JsonLimbusConfig {
             val loaded = LinkedHashMap<String, JsonObject>()
             for ((section, text) in raw) {

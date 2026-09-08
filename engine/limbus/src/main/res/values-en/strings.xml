@@ -1,3 +1,21 @@
 <resources>
     <string name="limbus_game_name">Limbus Company</string>
+
+    <string name="limbus_task_mail">Claim Mail</string>
+    <string name="limbus_task_exp">EXP Luxcavation</string>
+    <string name="limbus_task_thread">Thread Luxcavation</string>
+    <string name="limbus_task_mirror">Mirror Dungeon</string>
+    <string name="limbus_task_reward">Claim Rewards</string>
+
+    <string name="limbus_stage_label">Stage</string>
+    <string name="limbus_mode_label">Entry mode</string>
+    <string name="limbus_mode_enter">Enter</string>
+    <string name="limbus_mode_skip">Skip battle</string>
+
+    <string name="limbus_mirror_mode_label">Difficulty</string>
+    <string name="limbus_mirror_mode_normal">Normal</string>
+    <string name="limbus_mirror_mode_hard">Hard</string>
+    <string name="limbus_mirror_accept_reward">Claim reward on clear</string>
+
+    <string name="limbus_no_options">No options for this task</string>
 </resources>

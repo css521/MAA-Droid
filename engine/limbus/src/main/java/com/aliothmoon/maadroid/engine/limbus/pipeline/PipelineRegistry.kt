@@ -31,6 +31,28 @@ class PipelineRegistry private constructor(
 
     fun interruptsOf(name: String): List<String> = interrupts[name].orEmpty()
 
+    /**
+     * 覆盖若干节点的 `enable`，返回新注册表（本实例不变）。
+     *
+     * 这是「用户选了哪些任务」的落地方式，也是上游的做法：整条流水线只有一个入口
+     * `main`，`task_center` 的 next 里列着 `check_and_get_mails` / `exp_entry` /
+     * `thread_entry` / `mirror_entry` / `reward_entry`，**靠各自的 enable 决定跑不跑**。
+     * 不存在 `mirror`、`exp` 这类独立入口节点（实测确认）。
+     *
+     * 返回新实例而不是原地改：节点不可变是为了让资源包能整体替换，
+     * 而一次运行的任务选择不该污染下一次。
+     *
+     * 名字不在注册表里的覆盖项直接忽略 —— 上游改了节点名时，宁可该任务不跑，
+     * 也不要因为一个陌生名字让整条链装不起来。
+     */
+    fun withEnabled(overrides: Map<String, Boolean>): PipelineRegistry {
+        if (overrides.isEmpty()) return this
+        val patched = nodes.mapValues { (name, node) ->
+            overrides[name]?.let { node.copy(enable = it) } ?: node
+        }
+        return PipelineRegistry(patched, interrupts)
+    }
+
     /** 流水线引用到的全部 action 名（含纯路由的） */
     fun referencedActions(): Set<String> = nodes.values.map { it.action }.toSet()
 

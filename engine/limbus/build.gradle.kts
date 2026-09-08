@@ -1,6 +1,9 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.serialization)
+    // 引擎自带任务面板（EngineUi.taskPanels）。compose 依赖由 engine:api 以 api 暴露，
+    // 所以引擎写面板**不需要依赖 :app** —— 这正是「加一个游戏只加一个模块」的前提
+    alias(libs.plugins.kotlin.compose)
 }
 
 android {
@@ -9,6 +12,10 @@ android {
 
     defaultConfig {
         minSdk = 28
+    }
+
+    buildFeatures {
+        compose = true
     }
 
     compileOptions {

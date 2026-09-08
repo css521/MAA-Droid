@@ -1,3 +1,25 @@
 <resources>
     <string name="limbus_game_name">边狱公司</string>
+
+    <!-- 任务名。与 LimbusTask 一一对应，顺序即任务页呈现顺序 -->
+    <string name="limbus_task_mail">领取邮件</string>
+    <string name="limbus_task_exp">经验副本</string>
+    <string name="limbus_task_thread">纺锤副本</string>
+    <string name="limbus_task_mirror">镜牢</string>
+    <string name="limbus_task_reward">领取奖励</string>
+
+    <!-- 副本设置 -->
+    <string name="limbus_stage_label">关卡</string>
+    <string name="limbus_mode_label">进入方式</string>
+    <string name="limbus_mode_enter">正常进入</string>
+    <string name="limbus_mode_skip">跳过战斗</string>
+
+    <!-- 镜牢设置 -->
+    <string name="limbus_mirror_mode_label">镜牢难度</string>
+    <string name="limbus_mirror_mode_normal">普通</string>
+    <string name="limbus_mirror_mode_hard">困难</string>
+    <string name="limbus_mirror_accept_reward">结算时领取奖励</string>
+
+    <!-- 无参数任务的说明 -->
+    <string name="limbus_no_options">此任务无需配置</string>
 </resources>

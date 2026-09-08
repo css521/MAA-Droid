@@ -82,26 +82,21 @@ class UpstreamPipelineRunTest {
     }
 
     @Test
-    fun `所有入口节点都能起跑且不抛异常`() = runTest {
+    fun `唯一入口 main 能起跑且不抛异常`() = runTest {
+        // 先前这条用例名叫「所有入口节点都能起跑」，列了 main/mirror/exp/thread/mail/reward
+        // 六个名字再 filter 掉不存在的 —— 而实测只有 main 是节点，另外五个压根不存在，
+        // 于是它其实只测了一个入口，名字却在暗示测了六个。任务选择靠 enable 而非换入口，
+        // 见 LimbusTaskContractTest。
+        assertNotNull("上游流水线的入口应当是 main", registry["main"])
+
         // 注意「什么都不命中」**不是**静止态：上游有 7 个 inverse 节点
         // （back_to_init_page 等），识别不中时它们反而命中，于是
         // main_circle_center 与 back_to_init_page 会互相路由。真实运行中
         // back_to_init_page 的动作会改变画面从而跳出，喂静态假识别则会一直转。
-        //
-        // 所以这里断言的是「不抛异常、且要么正常结束要么被步数保险兜住」，
-        // 而不是「必然收敛」—— 后者对真实流水线是个错误的期望。
-        val entries = listOf("main", "mirror", "exp", "thread", "mail", "reward")
-            .filter { registry[it] != null }
-        assertTrue("应能找到上游的入口节点", entries.isNotEmpty())
-
-        for (entry in entries) {
-            val reason = runnerFor(FakeRecognizer(), FakeInput()).run(entry)
-            if (reason != null) {
-                assertTrue(
-                    "入口 $entry 只应因步数保险而中止，实际: $reason",
-                    reason.contains("死循环"),
-                )
-            }
+        // 所以断言的是「不抛异常、且要么正常结束要么被步数保险兜住」。
+        val reason = runnerFor(FakeRecognizer(), FakeInput()).run("main")
+        if (reason != null) {
+            assertTrue("main 只应因步数保险而中止，实际: $reason", reason.contains("死循环"))
         }
     }
 

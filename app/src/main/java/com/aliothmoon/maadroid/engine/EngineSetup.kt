@@ -3,6 +3,7 @@ package com.aliothmoon.maadroid.engine
 import com.aliothmoon.maadroid.maa.ArknightsProfile
 import com.aliothmoon.maadroid.engine.limbus.LimbusEngine
 import com.aliothmoon.maadroid.engine.limbus.LimbusProfile
+import com.aliothmoon.maadroid.engine.limbus.ui.LimbusUi
 import timber.log.Timber
 
 /**
@@ -60,7 +61,6 @@ private object LimbusEngineProvider : EngineProvider {
 
     override fun createEngine(): AutomationEngine = LimbusEngine()
 
-    override val ui: EngineUi = object : EngineUi {
-        override val taskPanels: List<TaskPanelSpec> = emptyList()
-    }
+    /** 边狱自带面板，宿主不认识它们的内部结构 */
+    override val ui: EngineUi = LimbusUi
 }

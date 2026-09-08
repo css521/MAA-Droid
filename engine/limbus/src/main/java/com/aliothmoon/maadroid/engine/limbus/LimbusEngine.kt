@@ -9,6 +9,7 @@ import com.aliothmoon.maadroid.engine.LogLevel
 import com.aliothmoon.maadroid.engine.TaskPhase
 import com.aliothmoon.maadroid.engine.limbus.action.LimbusActions
 import com.aliothmoon.maadroid.engine.limbus.config.JsonLimbusConfig
+import kotlinx.serialization.json.JsonObject
 import com.aliothmoon.maadroid.engine.limbus.pipeline.NodeRecognizer
 import com.aliothmoon.maadroid.engine.limbus.pipeline.PipelineRegistry
 import com.aliothmoon.maadroid.engine.limbus.pipeline.PipelineRunner
@@ -157,8 +158,16 @@ class LimbusEngine(
     // ------------------------------------------------------------------ tasks
 
     /**
-     * 追加任务。[type] 是流水线的入口节点名（如 `mirror` / `exp` / `thread`），
-     * [paramsJson] 是该任务的配置分节内容，由任务面板产出。
+     * 追加任务。
+     *
+     * @param type 流水线的入口节点名（`mirror` / `exp` / `thread` / `mail` / `reward`）
+     * @param paramsJson **分节表**：顶层每个键是一个配置分节名。
+     *
+     * 之所以是分节表而不是「该任务自己那一节」：镜牢的动作要同时读 `mirror`、
+     * `theme_pack`、`other_task` 三节。只传一节会让卡包权重与 ego 开关静默失效。
+     * ```json
+     * { "mirror": {"mirror_mode": "normal"}, "theme_pack": {"names": [...]} }
+     * ```
      */
     override fun appendTask(type: String, paramsJson: String): Int {
         val reg = registry
@@ -166,8 +175,13 @@ class LimbusEngine(
             warn("尚未装载资源，无法追加任务 $type")
             return AutomationEngine.INVALID_TASK_ID
         }
-        if (reg[type] == null) {
-            warn("流水线里没有入口节点 $type")
+        val task = LimbusTask.ofType(type)
+        if (task == null) {
+            warn("未知任务 $type，可选：${LimbusTask.entries.joinToString { it.type }}")
+            return AutomationEngine.INVALID_TASK_ID
+        }
+        if (reg[task.nodeName] == null) {
+            warn("流水线里没有 ${task.type} 对应的节点 ${task.nodeName}，资源包可能与本版本不匹配")
             return AutomationEngine.INVALID_TASK_ID
         }
         val id = taskIds.incrementAndGet()
@@ -185,6 +199,14 @@ class LimbusEngine(
 
     // ------------------------------------------------------------------- run
 
+    /**
+     * 跑一次流水线。
+     *
+     * **所有选中的任务共用一次运行**，而不是每个任务跑一遍 —— 这是上游的模型：
+     * 唯一入口 `main`，`task_center` 按各 `*_entry` 节点的 `enable` 决定跑哪些。
+     * 若按任务各跑一遍，每次都要重新走「起游戏 → 回主页 → 进任务中心」，
+     * 既慢又会在中途反复触发登录/公告等干扰界面。
+     */
     override suspend fun start(): Boolean {
         if (isRunning) {
             warn("已在运行中")
@@ -201,35 +223,68 @@ class LimbusEngine(
             return false
         }
 
+        val selected = tasks.mapNotNull { LimbusTask.ofType(it.type) }
+        if (selected.isEmpty()) {
+            warn("没有可识别的任务")
+            return false
+        }
+
+        // 选中的开、其余一律关：不显式关掉的话，上游默认全开，
+        // 用户只勾了镜牢却会连经验本一起跑
+        val enableOverrides = LimbusTask.allNodeNames().associateWith { node ->
+            selected.any { it.nodeName == node }
+        }
+        val effectiveRegistry = reg.withEnabled(enableOverrides)
+
+        // 各任务的配置分节合并成一份：镜牢的动作要同时读 mirror / theme_pack / other_task
+        val config = mergeConfigs(tasks)
+
         stopRequested = false
         counters.clear()
 
         runJob = scope.launch {
-            var allOk = true
+            var ok = false
             try {
-                for (task in tasks) {
-                    if (stopRequested) break
-                    allOk = runOne(reg, dev, rec, index, task) && allOk
+                selected.forEach {
+                    emit(EngineEvent.Task(taskIdOf(tasks, it), it.type, TaskPhase.Started))
                 }
+                info("本次运行任务：${selected.joinToString { it.type }}")
+                ok = runPipeline(effectiveRegistry, dev, rec, index, config, selected, tasks)
             } finally {
-                emit(EngineEvent.AllTasksFinished(success = allOk && !stopRequested))
+                emit(EngineEvent.AllTasksFinished(success = ok && !stopRequested))
             }
         }
         return true
     }
 
-    private suspend fun runOne(
+    private fun taskIdOf(tasks: List<QueuedTask>, task: LimbusTask): Int =
+        tasks.firstOrNull { it.type == task.type }?.id ?: AutomationEngine.INVALID_TASK_ID
+
+    /**
+     * 合并各任务带来的配置分节。
+     *
+     * 同名分节以**后追加的任务**为准 —— 宿主按用户勾选顺序追加，后者更贴近用户当下意图。
+     * 实践中不同任务的分节本就不重叠（exp / thread / mirror 各一节），
+     * 只有 `other_task` 与 `theme_pack` 可能被多个任务同时带上。
+     */
+    private fun mergeConfigs(tasks: List<QueuedTask>): JsonLimbusConfig {
+        val merged = LinkedHashMap<String, JsonObject>()
+        for (task in tasks) {
+            JsonLimbusConfig.sectionsOf(task.paramsJson).forEach { (k, v) -> merged[k] = v }
+        }
+        return JsonLimbusConfig(merged)
+    }
+
+    private suspend fun runPipeline(
         reg: PipelineRegistry,
         dev: DeviceHandle,
         rec: LimbusRecognizer,
         index: ResourcePackTemplateIndex,
-        task: QueuedTask,
+        config: JsonLimbusConfig,
+        selected: List<LimbusTask>,
+        tasks: List<QueuedTask>,
     ): Boolean {
-        emit(EngineEvent.Task(task.id, task.type, TaskPhase.Started))
-
-        val config = JsonLimbusConfig.fromJsonStrings(mapOf(task.type to task.paramsJson))
         val nodeRecognizer = NodeRecognizer(rec) { warn(it) }
-
         val pipelineRunner = PipelineRunner(
             registry = reg,
             contextFactory = { name, node, matches ->
@@ -252,20 +307,22 @@ class LimbusEngine(
         runner = pipelineRunner
 
         return try {
-            val reason = pipelineRunner.run(task.type)
-            if (reason == null) {
-                emit(EngineEvent.Task(task.id, task.type, TaskPhase.Completed))
-                true
-            } else {
-                emit(EngineEvent.Task(task.id, task.type, TaskPhase.Failed, reason))
-                false
+            val reason = pipelineRunner.run(LimbusTask.ENTRY_NODE)
+            val phase = if (reason == null) TaskPhase.Completed else TaskPhase.Failed
+            selected.forEach {
+                emit(EngineEvent.Task(taskIdOf(tasks, it), it.type, phase, reason))
             }
+            reason == null
         } catch (e: StoppedException) {
-            emit(EngineEvent.Task(task.id, task.type, TaskPhase.Stopped))
+            selected.forEach {
+                emit(EngineEvent.Task(taskIdOf(tasks, it), it.type, TaskPhase.Stopped))
+            }
             false
         } catch (e: Throwable) {
-            emit(EngineEvent.Task(task.id, task.type, TaskPhase.Failed, e.message))
-            fail("任务 ${task.type} 异常终止: ${e.message}", e)
+            selected.forEach {
+                emit(EngineEvent.Task(taskIdOf(tasks, it), it.type, TaskPhase.Failed, e.message))
+            }
+            fail("流水线异常终止: ${e.message}", e)
             false
         } finally {
             runner = null
