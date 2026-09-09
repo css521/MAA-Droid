@@ -2,6 +2,10 @@ plugins {
     `kotlin-dsl`
 }
 
+dependencies {
+    testImplementation("junit:junit:4.13.2")
+}
+
 gradlePlugin {
     plugins {
         register("assetManifest") {

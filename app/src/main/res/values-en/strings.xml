@@ -2495,6 +2495,9 @@
     <string name="blackflow_termination_unknown">See the file log for details</string>
     <string name="engine_start">Start</string>
     <string name="engine_preview_description">Live game preview</string>
+    <string name="engine_preview_summary">Game preview · %1$s</string>
+    <string name="engine_preview_expand">Expand</string>
+    <string name="engine_preview_collapse">Collapse</string>
     <string name="engine_preview_failed">Preview connection failed. Reopen this page to retry.</string>
     <string name="engine_preview_error_detail">Preview connection failed: %1$s</string>
     <string name="engine_log_export_hint">Export diagnostic logs here after a startup failure or crash.</string>

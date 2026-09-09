@@ -36,6 +36,8 @@ libsu = "6.0.0"
 floatingX = "2.3.7"
 sonner = "0.4.0"
 timber = "5.0.1"
+# MaaCore v6.17.2 links OrtGetApiBase@VERS_1.19.2. The Android C/JNI pair must match.
+onnxruntime = "1.19.2"
 okhttp = "5.4.0"
 angusMail = "2.0.5"
 angusActivation = "2.0.3"
@@ -112,7 +114,7 @@ jakarta-activation-api = { group = "jakarta.activation", name = "jakarta.activat
 compose-markdown = { group = "com.github.jeziellago", name = "compose-markdown", version.ref = "composeMarkdown" }
 reorderable = { group = "sh.calvin.reorderable", name = "reorderable", version.ref = "reorderable" }
 opencv = { group = "org.opencv", name = "opencv", version = "4.11.0" }
-onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version = "1.20.0" }
+onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version.ref = "onnxruntime" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version = "1.10.2" }
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version = "1.10.2" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }

@@ -2552,6 +2552,9 @@
     <string name="blackflow_termination_unknown">详细原因请查看文件日志</string>
     <string name="engine_start">开始</string>
     <string name="engine_preview_description">游戏实时预览</string>
+    <string name="engine_preview_summary">游戏画面 · %1$s</string>
+    <string name="engine_preview_expand">展开</string>
+    <string name="engine_preview_collapse">收起</string>
     <string name="engine_preview_failed">预览连接失败，请切换页面后重试</string>
     <string name="engine_preview_error_detail">小屏预览连接失败：%1$s</string>
     <string name="engine_log_export_hint">启动失败或闪退后，可在此导出诊断日志</string>

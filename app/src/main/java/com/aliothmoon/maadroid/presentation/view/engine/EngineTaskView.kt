@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -140,6 +139,12 @@ fun EngineTaskContent(
         val logs by viewModel.logs.collectAsStateWithLifecycle()
         val previewReady by viewModel.previewReady.collectAsStateWithLifecycle()
         val profile = EngineRegistry.provider(engineId)?.profile
+        val workspace = viewModel.workspace
+        // Start idle workspaces with room to configure teams/packs; later task state changes
+        // must not override the user's choice. The surrounding game key also isolates restoration.
+        var previewExpanded by rememberSaveable(engineId) {
+            mutableStateOf(workspace == null || running)
+        }
         var showLogExport by rememberSaveable { mutableStateOf(false) }
         // Keep the document launcher registered even while the sheet is closed or the task is idle.
         LogExportController(
@@ -155,28 +160,33 @@ fun EngineTaskContent(
             }
         } else {
             BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-                // Budget for the usual footer, but let taller errors/download details scroll.
-                // The footer never consumes these weights: the workspace keeps at least 300dp.
-                val contentHeight = maxOf(maxHeight - 192.dp, 480.dp)
-                Column(
-                    modifier = Modifier.fillMaxSize()
-                        .verticalScroll(rememberScrollState()),
-                ) {
-                    // Bound the engine's nested LazyColumns even though the page can scroll.
-                    Column(Modifier.fillMaxWidth().height(contentHeight)) {
+                val resourceDetailsMaxHeight = maxHeight * 0.2f
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // Give nested workspace lists a finite viewport after measuring the footer.
+                    // Collapsing the preview returns its entire weight to the configuration area.
+                    Column(Modifier.fillMaxWidth().weight(1f)) {
                         profile?.display?.let { display ->
-                            EngineDisplayPreview(
-                                previewReady = previewReady,
+                            EnginePreviewControls(
+                                expanded = previewExpanded,
                                 isRunning = running,
-                                displayWidth = display.width,
-                                displayHeight = display.height,
-                                onSurfaceAvailable = viewModel::onPreviewSurfaceAvailable,
-                                onSurfaceDestroyed = viewModel::onPreviewSurfaceDestroyed,
-                                modifier = Modifier.fillMaxWidth().weight(3f)
-                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                onToggleExpanded = { previewExpanded = !previewExpanded },
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                             )
+                            if (previewExpanded) {
+                                // Disposal only detaches the borrowed preview Surface. The VM and
+                                // its running session remain alive while the configuration is used.
+                                EngineDisplayPreview(
+                                    previewReady = previewReady,
+                                    isRunning = running,
+                                    displayWidth = display.width,
+                                    displayHeight = display.height,
+                                    onSurfaceAvailable = viewModel::onPreviewSurfaceAvailable,
+                                    onSurfaceDestroyed = viewModel::onPreviewSurfaceDestroyed,
+                                    modifier = Modifier.fillMaxWidth().weight(3f)
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                )
+                            }
                         }
-                        val workspace = viewModel.workspace
                         if (workspace != null) {
                             Box(Modifier.fillMaxWidth().weight(5f)) {
                                 workspace.Content(
@@ -216,8 +226,18 @@ fun EngineTaskContent(
                         }
                     }
 
-                    profile?.resourcePacks?.filter { it.upstreamArchive != null }?.forEach { pack ->
-                        EngineResourceCard(pack, resourceService, running)
+                    val downloadablePacks = profile?.resourcePacks.orEmpty()
+                        .filter { it.upstreamArchive != null }
+                    if (downloadablePacks.isNotEmpty()) {
+                        // Long download/error details scroll locally, keeping task actions visible.
+                        Column(
+                            Modifier.fillMaxWidth().heightIn(max = resourceDetailsMaxHeight)
+                                .verticalScroll(rememberScrollState()),
+                        ) {
+                            downloadablePacks.forEach { pack ->
+                                EngineResourceCard(pack, resourceService, running)
+                            }
+                        }
                     }
 
                     Row(

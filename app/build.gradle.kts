@@ -2,6 +2,8 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.util.Properties
 import javax.xml.parsers.DocumentBuilderFactory
 import org.w3c.dom.Element
+import com.aliothmoon.maadroid.buildlogic.PrepareMaaNativeLibrariesTask
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 
 plugins {
     alias(libs.plugins.android.application)
@@ -183,25 +185,22 @@ android {
         compose = true
     }
 
+    // The build verifies the shared ORT ABI and omits MaaCore's duplicate runtime.
+    // Downloaded upstream libraries remain intact; only generated JNI files are packaged.
+    sourceSets.getByName("main").jniLibs.setSrcDirs(emptyList<String>())
+
     packaging {
         jniLibs {
             useLegacyPackaging = true
 
-            // 显式声明冲突取舍，不让 AGP 隐式选择（未来版本会直接报错）：
-            //
-            // libonnxruntime.so —— 两份不同构建冲突：
-            //   · MaaCore 带的 26.3 MB，被 libMaaCore.so 硬链接（已用 llvm-readelf 确认
-            //     DT_NEEDED 含 libonnxruntime.so），换掉会让方舟引擎加载失败
-            //   · onnxruntime-android AAR 带的 17.6 MB，配套其 libonnxruntime4j_jni.so
-            //   取舍：保留 app 模块 jniLibs 里 MaaCore 的那份 —— 方舟不能回退是硬约束。
-            //   ONNX 的 C API 经 OrtGetApiBase()->GetApi(version) 协商版本，Java 绑定
-            //   在版本不支持时会明确报错而非静默出错；边狱侧的 ONNX 推理需真机验证。
+            // MaaCore and Limbus share the complete, version-matched ORT Android AAR pair.
+            // Do not pickFirst libonnxruntime.so: PrepareMaaNativeLibrariesTask checks the
+            // actual versioned symbols before removing the duplicate from the staged files.
             //
             // libc++_shared.so —— core-bridge（NDK 29）与 OpenCV AAR 各带一份。
             //   取舍：以 NDK 提供的为准（setup_maa_core.py 的 EXCLUDE_SO 也是同一原则：
             //   "provided by the NDK toolchain, never ship MAA's copy"）。
             pickFirsts += setOf(
-                "**/libonnxruntime.so",
                 "**/libc++_shared.so",
             )
         }
@@ -363,6 +362,28 @@ abstract class GenerateAchievementStringResTask : DefaultTask() {
 androidComponents {
     onVariants { variant ->
         val variantName = variant.name.replaceFirstChar { it.uppercaseChar() }
+        val prepareNative = tasks.register<PrepareMaaNativeLibrariesTask>("prepare${variantName}MaaNativeLibraries") {
+            sourceDir.set(layout.projectDirectory.dir("src/main/jniLibs"))
+            abis.set(nativeAbis)
+            // Inspect the AAR actually resolved for this APK, including dependency conflict resolution.
+            runtimeAar.from(variant.runtimeConfiguration.incoming.artifactView {
+                componentFilter {
+                    it is ModuleComponentIdentifier && it.group == "com.microsoft.onnxruntime" &&
+                        it.module == "onnxruntime-android"
+                }
+            }.files)
+            val host = when {
+                System.getProperty("os.name").startsWith("Mac") -> "darwin-x86_64"
+                System.getProperty("os.name").startsWith("Windows") -> "windows-x86_64"
+                else -> "linux-x86_64"
+            }
+            val suffix = if (host.startsWith("windows")) ".exe" else ""
+            readelf.set(sdkComponents.ndkDirectory.map {
+                it.file("toolchains/llvm/prebuilt/$host/bin/llvm-readelf$suffix")
+            })
+            outputDir.set(layout.buildDirectory.dir("generated/maa-native/${variant.name}/jniLibs"))
+        }
+        variant.sources.jniLibs?.addGeneratedSourceDirectory(prepareNative) { it.outputDir }
         val genTask = tasks.register(
             "generate${variantName}AchievementStringRes",
             GenerateAchievementStringResTask::class.java,

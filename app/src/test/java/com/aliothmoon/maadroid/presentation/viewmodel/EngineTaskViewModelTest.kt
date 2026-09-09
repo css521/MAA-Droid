@@ -14,6 +14,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import io.mockk.verifyOrder
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -252,6 +253,43 @@ class EngineTaskViewModelTest {
         dispatcher.runCurrent()
         verify { session.setPreviewSurface(null) }
         assertTrue(model.running.value)
+        coVerify(exactly = 0) { session.stop() }
+        coVerify(exactly = 0) { session.close() }
+    }
+
+    @Test
+    fun collapsingAndReopeningPreviewKeepsTheSameRunningSession() {
+        val model = model()
+        // The task can start with the preview collapsed, before any Surface exists.
+        model.start()
+        dispatcher.runCurrent()
+        deviceReady.value = true
+        dispatcher.runCurrent()
+
+        repeat(2) {
+            val surface = mockk<Surface>()
+            model.onPreviewSurfaceAvailable(surface)
+            dispatcher.runCurrent()
+            verify(exactly = 1) { session.setPreviewSurface(surface) }
+
+            model.onPreviewSurfaceDestroyed(surface)
+            dispatcher.runCurrent()
+            verifyOrder {
+                session.setPreviewSurface(surface)
+                session.setPreviewSurface(null)
+            }
+            assertTrue(model.running.value)
+            assertTrue(model.previewReady.value)
+            assertEquals("limbus", executionState.activeEngineId.value)
+        }
+
+        val reopened = mockk<Surface>()
+        model.onPreviewSurfaceAvailable(reopened)
+        dispatcher.runCurrent()
+        verify(exactly = 1) { session.setPreviewSurface(reopened) }
+        coVerify(exactly = 1) { session.prepare() }
+        coVerify(exactly = 1) { session.start() }
+        verify(exactly = 1) { session.appendTask("task", "{}") }
         coVerify(exactly = 0) { session.stop() }
         coVerify(exactly = 0) { session.close() }
     }
