@@ -4,15 +4,22 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.rounded.FolderZip
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -24,6 +31,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -46,6 +54,8 @@ import com.aliothmoon.maadroid.presentation.pip.LocalIsInPip
 import com.aliothmoon.maadroid.remote.EngineDataRoot
 import com.aliothmoon.maadroid.engine.resource.EngineResourceService
 import com.aliothmoon.maadroid.data.preferences.AppSettingsManager
+import com.aliothmoon.maadroid.ui.components.TaskPrimaryButton
+import com.aliothmoon.maadroid.ui.components.TaskSecondaryButton
 import org.koin.compose.koinInject
 
 /**
@@ -181,18 +191,27 @@ fun EngineTaskContent(
                         // Collapsing the preview returns its entire weight to the configuration area.
                         Column(Modifier.fillMaxWidth().weight(1f)) {
                             profile?.display?.let {
-                                EnginePreviewControls(
-                                    expanded = previewExpanded,
+                                if (previewExpanded) {
+                                    Box(Modifier.fillMaxWidth()) {
+                                        preview()
+                                        EnginePreviewControls(
+                                            expanded = true,
+                                            isRunning = previewReady || running,
+                                            onToggleExpanded = { previewExpanded = false },
+                                            canEnterFullscreen = previewReady && !stopping && isActivePage,
+                                            onEnterFullscreen = enterFullscreen,
+                                            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 24.dp, bottom = 16.dp)
+                                                .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp)),
+                                        )
+                                    }
+                                } else EnginePreviewControls(
+                                    expanded = false,
                                     isRunning = previewReady || running,
-                                    onToggleExpanded = { previewExpanded = !previewExpanded },
+                                    onToggleExpanded = { previewExpanded = true },
                                     canEnterFullscreen = previewReady && !stopping && isActivePage,
                                     onEnterFullscreen = enterFullscreen,
                                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                                 )
-                                if (previewExpanded) {
-                                    // Full available width, 16:9, with the same 16dp margins as Arknights.
-                                    preview()
-                                }
                             }
                             if (workspace != null) {
                                 Box(Modifier.fillMaxWidth().weight(5f)) {
@@ -225,22 +244,31 @@ fun EngineTaskContent(
                         )
 
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Button(
+                            if (!running) TaskPrimaryButton(
                                 onClick = viewModel::start,
                                 enabled = !running,
                                 modifier = Modifier.weight(1f),
                             ) {
-                                Text(stringResource(R.string.engine_start))
+                                Text(stringResource(R.string.task_btn_start), maxLines = 1)
                             }
-                            OutlinedButton(
+                            else TaskSecondaryButton(
                                 onClick = viewModel::stop,
                                 enabled = running && !stopping,
                                 modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                             ) {
-                                Text(stringResource(if (stopping) R.string.engine_stopping else R.string.engine_stop))
+                                if (stopping) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.error)
+                                else Text(stringResource(R.string.task_btn_stop), maxLines = 1)
+                            }
+                            TaskSecondaryButton(onClick = { showLogExport = true }) {
+                                Icon(Icons.Rounded.FolderZip, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(stringResource(R.string.settings_log_export_chooser_title), maxLines = 1)
                             }
                         }
                     }

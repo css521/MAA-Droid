@@ -297,6 +297,21 @@ class EngineTaskViewModelTest {
     }
 
     @Test
+    fun pipelineTaskFailureKeepsItsReasonAndErrorLevelAfterCompletion() {
+        val model = model()
+        model.start()
+        dispatcher.runCurrent()
+        val reason = "暂时无法识别主页导航"
+        events.tryEmit(EngineEvent.Task(1, "exp", com.aliothmoon.maadroid.engine.TaskPhase.Failed, reason))
+        events.tryEmit(EngineEvent.AllTasksFinished(false))
+        dispatcher.runCurrent()
+        assertTrue(model.diagnosticFailure.value.toString().contains(reason))
+        assertTrue(model.logs.value.contains("[Error] exp: $reason"))
+        assertFalse(model.running.value)
+        coVerify(exactly = 1) { session.finishTask() }
+    }
+
+    @Test
     fun previewCanPrecedeStartAndTabDetachNeverStopsTheGame() {
         val surface = mockk<Surface>()
         val model = model()

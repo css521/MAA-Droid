@@ -46,4 +46,33 @@ class AndroidHomeNavigationTest {
             assertFalse(AndroidHomeNavigation.supports(name))
         }
     }
+
+    @Test fun tinyDriveLabelCanBeConfirmedByIndependentNavigationWords() {
+        val labels = listOf(
+            TextMatch("Drlre", 982, 690, .76),
+            TextMatch("Sinners", 903, 690, .867),
+            TextMatch("Extrect", 1140, 690, .869),
+        )
+        assertNotNull(AndroidHomeNavigation.confirmedDriveLabel(drive, labels, "en", .85))
+        assertEquals(GameLanguageObservation.Confirmed, AndroidHomeNavigation.languageObservation(drive, labels, "en"))
+        assertEquals(GameLanguageObservation.Mismatch("zh", "en"), AndroidHomeNavigation.languageObservation(drive, labels, "zh"))
+    }
+
+    @Test fun missingUnreadableOrConflictingWordsAreNotAWrongLanguage() {
+        val sets = listOf(
+            emptyList(),
+            listOf(label.copy(text = "Drlre", score = .76)),
+            listOf(label, label.copy(text = "驾驶舱")),
+            listOf(TextMatch("Sinners", 903, 690, .9), TextMatch("Extract", 1140, 350, .9)),
+            listOf(TextMatch("Sinnars", 903, 690, .9), TextMatch("Extrect", 1140, 690, .9)),
+        )
+        sets.forEach { labels ->
+            assertEquals(GameLanguageObservation.Uncertain, AndroidHomeNavigation.languageObservation(drive, labels, "en"))
+        }
+    }
+
+    @Test fun oneButtonCannotSupplyBothIndependentLabels() {
+        val labels = listOf(TextMatch("Sinners", 903, 690, .9), TextMatch("Extract", 904, 690, .9))
+        assertEquals(GameLanguageObservation.Uncertain, AndroidHomeNavigation.languageObservation(drive, labels, "en"))
+    }
 }

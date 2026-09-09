@@ -5,6 +5,7 @@ import com.aliothmoon.maadroid.engine.limbus.action.InputHelper.clickRepeat
 import com.aliothmoon.maadroid.engine.limbus.action.InputHelper.keyPress
 import com.aliothmoon.maadroid.engine.limbus.action.InputHelper.keyRepeat
 import com.aliothmoon.maadroid.engine.limbus.action.InputHelper.swipe
+import com.aliothmoon.maadroid.engine.limbus.recognize.GameLanguageObservation
 import kotlin.math.max
 
 /**
@@ -176,11 +177,44 @@ private object WaitDisappearAction : ActionBackend {
 
 private object ReportErrorAction : ActionBackend {
     override suspend fun execute(ctx: ActionContext): ActionOutcome {
+        if (ctx.node.inverse && ctx.node.str("template") == "main_drive_with_text") {
+            // The upstream inverse template gate treats any miss as a wrong language.
+            // On Android, let a transition finish and require positive language evidence.
+            repeat(3) { attempt ->
+                ctx.ensureActive()
+                when (val observation = ctx.recognize.observeGameLanguage()) {
+                    GameLanguageObservation.Confirmed -> {
+                        ctx.log("已确认游戏导航语言，继续任务")
+                        return ActionOutcome.Continue
+                    }
+                    is GameLanguageObservation.Mismatch -> {
+                        val selected = languageName(observation.configured)
+                        val detected = languageName(observation.detected)
+                        val message = "游戏画面为$detected，任务配置为$selected。请在边狱巴士「更多」中将游戏语言改为$detected。"
+                        ctx.log(message)
+                        return ActionOutcome.Finish(false, message)
+                    }
+                    GameLanguageObservation.Uncertain -> if (attempt < 2) {
+                        ctx.log("正在重新确认游戏导航语言（${attempt + 1}/3）")
+                        ctx.delay(0.5)
+                    }
+                }
+            }
+            val message = "暂时无法识别主页导航。请放大游戏画面检查转场或弹窗后重试；这不代表游戏语言设置错误。"
+            ctx.log(message)
+            return ActionOutcome.Finish(false, message)
+        }
         // 上游是 raise Exception 直接炸掉整条流水线；这里收敛成 Finish(false)，
         // 让宿主能把 error_msg 作为失败原因投给用户而不是抛一个栈到日志里。
         val msg = ctx.node.str("error_msg") ?: "未知错误"
         ctx.log("流水线报告错误: $msg")
         return ActionOutcome.Finish(success = false, message = msg)
+    }
+
+    private fun languageName(language: String) = when (language) {
+        "en" -> "英文"
+        "zh" -> "中文"
+        else -> language
     }
 }
 

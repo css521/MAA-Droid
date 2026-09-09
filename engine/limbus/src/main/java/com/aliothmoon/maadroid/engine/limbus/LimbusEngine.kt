@@ -294,6 +294,7 @@ class LimbusEngine(
                     emit(EngineEvent.Task(taskIdOf(tasks, it), it.type, TaskPhase.Started))
                 }
                 info("本次运行任务：${selected.joinToString { it.type }}")
+                info("游戏语言：${if (language == "en") "英文" else "中文"}")
                 ok = runPipeline(effectiveRegistry, dev, rec, index, config, selected, tasks)
                 if (ok && config.bool("other_task", "close_game", false)) {
                     val pkg = profile.gamePackages.firstOrNull { dev.control.isPackageInstalled(it) }

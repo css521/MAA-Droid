@@ -324,6 +324,16 @@ class EngineTaskViewModel(
                         reportFailure(UiText.Dynamic(event.reason))
                         _logs.value = (_logs.value + "[Error] ${event.reason}").takeLast(500)
                     }
+                    is com.aliothmoon.maadroid.engine.EngineEvent.Task -> {
+                        if (event.phase == com.aliothmoon.maadroid.engine.TaskPhase.Failed) {
+                            event.message?.takeIf(String::isNotBlank)?.let { reason ->
+                                // A pipeline's reported failure is a task result, not an engine
+                                // crash. Preserve its actual reason when the terminal event arrives.
+                                reportFailure(UiText.Dynamic(reason))
+                                _logs.value = (_logs.value + "[Error] ${event.type}: $reason").takeLast(500)
+                            }
+                        }
+                    }
                     is com.aliothmoon.maadroid.engine.EngineEvent.AllTasksFinished -> {
                         AppDiagnostics.record(engineId, "engine.finished", "success=${event.success}")
                         val terminal = uiTextOf(

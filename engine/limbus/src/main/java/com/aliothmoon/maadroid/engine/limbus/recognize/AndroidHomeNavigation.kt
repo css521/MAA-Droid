@@ -36,23 +36,32 @@ internal object AndroidHomeNavigation {
             "main_window_no_text" -> icon(screen, template, threshold, checkActive)
                 ?.takeIf { isWindowBesideDrive(it, drive) }
             else -> {
-                // 必须看见所选语言的 Drive 标签；不能因手机排布不同就跳过语言校验。
                 val reader = ocr ?: return null
-                checkActive()
-                // 较高的区域避免 OCR 的 min-side 放大把细长导航条放大到数千像素。
-                val region = Rect(640, 400, 640, 320)
-                val work = Mat(screen, region)
-                val labels = try {
-                    // 相邻导航标签是独立按钮，不能合并成 "Window Sinners" 等整行。
-                    reader.detect(work, mergeX = false, mergeY = false).map {
-                        TextMatch(it.text, it.centerX + region.x, it.centerY + region.y, it.confidence.toDouble())
-                    }
-                } finally {
-                    work.release()
-                }
-                confirmedDriveLabel(drive, labels, language, threshold)
+                confirmedDriveLabel(drive, labels(screen, reader, checkActive), language, threshold)
             }
         }
+    }
+
+    fun observeLanguage(
+        screen: Mat, driveTemplate: Mat, language: String, ocr: PpOcrEngine?,
+        checkActive: () -> Unit,
+    ): GameLanguageObservation {
+        if (ocr == null || screen.cols() != 1280 || screen.rows() != 720) return GameLanguageObservation.Uncertain
+        val drive = icon(screen, driveTemplate, .85, checkActive) ?: return GameLanguageObservation.Uncertain
+        val labels = labels(screen, ocr, checkActive)
+        return languageObservation(drive, labels, language)
+    }
+
+    private fun labels(screen: Mat, reader: PpOcrEngine, checkActive: () -> Unit): List<TextMatch> {
+        checkActive()
+        // Avoid magnifying a thin strip to thousands of pixels; keep button labels separate.
+        val region = Rect(640, 400, 640, 320)
+        val work = Mat(screen, region)
+        return try {
+            reader.detect(work, mergeX = false, mergeY = false).map {
+                TextMatch(it.text, it.centerX + region.x, it.centerY + region.y, it.confidence.toDouble())
+            }
+        } finally { work.release() }
     }
 
     internal fun isWindowBesideDrive(window: Match, drive: Match): Boolean =
@@ -61,28 +70,63 @@ internal object AndroidHomeNavigation {
     internal fun confirmedDriveLabel(
         drive: Match, labels: List<TextMatch>, language: String, threshold: Double,
     ): Match? {
-        val expected = when (language) {
-            "en" -> setOf("drive")
-            "zh" -> setOf("驾驶舱", "驾驶席", "駕駛艙", "駕駛席")
-            else -> return null
-        }
-        val label = labels.firstOrNull {
-            it.score >= threshold && abs(it.x - drive.x) <= 40 && it.y - drive.y in 10..75 &&
-                (normalize(it.text) in expected ||
-                    language == "en" && isConfirmedEnglishOcrAlias(it, drive, labels))
-        } ?: return null
-        return drive.copy(score = minOf(drive.score, label.score))
+        if (drive.score < threshold) return null
+        if (!matchesLanguage(drive, labels, language, threshold)) return null
+        // Conflicting language evidence cannot authorize loading either language's templates.
+        val other = if (language == "en") "zh" else "en"
+        return drive.takeUnless { matchesLanguage(drive, labels, other, threshold) }
     }
 
     private fun normalize(text: String) = text.lowercase(Locale.ROOT).filter(Char::isLetterOrDigit)
 
-    private fun isConfirmedEnglishOcrAlias(label: TextMatch, drive: Match, labels: List<TextMatch>): Boolean {
-        // In the downsampled phone report, OCR reads the round D as O ("Orive", 0.91).
-        // Accept only with the strong Drive icon AND the adjacent English Sinners label.
-        return normalize(label.text) == "orive" && drive.score >= .9 && labels.any {
-            normalize(it.text) == "sinners" && it.score >= .8 &&
-                label.x - it.x in 50..130 && abs(label.y - it.y) <= 15
+    internal fun languageObservation(drive: Match, labels: List<TextMatch>, language: String): GameLanguageObservation {
+        val english = matchesLanguage(drive, labels, "en", .85)
+        val chinese = matchesLanguage(drive, labels, "zh", .85)
+        val detected = when {
+            english && !chinese -> "en"
+            chinese && !english -> "zh"
+            else -> return GameLanguageObservation.Uncertain
         }
+        return if (detected == language) GameLanguageObservation.Confirmed
+        else GameLanguageObservation.Mismatch(language, detected)
+    }
+
+    private fun matchesLanguage(drive: Match, labels: List<TextMatch>, language: String, threshold: Double): Boolean {
+        if (drive.score < threshold || language !in setOf("en", "zh")) return false
+        val row = labels.filter { it.y - drive.y in 10..75 }
+        val exactDrive = if (language == "en") setOf("drive")
+            else setOf("驾驶舱", "驾驶席", "駕駛艙", "駕駛席")
+        if (row.any { it.score >= threshold && abs(it.x - drive.x) <= 40 && normalize(it.text) in exactDrive }) return true
+
+        // Tiny mobile labels vary between frames (Drive -> Orive / Drlre). Do not keep
+        // adding misspellings of one word. Require two independent English navigation
+        // buttons, in their actual relative positions, with at least one exact word.
+        if (language != "en" || drive.score < .9) return false
+        val vocabulary = listOf(
+            "window" to -230..-105, "sinners" to -135..-40, "drive" to -40..40,
+            "theater" to 35..125, "extract" to 115..210, "dispense" to 195..295,
+        )
+        val evidence = vocabulary.mapNotNull { (word, offset) ->
+            row.filter { it.score >= .8 && it.x - drive.x in offset }
+                .map { normalize(it.text) }
+                .firstOrNull { it == word || oneEditApart(it, word) }
+                ?.let { word to (it == word) }
+        }
+        return evidence.size >= 2 && evidence.any { it.second }
+    }
+
+    private fun oneEditApart(actual: String, expected: String): Boolean {
+        if (abs(actual.length - expected.length) > 1) return false
+        var a = 0
+        var b = 0
+        var edits = 0
+        while (a < actual.length && b < expected.length) {
+            if (actual[a] == expected[b]) { a++; b++; continue }
+            if (++edits > 1) return false
+            if (actual.length >= expected.length) a++
+            if (actual.length <= expected.length) b++
+        }
+        return edits + (actual.length - a) + (expected.length - b) == 1
     }
 
     private fun icon(screen: Mat, template: Mat, threshold: Double, checkActive: () -> Unit): Match? {

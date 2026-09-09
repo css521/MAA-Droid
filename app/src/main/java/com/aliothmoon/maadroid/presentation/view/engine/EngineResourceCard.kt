@@ -28,7 +28,7 @@ internal fun EngineResourceCard(
     LaunchedEffect(pack.packId, running) {
         if (!running && !service.state(pack).value.busy) service.refreshInstalled(pack)
     }
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+    Column(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.weight(1f)) {
                 if (state.phase != ResourcePhase.DOWNLOADING || state.download == null) Text(when (state.phase) {

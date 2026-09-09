@@ -31,6 +31,9 @@ data class Crop(val x: Int, val y: Int, val width: Int, val height: Int)
  */
 interface Recognizer {
 
+    /** Current-frame language evidence. Missing navigation or unclear OCR remains uncertain. */
+    suspend fun observeGameLanguage(): GameLanguageObservation = GameLanguageObservation.Uncertain
+
     /** 只返回确认过的标题页开始位置，不返回清理缓存按钮的位置。 */
     suspend fun titleScreenStart(): Match? =
         TitleScreenDetector.fromAnchor(templateMatch("clear_all_caches"))

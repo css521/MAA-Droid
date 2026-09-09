@@ -17,6 +17,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -24,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -36,7 +38,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.aliothmoon.maadroid.R
 import timber.log.Timber
 
-/** Always visible, including when the preview Surface is absent. */
+/** Overlay controls while expanded; a compact restore row when its Surface is absent. */
 @Composable
 internal fun EnginePreviewControls(
     expanded: Boolean,
@@ -47,7 +49,7 @@ internal fun EnginePreviewControls(
     modifier: Modifier = Modifier,
 ) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
-        Text(
+        if (!expanded) Text(
             text = stringResource(
                 R.string.engine_preview_summary,
                 stringResource(if (isRunning) R.string.virtual_display_game_running else R.string.virtual_display_idle),
@@ -59,9 +61,12 @@ internal fun EnginePreviewControls(
             overflow = TextOverflow.Ellipsis,
         )
         IconButton(onClick = onEnterFullscreen, enabled = canEnterFullscreen) {
-            Icon(Icons.Default.Fullscreen, contentDescription = stringResource(R.string.engine_preview_fullscreen))
+            Icon(Icons.Default.Fullscreen, contentDescription = stringResource(R.string.engine_preview_fullscreen),
+                tint = if (expanded) Color.White.copy(alpha = if (canEnterFullscreen) 1f else 0.38f) else MaterialTheme.colorScheme.onSurface)
         }
-        TextButton(onClick = onToggleExpanded) {
+        TextButton(onClick = onToggleExpanded, colors = ButtonDefaults.textButtonColors(
+            contentColor = if (expanded) Color.White else MaterialTheme.colorScheme.primary,
+        )) {
             Icon(
                 imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                 contentDescription = null,

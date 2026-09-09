@@ -37,6 +37,20 @@ class LimbusRecognizer(
 
     private val templateCache = HashMap<Pair<String, Boolean>, Mat?>()
 
+    override suspend fun observeGameLanguage(): GameLanguageObservation {
+        val frame = frames.grab() ?: return GameLanguageObservation.Uncertain
+        val screen = frame.toMat()
+        try {
+            val selected = templateOf("main_drive_with_text")
+            if (selected != null && TemplateMatcher.match(screen, selected, .85).isNotEmpty()) {
+                return GameLanguageObservation.Confirmed
+            }
+            val drive = templateOf("main_drive_no_text") ?: return GameLanguageObservation.Uncertain
+            val coroutine = currentCoroutineContext()
+            return AndroidHomeNavigation.observeLanguage(screen, drive, gameLanguage, ocr) { coroutine.ensureActive() }
+        } finally { screen.release() }
+    }
+
     override suspend fun titleScreenStart(): Match? {
         if (titleAnchorFiles.isNotEmpty()) {
             val frame = frames.grab() ?: return null

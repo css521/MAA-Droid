@@ -1,30 +1,20 @@
 package com.aliothmoon.maadroid.presentation.view.panel
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.List
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.FolderZip
@@ -35,7 +25,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,7 +39,6 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -60,6 +48,9 @@ import com.aliothmoon.maadroid.data.model.LogItem
 import com.aliothmoon.maadroid.data.model.LogLevel
 import com.aliothmoon.maadroid.data.model.RecruitCombination
 import com.aliothmoon.maadroid.ui.components.AdaptiveTaskPromptDialog
+import com.aliothmoon.maadroid.ui.components.TaskLogPanel
+import com.aliothmoon.maadroid.ui.components.TaskLogLine
+import com.aliothmoon.maadroid.ui.components.TaskLogBadge
 import com.aliothmoon.maadroid.theme.LocalLogPalette
 import com.aliothmoon.maadroid.theme.themedColor
 
@@ -71,103 +62,26 @@ fun LogPanel(
     onClearLogs: () -> Unit,
     onExportLogs: (() -> Unit)? = null,
 ) {
-    val listState = rememberLazyListState()
-    var isAutoScroll by remember { mutableStateOf(true) }
     var selectedLog by remember { mutableStateOf<LogItem?>(null) }
-
-    LaunchedEffect(logs.size, isAutoScroll) {
-        if (isAutoScroll && logs.isNotEmpty()) {
-            listState.scrollToItem(logs.size - 1)
-        }
-    }
-
-    LaunchedEffect(listState.isScrollInProgress) {
-        if (listState.isScrollInProgress) {
-            isAutoScroll = false
-        }
-    }
-
-    Column(modifier = modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.List,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = stringResource(R.string.panel_log_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
+    TaskLogPanel(
+        title = stringResource(R.string.panel_log_title),
+        count = logs.size,
+        latestDescription = stringResource(R.string.panel_log_resume_auto_scroll),
+        modifier = modifier,
+        key = { logs[it].id },
+        lastEntryKey = logs.lastOrNull()?.id,
+        actions = {
+            if (onExportLogs != null) IconButton(onClick = onExportLogs) {
+                Icon(Icons.Rounded.FolderZip, stringResource(R.string.settings_log_export_title),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-
-            Row {
-                if (onExportLogs != null) {
-                    IconButton(onClick = onExportLogs) {
-                        Icon(
-                            imageVector = Icons.Rounded.FolderZip,
-                            contentDescription = stringResource(R.string.settings_log_export_title),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                IconButton(onClick = onClearLogs) {
-                    Icon(
-                        imageVector = Icons.Rounded.Delete,
-                        contentDescription = stringResource(R.string.common_clear),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+            IconButton(onClick = onClearLogs) {
+                Icon(Icons.Rounded.Delete, stringResource(R.string.common_clear),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-        }
-
-        Box(modifier = Modifier.weight(1f)) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                items(
-                    items = logs,
-                    key = { it.id }
-                ) { logItem ->
-                    LogLine(
-                        logItem = logItem,
-                        onClick = { selectedLog = logItem }
-                    )
-                }
-            }
-
-            if (listState.canScrollForward && logs.isNotEmpty()) {
-                IconButton(
-                    onClick = { isAutoScroll = true },
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(16.dp)
-                        .size(40.dp)
-                        .background(
-                            MaterialTheme.colorScheme.primaryContainer,
-                            CircleShape
-                        )
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.KeyboardArrowDown,
-                        contentDescription = stringResource(R.string.panel_log_resume_auto_scroll),
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-        }
+        },
+    ) { index ->
+        LogLine(logItem = logs[index], onClick = { selectedLog = logs[index] })
     }
 
     selectedLog?.let { log ->
@@ -191,46 +105,28 @@ private fun LogLine(
             .clickable { onClick() },
         color = Color.Transparent
     ) {
-        Row(
-            modifier = Modifier.padding(vertical = 4.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            Text(
-                text = logItem.formattedTime,
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp
-                ),
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                maxLines = 1,
-                modifier = Modifier.widthIn(min = 55.dp)
-            )
-
-            LogLevelBadge(level = logItem.level, color = levelColor, compact = true)
-
-            Spacer(modifier = Modifier.width(6.dp))
-
-            Text(
-                text = logItem.content,
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontSize = 12.sp
-                ),
-                color = levelColor,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-
-            if (logItem.hasDetails) {
-                Spacer(modifier = Modifier.width(4.dp))
-                Icon(
-                    imageVector = Icons.Outlined.Info,
-                    contentDescription = stringResource(R.string.panel_log_view_details),
-                    modifier = Modifier.size(14.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+        TaskLogLine(
+            message = logItem.content,
+            color = levelColor,
+            levelLabel = stringResource(logItem.level.labelRes),
+            maxLines = 3,
+            leading = {
+                Text(
+                    logItem.formattedTime,
+                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace, fontSize = 10.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    maxLines = 1,
+                    modifier = Modifier.widthIn(min = 55.dp),
                 )
-            }
-        }
+            },
+            trailing = {
+                if (logItem.hasDetails) {
+                    Spacer(Modifier.width(4.dp))
+                    Icon(Icons.Outlined.Info, stringResource(R.string.panel_log_view_details),
+                        modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+        )
     }
 }
 
@@ -346,27 +242,7 @@ private fun LogLevelBadge(
     color: Color,
     compact: Boolean,
 ) {
-    Surface(
-        shape = RoundedCornerShape(if (compact) 3.dp else 4.dp),
-        color = color.copy(alpha = 0.15f)
-    ) {
-        Text(
-            text = stringResource(level.labelRes),
-            style = if (compact) {
-                MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            } else {
-                MaterialTheme.typography.labelMedium
-            },
-            color = color,
-            modifier = Modifier.padding(
-                horizontal = if (compact) 4.dp else 6.dp,
-                vertical = if (compact) 1.dp else 2.dp,
-            )
-        )
-    }
+    TaskLogBadge(stringResource(level.labelRes), color, compact)
 }
 
 /**

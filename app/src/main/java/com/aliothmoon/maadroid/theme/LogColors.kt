@@ -8,15 +8,20 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import com.aliothmoon.maadroid.data.model.LogColorRole
 import com.aliothmoon.maadroid.data.model.LogLevel
+import com.aliothmoon.maadroid.ui.components.LocalTaskLogColors
+import com.aliothmoon.maadroid.ui.components.taskLogColors
 
+
+private val lightTaskLogs = taskLogColors(false)
+private val darkTaskLogs = taskLogColors(true)
 
 private fun colorsFor(role: LogColorRole): Pair<Color, Color> = when (role) {
     LogColorRole.DEFAULT -> Color.Unspecified to Color.Unspecified
-    LogColorRole.INFO -> Color(0xFF409EFF) to Color(0xFF5DADE2)
-    LogColorRole.SUCCESS -> Color(0xFF67C23A) to Color(0xFF7ED957)
-    LogColorRole.WARNING -> Color(0xFFE6A23C) to Color(0xFFF0B050)
-    LogColorRole.ERROR -> Color(0xFFF56C6C) to Color(0xFFFF8585)
-    LogColorRole.TRACE -> Color(0xFF909399) to Color(0xFFB0B4BC)
+    LogColorRole.INFO -> lightTaskLogs.info to darkTaskLogs.info
+    LogColorRole.SUCCESS -> lightTaskLogs.success to darkTaskLogs.success
+    LogColorRole.WARNING -> lightTaskLogs.warning to darkTaskLogs.warning
+    LogColorRole.ERROR -> lightTaskLogs.error to darkTaskLogs.error
+    LogColorRole.TRACE -> lightTaskLogs.trace to darkTaskLogs.trace
     LogColorRole.RARE -> Color(0xFFFFAA00) to Color(0xFFFFC042)
     LogColorRole.STAR_1 -> Color(0xFF333333) to Color(0xFFE5E5E5)
     LogColorRole.STAR_2 -> Color(0xFF99CC33) to Color(0xFFB5E853)
@@ -49,7 +54,7 @@ val LocalLogPalette = staticCompositionLocalOf { LightLogPalette }
 @Composable
 fun ProvideLogPalette(isDark: Boolean, content: @Composable () -> Unit) {
     val palette = if (isDark) DarkLogPalette else LightLogPalette
-    CompositionLocalProvider(LocalLogPalette provides palette, content = content)
+    CompositionLocalProvider(LocalLogPalette provides palette, LocalTaskLogColors provides taskLogColors(isDark), content = content)
 }
 
 @Composable

@@ -7,6 +7,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -17,6 +19,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.aliothmoon.maadroid.engine.EngineWorkspace
+import com.aliothmoon.maadroid.ui.components.MaaSurfaceCard
+import com.aliothmoon.maadroid.ui.components.TaskPanelTabs
+import com.aliothmoon.maadroid.ui.components.TaskLogPanel
+import com.aliothmoon.maadroid.ui.components.TaskLogLine
+import com.aliothmoon.maadroid.ui.components.LocalTaskLogColors
 import com.aliothmoon.maadroid.engine.limbus.config.*
 import kotlinx.serialization.json.*
 import java.io.File
@@ -48,12 +55,12 @@ private fun WorkspaceContent(config: LimbusWorkspaceConfig, change: (LimbusWorks
     var transfer by rememberSaveable { mutableStateOf(false) }
     var more by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            TabRow(selectedTabIndex = page, modifier = Modifier.weight(1f)) {
-                listOf("任务", "队伍", "卡包", "日志").forEachIndexed { index, title ->
-                    Tab(selected = page == index, onClick = { page = index }, text = { Text(title) })
-                }
-            }
+        TaskPanelTabs(
+            labels = listOf("任务", "队伍", "卡包", "日志"),
+            selectedIndex = page,
+            onSelected = { page = it },
+            modifier = Modifier.padding(horizontal = 16.dp),
+        ) {
             Box {
                 TextButton(onClick = { more = true }, modifier = Modifier.width(48.dp), contentPadding = PaddingValues(0.dp)) { Text("更多") }
                 DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
@@ -85,7 +92,7 @@ internal val styleLabels = LimbusWorkspaceConfig.STYLES.zip(listOf("流血", "�
 @Composable
 private fun TasksPage(config: LimbusWorkspaceConfig, change: (LimbusWorkspaceConfig) -> Unit, editable: Boolean, onTeams: () -> Unit) {
     var expanded by rememberSaveable { mutableStateOf("EXP") }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             Section("游戏语言") {
                 Choices(listOf("en" to "英文", "zh" to "简体中文"), config.language, editable) { change(config.copy(language = it)) }
@@ -164,7 +171,7 @@ private fun MirrorSettings(task: LimbusTaskConfig, update: (LimbusTaskConfig) ->
 
 @Composable
 internal fun Section(title: String? = null, content: @Composable ColumnScope.() -> Unit) {
-    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
+    MaaSurfaceCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (title != null) Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
             content()
@@ -211,7 +218,7 @@ private fun PacksPage(config: LimbusWorkspaceConfig, change: (LimbusWorkspaceCon
     var weighted by rememberSaveable { mutableStateOf(false) }
     val rows = catalog.packs.filter { it.title.contains(search, true) || it.name.contains(search, true) }
         .let { if (weighted) it.sortedByDescending { it.weight(config.themePackWeights) } else it.sortedBy { it.name } }
-    Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         InputField("搜索主题卡包", search, true) { search = it }
         Row(verticalAlignment = Alignment.CenterVertically) {
             FilterChip(weighted, { weighted = !weighted }, label = { Text(if (weighted) "按权重排序" else "按名称排序") })
@@ -236,15 +243,36 @@ private fun PacksPage(config: LimbusWorkspaceConfig, change: (LimbusWorkspaceCon
 @Composable
 private fun LogsPage(logs: List<String>) {
     val clipboard = LocalClipboardManager.current
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Hint("本次会话 · 最近 500 条日志")
-            TextButton(onClick = { clipboard.setText(AnnotatedString(logs.joinToString("\n"))) }, enabled = logs.isNotEmpty()) { Text("复制日志") }
+    TaskLogPanel(
+        title = "执行日志",
+        count = logs.size,
+        latestDescription = "跳至最新日志",
+        lastEntryKey = logs.lastOrNull(),
+        actions = {
+            IconButton(onClick = { clipboard.setText(AnnotatedString(logs.joinToString("\n"))) }, enabled = logs.isNotEmpty()) {
+                Icon(Icons.Default.ContentCopy, contentDescription = "复制日志", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+        emptyContent = { Hint("运行任务后，识别与执行日志会显示在这里") },
+    ) { index ->
+        val raw = logs[index]
+        val prefix = raw.takeIf { it.startsWith("[") && ']' in it }?.substringBefore(']')?.removePrefix("[")
+            ?.takeIf { it in setOf("Trace", "Debug", "Info", "Warn", "Error") }
+        // These prefixes only style a log row; the host supplies the actual failure state.
+        val color = when (prefix) {
+            "Error" -> LocalTaskLogColors.current.error
+            "Warn" -> LocalTaskLogColors.current.warning
+            "Info" -> LocalTaskLogColors.current.info
+            "Trace", "Debug" -> LocalTaskLogColors.current.trace
+            else -> MaterialTheme.colorScheme.onSurface
         }
-        if (logs.isEmpty()) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("运行任务后，识别与执行日志会显示在这里") }
-        else SelectionContainer { LazyColumn(Modifier.fillMaxSize(), reverseLayout = true, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(logs.asReversed()) { Text(it, style = MaterialTheme.typography.bodySmall) }
-        } }
+        SelectionContainer {
+            TaskLogLine(
+                message = if (prefix != null) raw.substringAfter(']').trimStart() else raw,
+                color = color,
+                levelLabel = prefix,
+            )
+        }
     }
 }
 

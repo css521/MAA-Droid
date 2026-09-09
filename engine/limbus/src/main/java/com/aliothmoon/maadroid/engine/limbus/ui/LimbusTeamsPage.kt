@@ -24,20 +24,20 @@ internal fun TeamsPage(config: LimbusWorkspaceConfig, change: (LimbusWorkspaceCo
     val team = config.team(slot)
     val update: (LimbusTeamConfig) -> Unit = { change(config.withTeam(slot, it)) }
     Column(Modifier.fillMaxSize()) {
-        LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             items((0 until 20).toList()) { index -> FilterChip(selected = slot == index, onClick = { slot = index }, label = { Text("${index + 1} · ${config.team(index).teamName}") }) }
         }
-        Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(team.teamName, { update(team.copy(teamName = it)) }, enabled = editable, singleLine = true, label = { Text("队伍名称 · 游戏槽位 ${slot + 1}") }, modifier = Modifier.weight(1f))
             TextButton(onClick = { copyTo = true }, enabled = editable) { Text("复制到") }
         }
-        LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             items(listOf(0 to "出战顺序", 1 to "星光与开局", 2 to "饰品", 3 to "技能替换")) { (index, title) ->
                 FilterChip(section == index, { section = index }, label = { Text(title) })
             }
         }
         resources.message?.let { message ->
-            Box(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) { Hint(message) }
+            Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) { Hint(message) }
         }
         when (section) {
             0 -> MembersPage(team, update, editable, root)
@@ -60,7 +60,7 @@ internal fun TeamsPage(config: LimbusWorkspaceConfig, change: (LimbusWorkspaceCo
 
 @Composable
 private fun MembersPage(team: LimbusTeamConfig, update: (LimbusTeamConfig) -> Unit, editable: Boolean, root: File?) {
-    LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Hint("按点击顺序出战 · 已选 ${team.selectedMembers.size}/12")
@@ -74,7 +74,7 @@ private fun MembersPage(team: LimbusTeamConfig, update: (LimbusTeamConfig) -> Un
                     Surface(onClick = { update(team.copy(selectedMembers = if (order >= 0) team.selectedMembers - sinner else team.selectedMembers + sinner)) }, enabled = editable,
                         shape = MaterialTheme.shapes.medium, modifier = Modifier.weight(1f),
                         border = BorderStroke(if (order >= 0) 2.dp else 1.dp, if (order >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
-                        color = if (order >= 0) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow) {
+                        color = if (order >= 0) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface) {
                         Column(Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             LimbusArtwork(sinnerPath(sinner), root, Modifier.height(68.dp).fillMaxWidth())
                             Text(sinnerLabels.getValue(sinner), style = MaterialTheme.typography.labelLarge)
@@ -96,7 +96,7 @@ private fun MembersPage(team: LimbusTeamConfig, update: (LimbusTeamConfig) -> Un
 
 @Composable
 private fun StarsPage(team: LimbusTeamConfig, update: (LimbusTeamConfig) -> Unit, editable: Boolean, root: File?) {
-    LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             Section("启程 E.G.O 饰品顺序") {
                 Hint("点击已有顺位移除，再按需要的顺序选择 1、2、3。")
@@ -133,7 +133,7 @@ private fun GiftsPage(team: LimbusTeamConfig, update: (LimbusTeamConfig) -> Unit
         (filter.isEmpty() || item.style == filter) && (search.isBlank() || item.name.contains(search, true) || item.title.contains(search, true)) &&
             (!onlyConfigured || team.giftName2Status[item.name] in listOf("Allow List", "Block List"))
     }
-    LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
             Section("首选饰品流派") {
                 Hint("自动选取该流派饰品；单件排除的优先级最高。")
@@ -173,7 +173,7 @@ private fun GiftsPage(team: LimbusTeamConfig, update: (LimbusTeamConfig) -> Unit
 
 @Composable
 private fun SkillsPage(team: LimbusTeamConfig, update: (LimbusTeamConfig) -> Unit, editable: Boolean, root: File?) {
-    LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { Hint("每位罪人独立设置替换优先级，越靠上越优先。只在启用“替换技能与购买饰品”时生效。") }
         items(LimbusWorkspaceConfig.SINNERS) { sinner ->
             val order = team.skillReplacementOrders[sinner] ?: LimbusWorkspaceConfig.DEFAULT_SKILLS

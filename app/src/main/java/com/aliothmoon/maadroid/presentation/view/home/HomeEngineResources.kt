@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,6 +20,7 @@ import com.aliothmoon.maadroid.engine.EngineExecutionCoordinator
 import com.aliothmoon.maadroid.engine.EngineRegistry
 import com.aliothmoon.maadroid.engine.resource.EngineResourceService
 import com.aliothmoon.maadroid.presentation.view.engine.EngineResourceCard
+import com.aliothmoon.maadroid.ui.components.MaaSurfaceCard
 import org.koin.compose.koinInject
 
 /** Downloadable engine packs share Home with the existing Arknights updater. */
@@ -39,12 +39,11 @@ internal fun HomeEngineResources() {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         profiles.forEach { profile ->
             key(profile.id) {
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(vertical = 12.dp)) {
+                MaaSurfaceCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
                             stringResource(R.string.home_engine_resources, stringResource(profile.displayNameRes)),
                             style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(horizontal = 16.dp),
                         )
                         profile.resourcePacks.filter { it.upstreamArchive != null }.forEach { pack ->
                             key(pack.packId) {

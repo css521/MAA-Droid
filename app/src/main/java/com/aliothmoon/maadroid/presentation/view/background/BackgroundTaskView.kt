@@ -110,6 +110,8 @@ import com.aliothmoon.maadroid.manager.PermissionManager
 import com.aliothmoon.maadroid.overlay.screensaver.ScreenSaverOverlayManager
 import com.aliothmoon.maadroid.ui.LocalInputFocusManager
 import com.aliothmoon.maadroid.ui.components.AdaptiveTaskPromptDialog
+import com.aliothmoon.maadroid.ui.components.TaskPrimaryButton
+import com.aliothmoon.maadroid.ui.components.TaskSecondaryButton
 import com.aliothmoon.maadroid.presentation.components.LogExportController
 import com.aliothmoon.maadroid.presentation.components.MaaWindowInsets
 import com.aliothmoon.maadroid.presentation.components.ShizukuReadinessGate
@@ -570,11 +572,10 @@ fun BackgroundTaskView(
                                         val gachaRunning = maaState == MaaExecutionState.RUNNING ||
                                                 maaState == MaaExecutionState.STOPPING
                                         if (gachaRunning) {
-                                            OutlinedButton(
+                                            TaskSecondaryButton(
                                                 onClick = { toolboxViewModel.onStop() },
                                                 enabled = maaState == MaaExecutionState.RUNNING,
                                                 modifier = Modifier.weight(1f),
-                                                shape = RoundedCornerShape(8.dp),
                                                 colors = ButtonDefaults.outlinedButtonColors(
                                                     contentColor = MaterialTheme.colorScheme.error,
                                                 ),
@@ -593,7 +594,7 @@ fun BackgroundTaskView(
                                                 }
                                             }
                                         } else {
-                                            Button(
+                                            TaskPrimaryButton(
                                                 onClick = {
                                                     inputFocusManager.clear()
                                                     if (foregroundBlocked) {
@@ -602,7 +603,7 @@ fun BackgroundTaskView(
                                                             switchBackgroundModeMessage,
                                                             Toast.LENGTH_SHORT,
                                                         ).show()
-                                                        return@Button
+                                                        return@TaskPrimaryButton
                                                     }
                                                     if (backendBlocked) {
                                                         Toast.makeText(
@@ -610,7 +611,7 @@ fun BackgroundTaskView(
                                                             backendUnavailableMessage,
                                                             Toast.LENGTH_SHORT,
                                                         ).show()
-                                                        return@Button
+                                                        return@TaskPrimaryButton
                                                     }
                                                     toolboxViewModel.onStartGacha(once = true)
                                                 },
@@ -628,7 +629,6 @@ fun BackgroundTaskView(
                                                     ButtonDefaults.buttonColors()
                                                 },
                                                 modifier = Modifier.weight(1f),
-                                                shape = RoundedCornerShape(8.dp),
                                             ) {
                                                 if (maaState == MaaExecutionState.STARTING) {
                                                     CircularProgressIndicator(
@@ -643,7 +643,7 @@ fun BackgroundTaskView(
                                                     )
                                                 }
                                             }
-                                            OutlinedButton(
+                                            TaskSecondaryButton(
                                                 onClick = {
                                                     inputFocusManager.clear()
                                                     if (foregroundBlocked) {
@@ -652,7 +652,7 @@ fun BackgroundTaskView(
                                                             switchBackgroundModeMessage,
                                                             Toast.LENGTH_SHORT,
                                                         ).show()
-                                                        return@OutlinedButton
+                                                        return@TaskSecondaryButton
                                                     }
                                                     if (backendBlocked) {
                                                         Toast.makeText(
@@ -660,13 +660,12 @@ fun BackgroundTaskView(
                                                             backendUnavailableMessage,
                                                             Toast.LENGTH_SHORT,
                                                         ).show()
-                                                        return@OutlinedButton
+                                                        return@TaskSecondaryButton
                                                     }
                                                     toolboxViewModel.onStartGacha(once = false)
                                                 },
                                                 enabled = canStart,
                                                 modifier = Modifier.weight(1f),
-                                                shape = RoundedCornerShape(8.dp),
                                             ) {
                                                 Text(
                                                     text = stringResource(R.string.gacha_ten_times),
@@ -680,7 +679,7 @@ fun BackgroundTaskView(
                                             maaState == MaaExecutionState.RUNNING ||
                                                     maaState == MaaExecutionState.STOPPING
                                         if (taskRunning) {
-                                            OutlinedButton(
+                                            TaskSecondaryButton(
                                                 onClick = {
                                                     when (state.current) {
                                                         PanelTab.TASKS -> viewModel.onStopTasks()
@@ -691,7 +690,6 @@ fun BackgroundTaskView(
                                                 },
                                                 enabled = maaState == MaaExecutionState.RUNNING,
                                                 modifier = Modifier.weight(1f),
-                                                shape = RoundedCornerShape(8.dp),
                                                 colors = ButtonDefaults.outlinedButtonColors(
                                                     contentColor = MaterialTheme.colorScheme.error
                                                 )
@@ -710,7 +708,7 @@ fun BackgroundTaskView(
                                                 }
                                             }
                                         } else {
-                                            Button(
+                                            TaskPrimaryButton(
                                                 onClick = {
                                                     inputFocusManager.clear()
                                                     if (foregroundBlocked) {
@@ -719,7 +717,7 @@ fun BackgroundTaskView(
                                                             switchBackgroundModeMessage,
                                                             Toast.LENGTH_SHORT
                                                         ).show()
-                                                        return@Button
+                                                        return@TaskPrimaryButton
                                                     }
                                                     if (backendBlocked) {
                                                         Toast.makeText(
@@ -727,7 +725,7 @@ fun BackgroundTaskView(
                                                             backendUnavailableMessage,
                                                             Toast.LENGTH_SHORT
                                                         ).show()
-                                                        return@Button
+                                                        return@TaskPrimaryButton
                                                     }
                                                     when (state.current) {
                                                         PanelTab.TASKS -> viewModel.onStartTasks()
@@ -750,7 +748,6 @@ fun BackgroundTaskView(
                                                     ButtonDefaults.buttonColors()
                                                 },
                                                 modifier = Modifier.weight(1f),
-                                                shape = RoundedCornerShape(8.dp)
                                             ) {
                                                 if (maaState == MaaExecutionState.STARTING) {
                                                     CircularProgressIndicator(
@@ -769,9 +766,8 @@ fun BackgroundTaskView(
                                     }
 
                                     // 次级操作不参与等分，按内容取宽，剩下的都留给主操作
-                                    OutlinedButton(
+                                    TaskSecondaryButton(
                                         onClick = { showMoreActions = !showMoreActions },
-                                        shape = RoundedCornerShape(8.dp),
                                         contentPadding = PaddingValues(horizontal = 14.dp),
                                         colors = ButtonDefaults.outlinedButtonColors(
                                             contentColor = if (showMoreActions) {
