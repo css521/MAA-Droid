@@ -15,7 +15,7 @@ class AccessibilityHelperService : AccessibilityService() {
     companion object {
         /** 同时按下两个键的时间容差 (毫秒) */
         private const val SIMULTANEOUS_PRESS_THRESHOLD = 300L
-        const val SERVICE_ID = "com.aliothmoon.maameow/com.aliothmoon.maadroid.service.AccessibilityHelperService"
+        const val SERVICE_ID = "com.aliothmoon.maadroid/com.aliothmoon.maadroid.service.AccessibilityHelperService"
 
         val onVolumeUpDownPressed = AtomicReference<(() -> Unit)>()
 

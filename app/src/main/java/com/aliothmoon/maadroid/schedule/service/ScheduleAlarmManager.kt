@@ -22,7 +22,7 @@ class ScheduleAlarmManager(
 ) {
 
     companion object {
-        const val ACTION_SCHEDULE_TRIGGER = "com.aliothmoon.maameow.SCHEDULE_TRIGGER"
+        const val ACTION_SCHEDULE_TRIGGER = "com.aliothmoon.maadroid.SCHEDULE_TRIGGER"
         const val EXTRA_STRATEGY_ID = "strategy_id"
         const val EXTRA_SCHEDULED_TIME = "scheduled_time"
     }

@@ -79,32 +79,20 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
             <intent-filter>
-                <action android:name="com.aliothmoon.maameow.action.LAUNCH_PROFILE" />
-                <action android:name="com.aliothmoon.maameow.action.SHOW_SCHEDULE_EXECUTION" />
+                <action android:name="com.aliothmoon.maadroid.action.LAUNCH_PROFILE" />
+                <action android:name="com.aliothmoon.maadroid.action.SHOW_SCHEDULE_EXECUTION" />
 
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
 
         <!--
-            兼容别名：包名从 com.aliothmoon.maameow 改为 com.aliothmoon.maadroid 后，
-            applicationId 仍保留旧值，因此外部自动化里 `-n com.aliothmoon.maameow/.MainActivity`
-            这种「按 applicationId 解析的相对类名」会指向不存在的类。
-            保留此别名让已有的 MacroDroid / Tasker 配置与文档中的 am 命令继续可用。
+            原有 com.aliothmoon.maameow/.MainActivity 的兼容别名已随永久改名移除。
+            外部自动化（MacroDroid / Tasker）请改用新组件与 action：
+              -a com.aliothmoon.maadroid.action.LAUNCH_PROFILE
+              -n com.aliothmoon.maadroid/.MainActivity
             见 docs/*/develop/AUTOMATION.md。
         -->
-        <activity-alias
-            android:name="com.aliothmoon.maameow.MainActivity"
-            android:exported="true"
-            android:label="@string/app_name"
-            android:targetActivity=".MainActivity">
-            <intent-filter>
-                <action android:name="com.aliothmoon.maameow.action.LAUNCH_PROFILE" />
-                <action android:name="com.aliothmoon.maameow.action.SHOW_SCHEDULE_EXECUTION" />
-
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </activity-alias>
 
         <service
             android:name=".service.AccessibilityHelperService"
@@ -123,7 +111,7 @@
             android:name=".schedule.receiver.ScheduleReceiver"
             android:exported="true">
             <intent-filter>
-                <action android:name="com.aliothmoon.maameow.SCHEDULE_TRIGGER" />
+                <action android:name="com.aliothmoon.maadroid.SCHEDULE_TRIGGER" />
             </intent-filter>
         </receiver>
 

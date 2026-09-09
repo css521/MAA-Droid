@@ -87,7 +87,9 @@ android {
 
 
     defaultConfig {
-        applicationId = "com.aliothmoon.maameow"
+        // 永久改为与 namespace 一致。此前保留旧值是为兼容 MAA-Meow 老用户；
+        // 现明确以 MAA-Droid 身份发布，老用户视为全新安装（数据不迁移）。
+        applicationId = "com.aliothmoon.maadroid"
         minSdk = 28
         targetSdk = 36
         versionCode = gitVersionCode

@@ -41,8 +41,8 @@ Profile ID 是一串固定的 UUID，格式如：`3f4a1b2c-xxxx-xxxx-xxxx-xxxxxx
 
 ```bash
 am start \
-  -a com.aliothmoon.maameow.action.LAUNCH_PROFILE \
-  -n com.aliothmoon.maameow/.MainActivity \
+  -a com.aliothmoon.maadroid.action.LAUNCH_PROFILE \
+  -n com.aliothmoon.maadroid/.MainActivity \
   --es extra_profile_id "你的Profile-ID"
 ```
 
@@ -50,8 +50,8 @@ am start \
 
 ```bash
 am start \
-  -a com.aliothmoon.maameow.action.LAUNCH_PROFILE \
-  -n com.aliothmoon.maameow/.MainActivity \
+  -a com.aliothmoon.maadroid.action.LAUNCH_PROFILE \
+  -n com.aliothmoon.maadroid/.MainActivity \
   --es extra_profile_id "你的Profile-ID" \
   --ez extra_force_start true
 ```
@@ -69,7 +69,7 @@ am start \
 2. 动作 → **Shell 脚本**，输入以下命令：
 
    ```
-   am start -a com.aliothmoon.maameow.action.LAUNCH_PROFILE -n com.aliothmoon.maameow/.MainActivity --es extra_profile_id "你的Profile-ID"
+   am start -a com.aliothmoon.maadroid.action.LAUNCH_PROFILE -n com.aliothmoon.maadroid/.MainActivity --es extra_profile_id "你的Profile-ID"
    ```
 
 3. 勾选 **Root 执行**
@@ -81,7 +81,7 @@ am start \
 2. 命令填入：
 
    ```
-   am start -a com.aliothmoon.maameow.action.LAUNCH_PROFILE -n com.aliothmoon.maameow/.MainActivity --es extra_profile_id "你的Profile-ID"
+   am start -a com.aliothmoon.maadroid.action.LAUNCH_PROFILE -n com.aliothmoon.maadroid/.MainActivity --es extra_profile_id "你的Profile-ID"
    ```
 
 3. 勾选 **使用 Root**
