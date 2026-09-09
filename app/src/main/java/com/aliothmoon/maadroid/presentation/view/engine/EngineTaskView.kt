@@ -37,6 +37,10 @@ import com.aliothmoon.maadroid.manager.RemoteServiceManager
 import com.aliothmoon.maadroid.presentation.viewmodel.EngineTaskViewModel
 import com.aliothmoon.maadroid.presentation.state.EngineTaskExecutionState
 import com.aliothmoon.maadroid.ui.asString
+import com.aliothmoon.maadroid.remote.EngineDataRoot
+import com.aliothmoon.maadroid.engine.resource.EngineResourceService
+import com.aliothmoon.maadroid.data.preferences.AppSettingsManager
+import org.koin.compose.koinInject
 
 /**
  * 按引擎声明渲染的任务页。
@@ -90,6 +94,8 @@ fun EngineTaskContent(
 ) {
     key(engineId) {
         val context = LocalContext.current.applicationContext
+        val resourceService = koinInject<EngineResourceService>()
+        val settings = koinInject<AppSettingsManager>()
         val executionState = engineTaskExecutionState(viewModelStoreOwner)
         val activeEngineId by executionState.activeEngineId.collectAsStateWithLifecycle()
         val viewModel = viewModel<EngineTaskViewModel>(
@@ -105,6 +111,8 @@ fun EngineTaskContent(
                     EngineSession(
                         context = context,
                         engineId = id,
+                        resources = resourceService,
+                        runMode = settings.runMode.value,
                         serviceProvider = { block ->
                             RemoteServiceManager.useRemoteService { service -> block(service) }
                         },
@@ -117,6 +125,8 @@ fun EngineTaskContent(
         val running by viewModel.running.collectAsStateWithLifecycle()
         val stopping by viewModel.stopping.collectAsStateWithLifecycle()
         val status by viewModel.status.collectAsStateWithLifecycle()
+        val workspaceDraft by viewModel.workspaceDraft.collectAsStateWithLifecycle()
+        val logs by viewModel.logs.collectAsStateWithLifecycle()
 
         if ((hostTaskActive && !running) || (activeEngineId != null && activeEngineId != engineId)) {
             EngineTaskBlockedContent(modifier)
@@ -126,7 +136,18 @@ fun EngineTaskContent(
             }
         } else {
             Column(modifier = modifier.fillMaxSize()) {
-                EngineTaskList(
+                val workspace = viewModel.workspace
+                if (workspace != null) {
+                    Box(Modifier.weight(1f)) {
+                        workspace.Content(
+                            configJson = workspaceDraft ?: tasks.workspaceConfig ?: workspace.initialConfig(tasks.enabled, tasks.params),
+                            onConfigChange = viewModel::onWorkspaceChange,
+                            editable = !running,
+                            logs = logs,
+                            resourceDir = EngineRegistry.provider(engineId)?.profile?.resourcePacks?.firstOrNull()?.let { EngineDataRoot.forPack(context, it) },
+                        )
+                    }
+                } else EngineTaskList(
                     panels = viewModel.panels,
                     enabledOf = { tasks.enabled[it.taskType] ?: it.enabledByDefault },
                     paramsOf = { tasks.params[it.taskType] ?: "" },
@@ -142,6 +163,10 @@ fun EngineTaskContent(
                         text = it.asString(),
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                     )
+                }
+
+                EngineRegistry.provider(engineId)?.profile?.resourcePacks?.filter { it.upstreamArchive != null }?.forEach { pack ->
+                    EngineResourceCard(pack, resourceService, running)
                 }
 
                 Row(

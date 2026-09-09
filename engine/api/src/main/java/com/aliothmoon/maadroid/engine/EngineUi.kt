@@ -7,10 +7,13 @@ import androidx.compose.runtime.Composable
  * 引擎向宿主暴露的 UI 插槽。
  *
  * 宿主的任务页 / 设置页 / 引导页据此渲染，**不 import 任何引擎的具体面板**。
- * 方舟现有的 13k 行任务面板（刷理智、公招、基建、肉鸽…）就是通过 [taskPanels]
- * 挂进来的；边狱将来挂自己的（镜牢、经验本、纽本…）。
+ * 边狱通过 [workspace] 提供跨任务配置页；简易引擎可只实现 [taskPanels]。
+ * 方舟的旧面板目前仍由宿主装配，后续迁入同一契约。
  */
 interface EngineUi {
+
+    /** 跨任务共用的队伍、策略、资料页。未提供时宿主仍渲染 taskPanels。 */
+    val workspace: EngineWorkspace? get() = null
 
     /** 该引擎提供的任务面板，顺序即宿主任务页的呈现顺序 */
     val taskPanels: List<TaskPanelSpec>
@@ -24,6 +27,22 @@ interface EngineUi {
     @Composable
     fun OnboardingSteps() {
     }
+}
+
+/** 引擎自己解释配置；宿主只负责持久化、运行和提供日志/资源目录。 */
+interface EngineWorkspace {
+    fun initialConfig(enabled: Map<String, Boolean>, taskParams: Map<String, String>): String
+    fun selectedTasks(configJson: String): List<Pair<String, String>>
+    fun validate(configJson: String): String? = null
+
+    @Composable
+    fun Content(
+        configJson: String,
+        onConfigChange: (String) -> Unit,
+        editable: Boolean,
+        logs: List<String>,
+        resourceDir: java.io.File?,
+    )
 }
 
 /**

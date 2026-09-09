@@ -275,6 +275,9 @@ class UpdateService(
         target: File,
         pack: ResourcePackSpec = MaaResourcePack,
     ): Result<Unit> {
+        if (pack.upstreamArchive != null) {
+            return Result.failure(IllegalArgumentException("此资源包请在对应游戏任务页更新"))
+        }
         if (!resourceDownloading.compareAndSet(false, true)) {
             return Result.success(Unit)   // 已在进行中，幂等跳过
         }

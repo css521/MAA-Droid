@@ -63,7 +63,7 @@
 
 ### 一、资源直接复用（不修改）
 
-`engine-limbus` 的资源包由 `scripts/pack_engine_resource.py` 从上游 tag 重打包，只取以下四份并**原样使用**：
+`engine/limbus` 的资源包从上游固定提交的源码归档提取，也可由 `scripts/pack_engine_resource.py` 离线重打包。使用以下五部分：
 
 | 上游路径 | 内容 |
 |---|---|
@@ -71,8 +71,9 @@
 | `lalc_backend/config/language/` | 语言相关的关键词与饰品名表 |
 | `lalc_backend/img/` | 模板素材（622 个 PNG，563 个唯一基名；`zh`/`en` 同名文件是语言变体） |
 | `lalc_backend/ai/model/` | 三个 ONNX 分类模型（mirror_legend / mirror_path / skill_icon） |
+| `lalc_backend/recognize/models/` | OCR 检测与识别模型 |
 
-资源包不进本仓库版本库，由 CI（`.github/workflows/limbus-resource.yml`）发布到本仓库 Release，App 运行时下载。
+执行资源在 App 内按 LALC 的固定 commit 下载、校验并安装，不依赖本仓库 Release。`engine/limbus/src/main/assets/lalc/ui` 内的罪人、星光、饰品和卡包 PNG 直接复制自 LALC v5.0.0；`catalog.json` 由其目录和中文语言表生成，包含来源 commit。`scripts/sync_limbus_ui.py` 可从本地上游更新此内置图鉴。游戏画面及素材的权利仍属于原权利人。
 
 ### 二、代码移植（衍生作品）
 
@@ -84,6 +85,8 @@
 | `pipeline/PipelineRegistry.kt` | `workflow/task_registry.py` 的 `init_tasks()` 六步装配与引用校验 |
 | `action/*` | `workflow/task_execution.py` 与 `task_action/*` 的动作语义 |
 | `recognize/Recognizer.kt` | `recognize/img_recognizer.py` 的识别接口 |
+| `ui/LimbusWorkspace.kt`、`ui/LimbusTeamsPage.kt` | `lalc_frontend/lib/pages` 中任务、队伍、卡包及工作日志页的信息与交互 |
+| `config/LimbusWorkspaceConfig.kt` | `managers/config_manager.dart` 的配置结构、`lalc_backend/server.py` 的配置转换规则 |
 
 > 移植保持了上游的字段名与语义，目的是让上游改动能经资源包热更直接生效、无需转换层。
 
@@ -92,7 +95,7 @@
 ## AhabAssistantLimbusCompany
 
 - **项目地址**：[AhabAssistantLimbusCompany](https://github.com/KIYI671/AhabAssistantLimbusCompany)
-- **许可证**：[GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.html)
+- **许可证**：[AGPL-3.0](https://www.gnu.org/licenses/agpl-3.0.html)（本地核对版本 V1.5.2-beta.70）
 - **使用方式**：**仅作设计参考，未复制代码或素材**
 
 借鉴了以下三处设计思路：

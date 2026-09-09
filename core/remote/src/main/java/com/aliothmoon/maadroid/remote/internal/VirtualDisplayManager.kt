@@ -99,6 +99,8 @@ object VirtualDisplayManager {
 
     fun getDisplayId(): Int = displayId.get()
 
+    fun isRunning(): Boolean = state.get() != STATE_IDLE
+
     private fun startInternal(): Int {
         try {
             val cfg = config.get()
@@ -109,15 +111,23 @@ object VirtualDisplayManager {
             return displayId.get()
         } catch (e: Exception) {
             Ln.e("VirtualDisplayManager start failed", e)
+            // setupNativeCapturer may have succeeded before display creation failed.
+            releaseResources()
             state.set(STATE_IDLE)
             return DISPLAY_NONE
         }
     }
 
     private fun releaseResources() {
-        virtualDisplay.getAndSet(null)?.release()
-        NativeBridgeLib.releaseNativeCapturer()
-        displayId.set(DISPLAY_NONE)
+        try {
+            virtualDisplay.getAndSet(null)?.release()
+        } finally {
+            try {
+                NativeBridgeLib.releaseNativeCapturer()
+            } finally {
+                displayId.set(DISPLAY_NONE)
+            }
+        }
     }
 
     private fun createVirtualDisplay(surface: Surface, cfg: DisplayConfig) {

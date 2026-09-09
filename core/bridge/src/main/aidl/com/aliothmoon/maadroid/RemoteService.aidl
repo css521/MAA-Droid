@@ -2,7 +2,9 @@ package com.aliothmoon.maadroid;
 
 import android.content.Intent;
 import android.os.ParcelFileDescriptor;
+import android.os.SharedMemory;
 import android.view.Surface;
+import com.aliothmoon.maadroid.IEngineDeviceSession;
 import com.aliothmoon.maadroid.ITouchEventCallback;
 import com.aliothmoon.maadroid.remote.PermissionGrantRequest;
 import com.aliothmoon.maadroid.remote.PermissionStateInfo;
@@ -141,4 +143,11 @@ interface RemoteService {
     // 强停游戏进程。原先只有 MaaCore 自带的 StopGame，属方舟专有；
     // engine-api 的 DeviceControl.stopApp 需要一个游戏无关的实现
     oneway void forceStopApp(String packageName) = 56;
+
+    // Device-only boot: does not load any engine or require an Arknights userDir.
+    int setupDevice() = 57;
+
+    // Exclusive native capturer: rejects busy devices and unsupported foreground input.
+    // owner is an App-process Binder used for death cleanup. Existing transactions stay fixed.
+    IEngineDeviceSession openDeviceSession(IBinder owner, int mode, int width, int height, int dpi) = 58;
 }

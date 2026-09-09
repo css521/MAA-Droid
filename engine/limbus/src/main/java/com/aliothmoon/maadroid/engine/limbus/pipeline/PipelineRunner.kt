@@ -4,6 +4,8 @@ import com.aliothmoon.maadroid.engine.limbus.action.ActionContext
 import com.aliothmoon.maadroid.engine.limbus.action.ActionOutcome
 import com.aliothmoon.maadroid.engine.limbus.action.ActionRegistry
 import com.aliothmoon.maadroid.engine.limbus.recognize.Match
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 /**
  * 流水线执行器。
@@ -51,6 +53,8 @@ class PipelineRunner(
      * 由动作经 [ActionContext.recognizeResult] 读取。
      */
     private val lastRecognition = HashMap<String, List<Match>>()
+    private val disabled = HashSet<String>()
+    private var failure: String? = null
 
     /** 上游的 continue_run 事件；置 false 后主循环尽快退出 */
     @Volatile
@@ -73,27 +77,38 @@ class PipelineRunner(
         val stack = ArrayDeque<Step>()
         // 与上游一致：先压 get_next 再压 do_action，故动作先执行、随后才路由
         lastRecognition.clear()
+        disabled.clear()
+        failure = null
         stack.addLast(Step.Route(entry, start))
         stack.addLast(Step.Action(entry, start))
 
         var steps = 0
-        while (running && stack.isNotEmpty()) {
+        try { while (running && stack.isNotEmpty()) {
+            currentCoroutineContext().ensureActive()
             if (++steps > MAX_STEPS) return "流水线步数超过 $MAX_STEPS，疑似死循环"
             when (val step = stack.removeLast()) {
                 is Step.Action -> runAction(step, stack)
                 is Step.Route -> route(step, stack)
             }
         }
-        running = false
-        return null
+        return failure ?: if (!running && stack.isNotEmpty()) "任务已停止" else null
+        } finally { running = false }
     }
 
     private suspend fun runAction(step: Step.Action, stack: ArrayDeque<Step>) {
         val actionName = step.node.action
         val backend = ActionRegistry[actionName]
         if (backend == null) {
-            // 纯路由节点（上游 45 个动作名里有 10 个没有实现体）：不是错误，直接放过
-            onLog("节点 ${step.name} 的动作 $actionName 无实现体，按纯路由处理")
+            // 没有原生 handler 的 action 是另一条子链，必须先识别再运行，之后回到父节点。
+            val target = registry.require(actionName)
+            if (actionName !in disabled && target.enable) {
+                val outcome = recognizeGate(target)
+                if (outcome.hit) {
+                    lastRecognition[actionName] = outcome.matches
+                    stack.addLast(Step.Route(actionName, target))
+                    stack.addLast(Step.Action(actionName, target))
+                }
+            }
             return
         }
         val ctx = contextFactory(step.name, step.node, lastRecognition[step.name].orEmpty())
@@ -107,13 +122,14 @@ class PipelineRunner(
             is ActionOutcome.Goto -> {
                 val target = registry[outcome.nodeName]
                 if (target == null) {
-                    onLog("节点 ${step.name} 要求跳转到未注册节点 ${outcome.nodeName}，忽略")
+                    error("节点 ${step.name} 要求跳转到未注册节点 ${outcome.nodeName}")
                 } else {
                     stack.addLast(Step.Route(outcome.nodeName, target))
                     stack.addLast(Step.Action(outcome.nodeName, target))
                 }
             }
             is ActionOutcome.Finish -> {
+                if (!outcome.success) failure = outcome.message ?: "动作 ${step.name} 失败"
                 onLog("节点 ${step.name} 结束流水线: ${outcome.message ?: ""}")
                 stack.clear()
                 running = false
@@ -123,6 +139,18 @@ class PipelineRunner(
 
     private suspend fun route(step: Step.Route, stack: ArrayDeque<Step>) {
         val started = System.nanoTime()
+        if (step.node.type == "check") {
+            val ctx = contextFactory(step.name, step.node, lastRecognition[step.name].orEmpty())
+            val target = step.node.num("target_count")?.toInt() ?: error("检查节点 ${step.name} 缺少 target_count")
+            if (ctx.counterOf(step.name) < target) {
+                val origin = step.node.str("origin") ?: error("检查节点 ${step.name} 缺少 origin")
+                stack.addLast(Step.Route(origin, registry.require(origin)))
+                stack.addLast(Step.Action(origin, registry.require(origin)))
+                rateLimit(step.node, started)
+                return
+            }
+            step.node.str("disable_node")?.let { disabled += it }
+        }
 
         // next 按声明顺序取第一个命中的，不是取分数最高的
         val hitNext = firstHit(step.node.next)
@@ -159,7 +187,7 @@ class PipelineRunner(
         for (name in candidates) {
             val node = registry[name] ?: continue
             // enable 在 recognizeGate 里也判了；这里先挡一次省掉一次截图识别
-            if (!node.enable) continue
+            if (!node.enable || name in disabled) continue
             val outcome = recognizeGate(node)
             if (outcome.hit) {
                 lastRecognition[name] = outcome.matches

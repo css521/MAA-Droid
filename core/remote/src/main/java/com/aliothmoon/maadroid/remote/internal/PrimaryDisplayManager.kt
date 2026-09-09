@@ -27,6 +27,8 @@ object PrimaryDisplayManager {
 
     const val DISPLAY_ID = Display.DEFAULT_DISPLAY
 
+    fun isRunning(): Boolean = state.get() != STATE_IDLE
+
     private val displayInfo = AtomicReference<DisplayInfo>()
 
 

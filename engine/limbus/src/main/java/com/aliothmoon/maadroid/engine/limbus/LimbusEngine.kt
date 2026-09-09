@@ -24,6 +24,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
+import org.opencv.android.OpenCVLoader
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
@@ -44,6 +45,7 @@ class LimbusEngine(
 ) : AutomationEngine {
 
     override val profile: GameProfile = LimbusProfile
+    private var loadedLanguage = DEFAULT_LANGUAGE
 
     private val _events = MutableSharedFlow<EngineEvent>(
         replay = 0,
@@ -123,12 +125,14 @@ class LimbusEngine(
         registry = loaded
         templateIndex = index
         this.resourceDir = resourceDir
+        loadedLanguage = languageOf(resourceDir)
         info("已装载流水线 ${loaded.size} 个节点、素材 ${index.size} 张")
     }.onFailure { fail("装载资源失败: ${it.message}", it) }
 
     // ---------------------------------------------------------------- connect
 
     override suspend fun connect(device: DeviceHandle): Result<Unit> = runCatching {
+        check(OpenCVLoader.initLocal()) { "OpenCV 初始化失败，请重新安装完整 APK" }
         emit(EngineEvent.Connection(ConnectionState.Connecting))
         val index = templateIndex
             ?: throw IllegalStateException("请先 prepare 装载资源")
@@ -141,14 +145,14 @@ class LimbusEngine(
             index = index,
             templateFileOf = index::fileOf,
             classifier = OnnxClassifier(dir) { warn(it) },
-            ocr = PpOcrEngine.load(dir) { warn(it) },
+            ocr = PpOcrEngine.load(dir) { warn(it) } ?: error("OCR 模型加载失败，请重新安装边狱资源"),
             onLog = { warn(it) },
         )
 
         // 强制显示规格：全部模板都按 1280x720 截取，分辨率不对就全都匹配不上
         val display = profile.display
         val ok = device.control.setDisplaySize(display.width, display.height, display.dpi)
-        if (!ok) warn("设置显示规格 ${display.width}x${display.height} 失败，模板可能匹配不上")
+        check(ok) { "设置显示规格 ${display.width}x${display.height} 失败" }
 
         emit(EngineEvent.Connection(ConnectionState.Connected))
     }.onFailure {
@@ -214,8 +218,6 @@ class LimbusEngine(
         }
         val reg = registry ?: run { warn("尚未装载资源"); return false }
         val dev = device ?: run { warn("尚未连接设备"); return false }
-        val rec = recognizer ?: run { warn("尚未连接设备"); return false }
-        val index = templateIndex ?: run { warn("尚未装载资源"); return false }
 
         val tasks = synchronized(queue) { queue.toList().also { queue.clear() } }
         if (tasks.isEmpty()) {
@@ -234,10 +236,20 @@ class LimbusEngine(
         val enableOverrides = LimbusTask.allNodeNames().associateWith { node ->
             selected.any { it.nodeName == node }
         }
-        val effectiveRegistry = reg.withEnabled(enableOverrides)
-
         // 各任务的配置分节合并成一份：镜牢的动作要同时读 mirror / theme_pack / other_task
         val config = mergeConfigs(tasks)
+        val effectiveRegistry = reg.withEnabled(enableOverrides).withTargetCounts(
+            listOf("exp", "thread", "mirror").associate { "${it}_check" to config.int(it, "check_node_target_count", 1) },
+        )
+        val language = config.str("other_task", "language", loadedLanguage)
+        if (language != loadedLanguage) {
+            require(language in setOf("en", "zh")) { "不支持的游戏语言: $language" }
+            templateIndex = ResourcePackTemplateIndex.load(requireNotNull(resourceDir), language) { warn(it) }
+            loadedLanguage = language
+            connect(dev).getOrThrow()
+        }
+        val rec = recognizer ?: return false
+        val index = templateIndex ?: return false
 
         stopRequested = false
         counters.clear()
@@ -250,6 +262,10 @@ class LimbusEngine(
                 }
                 info("本次运行任务：${selected.joinToString { it.type }}")
                 ok = runPipeline(effectiveRegistry, dev, rec, index, config, selected, tasks)
+                if (ok && config.bool("other_task", "close_game", false)) {
+                    val pkg = profile.gamePackages.firstOrNull { dev.control.isPackageInstalled(it) }
+                    if (pkg != null) dev.control.stopApp(pkg)
+                }
             } finally {
                 emit(EngineEvent.AllTasksFinished(success = ok && !stopRequested))
             }
@@ -338,10 +354,15 @@ class LimbusEngine(
     }
 
     /** 释放模板缓存等原生资源。切换游戏或换语言时调用 */
-    fun release() {
+    override fun release() {
         recognizer?.release()
         recognizer = null
         device = null
+        synchronized(queue) { queue.clear() }
+        registry = null
+        templateIndex = null
+        resourceDir = null
+        counters.clear()
     }
 
     // ----------------------------------------------------------------- 事件

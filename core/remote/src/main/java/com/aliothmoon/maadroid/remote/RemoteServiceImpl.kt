@@ -10,6 +10,7 @@ import android.os.SharedMemory
 import android.system.Os
 import android.view.Surface
 import com.aliothmoon.maadroid.ITouchEventCallback
+import com.aliothmoon.maadroid.IEngineDeviceSession
 import com.aliothmoon.maadroid.RemoteService
 import com.aliothmoon.maadroid.bridge.NativeBridgeLib
 import com.aliothmoon.maadroid.constant.DefaultDisplayConfig
@@ -19,6 +20,7 @@ import com.aliothmoon.maadroid.remote.internal.ActivityUtils
 import com.aliothmoon.maadroid.remote.internal.CoreDataStore
 import com.aliothmoon.maadroid.remote.internal.GameAudioMuteController
 import com.aliothmoon.maadroid.remote.internal.FrameChannel
+import com.aliothmoon.maadroid.remote.internal.EngineDeviceSessionHost
 import com.aliothmoon.maadroid.remote.internal.GameFpsMonitor
 import com.aliothmoon.maadroid.remote.internal.GestureRecorder
 import com.aliothmoon.maadroid.remote.internal.PermissionGrantHelper
@@ -83,6 +85,7 @@ open class RemoteServiceImpl : RemoteService.Stub() {
     private val destroyed = AtomicBoolean(false)
     /** 同一进程内 setup 幂等：成功后再调直接返回 OK，失败则下次重试 */
     private var setup = false
+    @Volatile private var deviceSetup = false
     private val coreData = CoreDataStore()
 
     init {
@@ -128,12 +131,34 @@ open class RemoteServiceImpl : RemoteService.Stub() {
 
     override fun pid(): Int = Process.myPid()
 
+    /** Common Android boot without creating any engine or touching its resource directory. */
+    @Synchronized
+    override fun setupDevice(): Int {
+        if (deviceSetup) return SetupResult.OK
+        restoreDeviceState()
+        Ln.i("NativeBridgeLib ping ${NativeBridgeLib.ping()}")
+        finishDeviceSetup()
+        return SetupResult.OK
+    }
+
+    private fun restoreDeviceState() {
+        if (deviceSetup) return
+        runCatching { XmsfFirewall.ensureRestored() }
+            .onFailure { Ln.w("XmsFw boot restore failed: ${it.message}") }
+    }
+
+    private fun finishDeviceSetup() {
+        if (deviceSetup) return
+        PermissionGrantHelper.disablePhantomProcessKiller()
+        deviceSetup = true
+    }
+
+    @Synchronized
     override fun setup(userDir: String?, isDebug: Boolean): Int {
         if (setup) return SetupResult.OK
         RemoteBootTrace.mark("SETUP_BEGIN")
         // 清上一实例可能残留的断网规则，同步执行先于业务 AIDL
-        runCatching { XmsfFirewall.ensureRestored() }
-            .onFailure { Ln.w("XmsFw boot restore failed: ${it.message}") }
+        restoreDeviceState()
         RemoteBootTrace.mark("SETUP_XMSF_RESTORED")
         // 不可访问的路径进 AsstSetUserDir 会 abort 整个进程（#227），这里只报告，换到哪由用户在设置里决定
         val dir = File(userDir.orEmpty())
@@ -150,7 +175,7 @@ open class RemoteServiceImpl : RemoteService.Stub() {
             Ln.e("$TAG: setup failed - $err")
             return SetupResult.ERR_SET_USER_DIR
         }
-        PermissionGrantHelper.disablePhantomProcessKiller()
+        finishDeviceSetup()
         setup = true
         RemoteBootTrace.mark("SETUP_DONE")
         return SetupResult.OK
@@ -286,9 +311,17 @@ open class RemoteServiceImpl : RemoteService.Stub() {
     // ---- 帧通道：供跑在 App 进程的 Kotlin 引擎取帧 ----
 
     private val frameChannel = FrameChannel()
+    private val deviceSessions = EngineDeviceSessionHost(frameChannel)
+
+    override fun openDeviceSession(
+        owner: IBinder, mode: Int, width: Int, height: Int, dpi: Int,
+    ): IEngineDeviceSession {
+        check(deviceSetup) { "请先调用 setupDevice" }
+        return deviceSessions.open(owner, mode, width, height, dpi)
+    }
 
     override fun openFrameChannel(width: Int, height: Int): SharedMemory? =
-        frameChannel.open(width, height)
+        deviceSessions.legacy { frameChannel.open(width, height) }
 
     override fun grabFrame(): LongArray? = frameChannel.grab()
 
@@ -298,8 +331,8 @@ open class RemoteServiceImpl : RemoteService.Stub() {
      * 按键注入。与 touch 一样只在虚拟显示器模式下生效 —— 前台模式由用户自己操作，
      * 注入按键会与真人输入打架。
      */
-    override fun keyDown(keyCode: Int) {
-        if (virtualDisplayMode.get() == DisplayMode.PRIMARY) return
+    override fun keyDown(keyCode: Int) = deviceSessions.legacy {
+        if (virtualDisplayMode.get() == DisplayMode.PRIMARY) return@legacy
         val displayId = VirtualDisplayManager.getDisplayId()
         if (displayId != DefaultDisplayConfig.DISPLAY_NONE) {
             InputControlUtils.keyDown(keyCode, displayId)
@@ -307,46 +340,47 @@ open class RemoteServiceImpl : RemoteService.Stub() {
     }
 
     /** 强停游戏进程，供 engine-api 的 DeviceControl.stopApp 使用 */
-    override fun forceStopApp(packageName: String?) {
-        if (packageName.isNullOrBlank()) return
+    override fun forceStopApp(packageName: String?) = deviceSessions.legacy {
+        if (packageName.isNullOrBlank()) return@legacy
         runCatching { ServiceManager.getActivityManager().forceStopPackage(packageName) }
             .onFailure { Ln.e("$TAG: forceStopApp($packageName) failed: ${it.message}") }
+        Unit
     }
 
-    override fun keyUp(keyCode: Int) {
-        if (virtualDisplayMode.get() == DisplayMode.PRIMARY) return
+    override fun keyUp(keyCode: Int) = deviceSessions.legacy {
+        if (virtualDisplayMode.get() == DisplayMode.PRIMARY) return@legacy
         val displayId = VirtualDisplayManager.getDisplayId()
         if (displayId != DefaultDisplayConfig.DISPLAY_NONE) {
             InputControlUtils.keyUp(keyCode, displayId)
         }
     }
 
-    override fun touchDown(x: Int, y: Int, contact: Int) {
-        if (virtualDisplayMode.get() == DisplayMode.PRIMARY) return
+    override fun touchDown(x: Int, y: Int, contact: Int) = deviceSessions.legacy {
+        if (virtualDisplayMode.get() == DisplayMode.PRIMARY) return@legacy
         val displayId = VirtualDisplayManager.getDisplayId()
         if (displayId != DefaultDisplayConfig.DISPLAY_NONE) {
             InputControlUtils.down(x, y, contact, displayId)
         }
     }
 
-    override fun touchMove(x: Int, y: Int, contact: Int) {
-        if (virtualDisplayMode.get() == DisplayMode.PRIMARY) return
+    override fun touchMove(x: Int, y: Int, contact: Int) = deviceSessions.legacy {
+        if (virtualDisplayMode.get() == DisplayMode.PRIMARY) return@legacy
         val displayId = VirtualDisplayManager.getDisplayId()
         if (displayId != DefaultDisplayConfig.DISPLAY_NONE) {
             InputControlUtils.move(x, y, contact, displayId)
         }
     }
 
-    override fun touchUp(x: Int, y: Int, contact: Int) {
-        if (virtualDisplayMode.get() == DisplayMode.PRIMARY) return
+    override fun touchUp(x: Int, y: Int, contact: Int) = deviceSessions.legacy {
+        if (virtualDisplayMode.get() == DisplayMode.PRIMARY) return@legacy
         val displayId = VirtualDisplayManager.getDisplayId()
         if (displayId != DefaultDisplayConfig.DISPLAY_NONE) {
             InputControlUtils.up(x, y, contact, displayId)
         }
     }
 
-    override fun touchCancel() {
-        if (virtualDisplayMode.get() == DisplayMode.PRIMARY) return
+    override fun touchCancel() = deviceSessions.legacy {
+        if (virtualDisplayMode.get() == DisplayMode.PRIMARY) return@legacy
         val displayId = VirtualDisplayManager.getDisplayId()
         if (displayId != DefaultDisplayConfig.DISPLAY_NONE) {
             InputControlUtils.cancel(displayId)
@@ -357,9 +391,9 @@ open class RemoteServiceImpl : RemoteService.Stub() {
         PowerController.setDisplayPower(on)
     }
 
-    override fun startVirtualDisplay(): Int {
+    override fun startVirtualDisplay(): Int = deviceSessions.legacy {
         Ln.i("$TAG: startVirtualDisplay() ${virtualDisplayMode.get()}")
-        return when (virtualDisplayMode.get()) {
+        return@legacy when (virtualDisplayMode.get()) {
             DisplayMode.PRIMARY -> PrimaryDisplayManager.start()
             DisplayMode.BACKGROUND -> VirtualDisplayManager.start().also { displayId ->
                 if (displayId != DefaultDisplayConfig.DISPLAY_NONE) {
@@ -371,7 +405,7 @@ open class RemoteServiceImpl : RemoteService.Stub() {
         }
     }
 
-    override fun stopVirtualDisplay() {
+    override fun stopVirtualDisplay() = deviceSessions.legacy {
         Ln.i("$TAG: stopVirtualDisplay() ${virtualDisplayMode.get()}")
         when (virtualDisplayMode.get()) {
             DisplayMode.PRIMARY -> PrimaryDisplayManager.stop()
@@ -431,14 +465,14 @@ open class RemoteServiceImpl : RemoteService.Stub() {
         return onDisplay
     }
 
-    override fun moveAppToVirtualDisplay(packageName: String): Boolean {
+    override fun moveAppToVirtualDisplay(packageName: String): Boolean = deviceSessions.legacy {
         val targetDisplayId = VirtualDisplayManager.getDisplayId()
         if (targetDisplayId == DefaultDisplayConfig.DISPLAY_NONE) {
             Ln.w("$TAG: moveAppToVirtualDisplay: no active virtual display")
-            return false
+            return@legacy false
         }
         Ln.i("$TAG: moveAppToVirtualDisplay($packageName) -> display $targetDisplayId")
-        return ActivityUtils.repinAppToDisplay(packageName, targetDisplayId)
+        return@legacy ActivityUtils.repinAppToDisplay(packageName, targetDisplayId)
     }
 
     /** @return [com.aliothmoon.maadroid.constant.WakeUnlockResult] */
@@ -477,8 +511,8 @@ open class RemoteServiceImpl : RemoteService.Stub() {
         }
     }
 
-    override fun startActivity(intent: Intent): Boolean {
-        return ActivityUtils.startActivity(intent)
+    override fun startActivity(intent: Intent): Boolean = deviceSessions.legacy {
+        return@legacy ActivityUtils.startActivity(intent)
     }
 
     override fun setForceFullscreenOnVirtualDisplay(enabled: Boolean) {
@@ -491,26 +525,26 @@ open class RemoteServiceImpl : RemoteService.Stub() {
         return XmsfFirewall.setNetworkingEnabled(packageName, enabled)
     }
 
-    override fun setVirtualDisplayResolution(width: Int, height: Int, dpi: Int) {
+    override fun setVirtualDisplayResolution(width: Int, height: Int, dpi: Int) = deviceSessions.legacy {
         Ln.i("$TAG: setVirtualDisplayResolution(${width}x${height}, dpi=$dpi)")
         VirtualDisplayManager.setResolution(width, height, dpi)
     }
 
-    override fun setVirtualDisplayMode(mode: Int): Boolean {
+    override fun setVirtualDisplayMode(mode: Int): Boolean = deviceSessions.legacy {
         when (mode) {
             DisplayMode.PRIMARY -> {
                 VirtualDisplayManager.stop()
                 virtualDisplayMode.set(mode)
-                return true
+                return@legacy true
             }
 
             DisplayMode.BACKGROUND -> {
                 PrimaryDisplayManager.stop()
                 virtualDisplayMode.set(mode)
-                return true
+                return@legacy true
             }
         }
-        return false
+        return@legacy false
     }
 
     private fun startHeartbeatWatchdog() {

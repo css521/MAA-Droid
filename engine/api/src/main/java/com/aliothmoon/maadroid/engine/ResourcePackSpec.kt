@@ -9,9 +9,8 @@ import java.io.File
  * 两种 feed 形态都要支持（这是实测后的结论，不是设计洁癖）：
  * - 方舟：上游 MAA 直接发布 MaaResource，且已有 MirrorChyan 渠道 —— 沿用既有下载链路，
  *   本接口只描述「版本怎么读、zip 条目怎么落盘」。
- * - 边狱：上游 LALC 没有资源 feed（只发 249 MB 的 Windows 整包，无清单无逐文件校验），
- *   所以由本仓库 CI 从其 tag 重打包成 25 MB 带 sha256 清单的包发 Release，
- *   见 `scripts/pack_engine_resource.py`。
+ * - 边狱：直接下载 LALC 固定 commit 的源码归档，在暂存目录提取资源并生成逐文件
+ *   sha256 清单；首次安装不依赖 GitHub API 或本项目 Release。
  */
 interface ResourcePackSpec {
 
@@ -32,6 +31,17 @@ interface ResourcePackSpec {
 
     /** 内置于 APK 的初始资源在 assets 下的前缀；为空表示该包必须联网获取 */
     val bundledAssetPrefix: String?
+
+    /** Null preserves the engine's existing updater (for example MAA / MirrorChyan). */
+    val upstreamArchive: UpstreamArchive? get() = null
+
+    /** Validate an extracted source archive and write its installed manifest, or throw. */
+    fun finalizeUpstreamInstall(resourceDir: File, revision: ResourceRevision) {
+        error("$packId does not support source archive installation")
+    }
+
+    /** Content verification before use; an error must leave the previous installation intact. */
+    fun verifyInstalledFiles(resourceDir: File): String? = null
 
     /**
      * 资源是否需要额外投递到**提权进程**的数据目录。

@@ -43,6 +43,8 @@ class EngineTaskStore(private val context: Context) {
         val enabled: Map<String, Boolean> = emptyMap(),
         /** taskType → 参数 JSON（引擎自定义结构） */
         val params: Map<String, String> = emptyMap(),
+        /** 引擎工作台的跨任务配置（队伍/策略），宿主不解释其内容。 */
+        val workspaceConfig: String? = null,
     )
 
     fun flow(engineId: String): Flow<EngineTasks> =
@@ -59,6 +61,10 @@ class EngineTaskStore(private val context: Context) {
         update(engineId) { it.copy(params = it.params + (taskType to paramsJson)) }
     }
 
+    suspend fun setWorkspaceConfig(engineId: String, configJson: String) {
+        update(engineId) { it.copy(workspaceConfig = configJson) }
+    }
+
     /**
      * 按引擎声明的面板顺序给出「本次要跑的任务」。
      *
@@ -68,8 +74,12 @@ class EngineTaskStore(private val context: Context) {
      */
     suspend fun selectedTasks(engineId: String): List<Pair<String, String>> {
         val ui = EngineRegistry.provider(engineId)?.ui ?: return emptyList()
+        val saved = current(engineId)
+        ui.workspace?.let { workspace ->
+            return workspace.selectedTasks(saved.workspaceConfig ?: workspace.initialConfig(saved.enabled, saved.params))
+        }
         val declared = ui.taskPanels.map { it.taskType to it.enabledByDefault }
-        return EngineTaskSelection.select(declared, current(engineId))
+        return EngineTaskSelection.select(declared, saved)
     }
 
     private suspend fun update(engineId: String, mutate: (EngineTasks) -> EngineTasks) {

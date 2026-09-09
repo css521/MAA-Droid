@@ -32,6 +32,8 @@ import com.aliothmoon.maadroid.engine.limbus.R
  */
 object LimbusUi : EngineUi {
 
+    override val workspace = LimbusWorkspace
+
     override val taskPanels: List<TaskPanelSpec> = listOf(
         TaskPanelSpec(
             taskType = LimbusTask.MAIL.type,

@@ -731,8 +731,7 @@ private object SelectNextNodeAction : ActionBackend {
             "node_boss_encounter" to 0,
             "train_head" to 0,
         )
-        val merged = defaults.mapValues { (k, v) -> ctx.config.int("mirror", "node_score_$k", v) }
-        return merged + (NODE_EMPTY to EMPTY_NODE_SCORE)
+        return com.aliothmoon.maadroid.engine.limbus.config.LimbusWeights.nodes(ctx.config, defaults)
     }
 }
 
@@ -839,12 +838,7 @@ private object SelectThemePackAction : ActionBackend {
 
     /** 用户配的卡包权重，按权重降序 —— 遍历顺序决定同权重时先选谁 */
     private fun themePackWeights(ctx: ActionContext): Map<String, Int> {
-        val names = ctx.config.list("theme_pack", "names")
-        return names
-            .associateWith { ctx.config.int("theme_pack", "weight_$it", 0) }
-            .toList()
-            .sortedByDescending { it.second }
-            .toMap()
+        return com.aliothmoon.maadroid.engine.limbus.config.LimbusWeights.packs(ctx.config)
     }
 }
 

@@ -16,6 +16,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.ensureActive
@@ -49,6 +52,25 @@ class EngineTaskViewModel(
     /** 该引擎声明的面板；引擎未提供则为空表，UI 据此显示「该引擎暂无任务面板」 */
     val panels: List<TaskPanelSpec> =
         EngineRegistry.provider(engineId)?.ui?.taskPanels.orEmpty()
+    val workspace = EngineRegistry.provider(engineId)?.ui?.workspace
+
+    private val _workspaceDraft = MutableStateFlow<String?>(null)
+    val workspaceDraft = _workspaceDraft.asStateFlow()
+    private var saveJob: Job? = null
+    private val _logs = MutableStateFlow<List<String>>(emptyList())
+    val logs = _logs.asStateFlow()
+
+    fun onWorkspaceChange(configJson: String) {
+        if (_running.value) return
+        _workspaceDraft.value = configJson
+        val previous = saveJob
+        saveJob = viewModelScope.launch {
+            previous?.join()
+            try { store.setWorkspaceConfig(engineId, configJson) }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { _status.value = UiText.Dynamic("保存配置失败：${error.message}") }
+        }
+    }
 
     val tasks: StateFlow<EngineTaskStore.EngineTasks> = store.flow(engineId)
         .stateIn(viewModelScope, SharingStarted.Eagerly, EngineTaskStore.EngineTasks())
@@ -107,6 +129,19 @@ class EngineTaskViewModel(
         _status.value = null
         startJob = viewModelScope.launch {
             try {
+                saveJob?.join()
+                workspace?.let { w ->
+                    val saved = store.current(engineId)
+                    val config = _workspaceDraft.value ?: saved.workspaceConfig ?: w.initialConfig(saved.enabled, saved.params)
+                    w.validate(config)?.let { reason ->
+                        _status.value = UiText.Dynamic(reason)
+                        closeSession()
+                        _running.value = false
+                        return@launch
+                    }
+                    // 验证和下发使用同一份快照，不能在最后一次持久化失败后跑旧配置。
+                    store.setWorkspaceConfig(engineId, config)
+                }
                 val selected = store.selectedTasks(engineId)
                 if (selected.isEmpty()) {
                     _status.value = uiTextOf(R.string.engine_no_tasks_selected)
@@ -116,6 +151,8 @@ class EngineTaskViewModel(
                 }
 
                 val s = sessionFactory(engineId).also { session = it }
+                _logs.value = emptyList()
+                collectEvents(s)
                 val failure = s.prepare()
                 ensureActive()
                 if (failure != null) {
@@ -124,9 +161,10 @@ class EngineTaskViewModel(
                     _running.value = false
                     return@launch
                 }
-                selected.forEach { (type, params) -> s.appendTask(type, params) }
+                selected.forEach { (type, params) ->
+                    check(s.appendTask(type, params) != com.aliothmoon.maadroid.engine.AutomationEngine.INVALID_TASK_ID) { "引擎拒绝任务 $type" }
+                }
 
-                collectEvents(s)
                 if (!s.start()) {
                     _status.value = uiTextOf(R.string.engine_start_rejected)
                     closeSession()
@@ -180,10 +218,12 @@ class EngineTaskViewModel(
                 when (event) {
                     is com.aliothmoon.maadroid.engine.EngineEvent.Log -> {
                         Timber.tag(engineId).log(event.level.toTimberPriority(), event.message)
+                        if (event.level >= LogLevel.Info) _logs.value = (_logs.value + "[${event.level}] ${event.message}").takeLast(500)
                         if (event.level >= LogLevel.Warn) _status.value = UiText.Dynamic(event.message)
                     }
                     is com.aliothmoon.maadroid.engine.EngineEvent.Failure -> {
                         _status.value = UiText.Dynamic(event.reason)
+                        _logs.value = (_logs.value + "[Error] ${event.reason}").takeLast(500)
                     }
                     is com.aliothmoon.maadroid.engine.EngineEvent.AllTasksFinished -> {
                         _status.value = uiTextOf(
@@ -200,18 +240,27 @@ class EngineTaskViewModel(
     }
 
     override fun onCleared() {
-        closeSession()
+        // ViewModel scope 已取消，收尾必须等启动/运行退出后才能解映射。
+        cleanupScope.launch {
+            startJob?.cancelAndJoin()
+            closeSession()
+        }
     }
 
-    private fun closeSession() {
-        eventsJob?.cancel()
+    private suspend fun closeSession() = withContext(NonCancellable) {
+        if (eventsJob != currentCoroutineContext()[Job]) eventsJob?.cancel()
         eventsJob = null
-        session?.close()
-        session = null
-        if (ownsDevice) {
-            executionState.release(engineId)
-            ownsDevice = false
+        try { session?.close() } finally {
+            session = null
+            if (ownsDevice) {
+                executionState.release(engineId)
+                ownsDevice = false
+            }
         }
+    }
+
+    private companion object {
+        val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     }
 }
 

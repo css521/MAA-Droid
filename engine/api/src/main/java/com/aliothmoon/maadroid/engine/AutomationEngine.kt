@@ -45,6 +45,9 @@ interface AutomationEngine {
 
     suspend fun stop(): Boolean
 
+    /** 在 stop 完成后释放本地模型、模板缓存等会话资源。 */
+    fun release() {}
+
     companion object {
         const val INVALID_TASK_ID = 0
     }

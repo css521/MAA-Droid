@@ -1,6 +1,8 @@
 package com.aliothmoon.maadroid.engine.limbus.pipeline
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * 流水线注册表。装配步骤严格对齐上游 LALC 的 `workflow/task_registry.py: init_tasks()`：
@@ -51,6 +53,15 @@ class PipelineRegistry private constructor(
             overrides[name]?.let { node.copy(enable = it) } ?: node
         }
         return PipelineRegistry(patched, interrupts)
+    }
+
+    fun withTargetCounts(counts: Map<String, Int>): PipelineRegistry {
+        val disabled = counts.filterValues { it == 0 }.keys.mapNotNull { nodes[it]?.str("disable_node") }.toSet()
+        return PipelineRegistry(nodes.mapValues { (name, node) ->
+            val count = counts[name]
+            if (count != null) node.copy(params = JsonObject(node.params + ("target_count" to JsonPrimitive(count))))
+            else if (name in disabled) node.copy(enable = false) else node
+        }, interrupts)
     }
 
     /** 流水线引用到的全部 action 名（含纯路由的） */

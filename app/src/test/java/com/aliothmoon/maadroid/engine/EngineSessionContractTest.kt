@@ -99,7 +99,10 @@ class EngineSessionContractTest {
         val dir = createTempDirectory("engine-session").toFile()
         try {
             File(dir, "manifest.json").writeText("""{"revision":"abc"}""")
-            assertEquals("abc", limbus.readInstalledVersion(dir))
+            assertNull("版本必须是完整内容摘要", limbus.readInstalledVersion(dir))
+            val revision = "a".repeat(64)
+            File(dir, "manifest.json").writeText("""{"revision":"$revision"}""")
+            assertEquals(revision, limbus.readInstalledVersion(dir))
 
             // 解压中途失败时靠它抹掉标记，否则下次检查认为已最新、
             // 用户会拿着一份缺文件的资源包一直跑

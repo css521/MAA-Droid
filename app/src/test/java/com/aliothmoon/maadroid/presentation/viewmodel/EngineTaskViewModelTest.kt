@@ -36,6 +36,8 @@ class EngineTaskViewModelTest {
     private val store = mockk<EngineTaskStore> {
         every { flow(any()) } returns MutableStateFlow(EngineTaskStore.EngineTasks())
         coEvery { selectedTasks(any()) } returns listOf("task" to "{}")
+        coEvery { current(any()) } returns EngineTaskStore.EngineTasks(workspaceConfig = """{"taskConfigs":{"EXP":{"enabled":false},"Thread":{"enabled":false},"Mirror":{"enabled":false}},"teamConfigs":{}}""")
+        coEvery { setWorkspaceConfig(any(), any()) } returns Unit
     }
     private val events = MutableSharedFlow<EngineEvent>(extraBufferCapacity = 8)
     private val session = mockk<EngineSession>(relaxed = true) {
@@ -43,6 +45,7 @@ class EngineTaskViewModelTest {
         coEvery { start() } returns true
         coEvery { stop() } returns true
         every { events() } returns events
+        every { appendTask(any(), any()) } returns 1
     }
 
     private fun model(
@@ -138,7 +141,7 @@ class EngineTaskViewModelTest {
         assertTrue(model.running.value)
         assertFalse(model.stopping.value)
         assertEquals("limbus", executionState.activeEngineId.value)
-        verify(exactly = 0) { session.close() }
+        coVerify(exactly = 0) { session.close() }
     }
 
     @Test
@@ -178,7 +181,7 @@ class EngineTaskViewModelTest {
             assertEquals("task", restored.expandedTaskType.value)
             coVerify(exactly = 1) { session.start() }
             coVerify(exactly = 0) { session.stop() }
-            verify(exactly = 0) { session.close() }
+            coVerify(exactly = 0) { session.close() }
         } finally {
             owner.viewModelStore.clear()
         }

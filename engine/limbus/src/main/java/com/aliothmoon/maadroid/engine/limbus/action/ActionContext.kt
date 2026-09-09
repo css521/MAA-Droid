@@ -80,6 +80,7 @@ interface ActionContext {
  * 由各动作按需读取，避免上游加一个开关就要改契约。
  */
 interface LimbusConfig {
+    fun section(section: String): Map<String, JsonElement> = emptyMap()
     fun int(section: String, key: String, default: Int): Int
     fun bool(section: String, key: String, default: Boolean): Boolean
     fun str(section: String, key: String, default: String): String

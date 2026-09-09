@@ -43,6 +43,7 @@ class PipelineRunnerTest {
     fun setUp() {
         trace.clear()
         ActionRegistry.clearForTest()
+        ActionRegistry.register("empty", recordingAction("EMPTY"))
     }
 
     @After
@@ -84,7 +85,7 @@ class PipelineRunnerTest {
         hits = setOf("a", "b")
 
         assertNull(runner(reg).run("main"))
-        assertEquals(listOf("A"), trace)
+        assertEquals(listOf("A"), trace.filterNot { it == "EMPTY" })
     }
 
     @Test
@@ -129,7 +130,7 @@ class PipelineRunnerTest {
 
         assertNull(runner(reg).run("main"))
         // a 被禁用（上游 check 节点会这样"用完即弃"），应跳到 b
-        assertEquals(listOf("B"), trace)
+        assertEquals(listOf("B"), trace.filterNot { it == "EMPTY" })
     }
 
     @Test
@@ -146,7 +147,7 @@ class PipelineRunnerTest {
         hits = setOf("a")
 
         assertNull(runner(reg).run("main"))
-        assertEquals(listOf("A1", "A2"), trace)
+        assertEquals(listOf("A1", "A2"), trace.filterNot { it == "EMPTY" })
     }
 
     @Test
@@ -163,17 +164,55 @@ class PipelineRunnerTest {
 
         val r = runner(reg)
         assertNull(r.run("main"))
-        assertEquals(listOf("A"), trace)
+        assertEquals(listOf("A"), trace.filterNot { it == "EMPTY" })
         assertTrue("Finish 后应停止", !r.isRunning)
     }
 
     @Test
-    fun actionWithoutBackendIsTreatedAsPureRouting() = runTest {
+    fun actionWithoutBackendExecutesItsNestedNodeAndReturns() = runTest {
         val reg = basicRegistry()
         // 不注册任何动作：上游 45 个动作名里 10 个无实现体，属正常情形而非错误
-        hits = setOf("a")
+        hits = setOf("a", "act_a")
         assertNull(runner(reg).run("main"))
-        assertTrue("无实现体不应报错", trace.isEmpty())
+        assertEquals("main 和子节点 act_a 都必须执行 empty", listOf("EMPTY", "EMPTY"), trace)
+    }
+
+    @Test fun checkCountRepeatsOriginThenDisablesEntryAndResetsNextRun() = runTest {
+        val reg = PipelineRegistry.load(mapOf("flow.json" to """{
+            "empty":{"action":"empty","interrupt":[]},
+            "inc":{"action":"empty","interrupt":[]},
+            "record":{"action":"empty","interrupt":[]},
+            "main":{"action":"empty","next":["work"],"interrupt":[],"rate_limit":0},
+            "work":{"action":"record","next":["check"],"interrupt":[],"rate_limit":0},
+            "check":{"type":"check","action":"inc","params":{"target_count":2,"origin":"work","disable_node":"work"},"next":["work"],"interrupt":[],"rate_limit":0}
+        }"""))
+        val counts = mutableMapOf<String, Int>()
+        ActionRegistry.register("record", recordingAction("WORK"))
+        ActionRegistry.register("inc", object : ActionBackend {
+            override suspend fun execute(ctx: ActionContext): ActionOutcome { ctx.incrementCounter(ctx.nodeName); return ActionOutcome.Continue }
+        })
+        val runner = PipelineRunner(reg, { name, node, matches ->
+            object : ActionContext by fakeContext(node, name, matches) {
+                override fun counterOf(nodeName: String) = counts[nodeName] ?: 0
+                override fun incrementCounter(nodeName: String): Int = (counterOf(nodeName) + 1).also { counts[nodeName] = it }
+            }
+        }, { RecognizeOutcome.DIRECT_HIT }).also { it.delayer = {} }
+        repeat(2) {
+            counts.clear(); trace.clear()
+            assertNull(runner.run("main"))
+            assertEquals(2, trace.count { it == "WORK" })
+            assertEquals(2, counts["check"])
+            assertTrue(reg.require("work").enable)
+        }
+    }
+
+    @Test fun failedFinishIsNotReportedAsSuccess() = runTest {
+        val reg = basicRegistry()
+        ActionRegistry.register("act_a", object : ActionBackend {
+            override suspend fun execute(ctx: ActionContext) = ActionOutcome.Finish(false, "游戏无法操作")
+        })
+        hits = setOf("a")
+        assertEquals("游戏无法操作", runner(reg).run("main"))
     }
 
     @Test

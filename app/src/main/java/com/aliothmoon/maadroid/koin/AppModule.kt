@@ -230,6 +230,7 @@ val appModule = module {
     }
     singleOf(::CoreDataPusher)
     singleOf(::ResourceDownloader)
+    single { com.aliothmoon.maadroid.engine.resource.EngineResourceService(androidContext(), get(), get()) }
     singleOf(::AppDownloader)
     singleOf(::ZipExtractor)
     singleOf(::AssetExtractor)

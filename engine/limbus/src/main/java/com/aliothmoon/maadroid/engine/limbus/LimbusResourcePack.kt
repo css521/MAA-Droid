@@ -1,119 +1,72 @@
 package com.aliothmoon.maadroid.engine.limbus
 
 import com.aliothmoon.maadroid.engine.ResourcePackSpec
+import com.aliothmoon.maadroid.engine.ResourceRevision
+import com.aliothmoon.maadroid.engine.UpstreamArchive
+import com.aliothmoon.maadroid.engine.isSafeResourcePath
 import com.aliothmoon.maadroid.engine.limbus.action.ActionRegistry
 import com.aliothmoon.maadroid.engine.limbus.action.LimbusActions
+import com.aliothmoon.maadroid.engine.limbus.resource.LimbusResourceManifest
 import com.aliothmoon.maadroid.remote.EngineIds
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
+import kotlinx.serialization.json.*
 
-/**
- * 边狱资源包：流水线 JSON + 模板图 + ONNX 模型 + 语言包。
- *
- * feed 来源是本仓库自己的 Release，而不是上游 —— 上游 LALC 只发一个 249 MB 的 Windows
- * 整包（含 Python 运行时、无清单、无逐文件 sha256），无法增量。由 CI 从其 tag 取
- * config/task、config/language、img、ai/model、recognize/models 五份重打包成约 43 MB 的包，
- * 见 scripts/pack_engine_resource.py。
- */
+/** LALC resources extracted from an immutable upstream source archive; no project Release required. */
 object LimbusResourcePack : ResourcePackSpec {
-
-    override val packId: String = "limbus-main"
-
-    override val engineId: String = EngineIds.LIMBUS
-
-    override val relativeRoot: String = "engines/limbus"
-
-    /**
-     * 不内置于 APK：43 MB 素材（含 20 MB OCR 模型）进包会让 APK 明显变大，
-     * 而首启必然要联网校验更新，
-     * 不如统一走热更。首次使用前宿主会引导下载。
-     */
+    override val packId = "limbus-main"
+    override val engineId = EngineIds.LIMBUS
+    override val relativeRoot = "engines/limbus"
     override val bundledAssetPrefix: String? = null
+    override val requiresPrivilegedDelivery = false
+    override val upstreamArchive = UpstreamArchive(
+        repository = LimbusResourceManifest.REPOSITORY,
+        initialRevision = ResourceRevision("v5.0.0", "431b432e22f0b0da08b95d7c478fa213be20b3e8"),
+        resourcePrefix = "lalc_backend",
+        directories = LimbusResourceManifest.directories,
+        inspectionSuffixes = listOf(".py"),
+    )
 
-    /** 边狱引擎跑在 App 进程，直接读自己的资源目录，无需投递到提权侧 */
-    override val requiresPrivilegedDelivery: Boolean = false
+    override fun finalizeUpstreamInstall(resourceDir: File, revision: ResourceRevision) =
+        LimbusResourceManifest.finalize(resourceDir, revision, ::checkCompatibility)
 
-    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+    override fun verifyInstalledFiles(resourceDir: File): String? =
+        LimbusResourceManifest.verify(resourceDir, ::checkCompatibility)
 
-    /** 我们自己的清单以 revision（对全部文件 path+sha256 求的稳定摘要）作版本 */
-    override fun readInstalledVersion(resourceDir: File): String? =
-        manifestOf(resourceDir)?.get("revision")?.jsonPrimitive?.contentOrNull
+    override fun readInstalledVersion(resourceDir: File): String? = runCatching {
+        val value = Json.parseToJsonElement(manifestFile(resourceDir).readText()).jsonObject["revision"]
+        (value as? JsonPrimitive)?.takeIf { it.isString && it.content.matches(Regex("[0-9a-f]{64}")) }?.content
+    }.getOrNull()
 
-    /**
-     * 我们的包是平铺布局（config/ img/ ai/ 直接在包根），无顶层目录，
-     * 所以除清单本身外原样落盘。
-     */
-    override fun mapZipEntry(entryName: String): String? = when {
-        entryName.endsWith("/") -> null
-        entryName == MANIFEST_NAME -> MANIFEST_NAME
-        // 白名单必须与 scripts/pack_engine_resource.py 的 include 列表一致。
-        // 两侧任一漏一项，文件会「在包里但落不了盘」，而 OCR/识别失败表现为
-        // 「返回空表」而非报错 —— 症状是某些步骤莫名走兜底分支，极难溯源
-        entryName.startsWith("config/") -> entryName
-        entryName.startsWith("img/") -> entryName
-        entryName.startsWith("ai/") -> entryName
-        entryName.startsWith("recognize/models/") -> entryName
-        else -> null
+    /** Legacy flat resource ZIP mapping, kept for ResourcePackSpec callers. */
+    override fun mapZipEntry(entryName: String): String? = entryName.takeIf {
+        isSafeResourcePath(it) && !it.endsWith(".py", true) &&
+            (it == MANIFEST_NAME || upstreamArchive.directories.any { dir -> it.startsWith("$dir/") })
     }
 
-    /**
-     * 兼容门闸。上游改流程、图、阈值 → 无感跟随；但若上游新增了本 App 尚未实现的动作，
-     * 必须在装载前拦住并提示升级，而不是跑到一半崩在某个节点上。
-     */
     override fun checkCompatibility(manifestJson: String?): String? {
-        // 门闸按设计**先于** prepare 运行（装载前拒绝才有意义），所以不能指望 prepare
-        // 已经注册过动作 —— 否则 ActionRegistry 是空的，会把每一个包都报成
-        // 「需要未实现的动作」，等于把所有用户都挡在门外。install() 是幂等的。
         LimbusActions.install()
-
-        val obj = runCatching { manifestJson?.let { json.parseToJsonElement(it) as JsonObject } }
-            .getOrNull() ?: return "资源包缺少或无法解析 $MANIFEST_NAME"
-
-        val schema = obj["schema_version"]?.jsonPrimitive?.intOrNull
-        if (schema != SUPPORTED_SCHEMA) {
-            return "资源包清单版本 $schema 不受支持（本 App 支持 $SUPPORTED_SCHEMA），请升级 App"
+        return try {
+            val obj = Json.parseToJsonElement(requireNotNull(manifestJson)).jsonObject
+            val schema = (obj["schema_version"] as? JsonPrimitive)?.intOrNull
+            if (schema != SUPPORTED_SCHEMA) {
+                return "资源包清单版本 $schema 不受支持（本 App 支持 $SUPPORTED_SCHEMA），请升级 App"
+            }
+            val minEngine = (obj["min_engine_version"] as? JsonPrimitive)?.intOrNull
+                ?: return "资源包缺少有效 min_engine_version"
+            if (minEngine < 0 || minEngine > ENGINE_VERSION) {
+                return "该资源包要求引擎版本 $minEngine，当前为 $ENGINE_VERSION，请升级 App"
+            }
+            val missing = ActionRegistry.missing(LimbusResourceManifest.stringList(obj, "required_actions"))
+            if (missing.isEmpty()) null else "该资源包需要本 App 尚未实现的动作（${missing.joinToString("、")}），请升级 App"
+        } catch (e: Exception) {
+            "资源包缺少或无法解析 $MANIFEST_NAME：${e.message.orEmpty()}"
         }
-
-        val minEngine = obj["min_engine_version"]?.jsonPrimitive?.intOrNull ?: 0
-        if (minEngine > ENGINE_VERSION) {
-            return "该资源包要求引擎版本 $minEngine，当前为 $ENGINE_VERSION，请升级 App"
-        }
-
-        val required = obj["required_actions"]?.jsonArray
-            ?.mapNotNull { it.jsonPrimitive.contentOrNull }
-            .orEmpty()
-        val missing = ActionRegistry.missing(required)
-        if (missing.isNotEmpty()) {
-            return "该资源包需要 ${missing.size} 个本 App 尚未实现的动作" +
-                "（${missing.take(3).joinToString("、")}${if (missing.size > 3) "…" else ""}），请升级 App"
-        }
-        return null
     }
 
-    /** 抹掉清单即视作未装载：readInstalledVersion 读的就是它的 revision */
-    override fun invalidateInstalledVersion(resourceDir: File) {
-        manifestFile(resourceDir).delete()
-    }
-
-    fun manifestFile(resourceDir: File): File = File(resourceDir, MANIFEST_NAME)
-
-    private fun manifestOf(resourceDir: File): JsonObject? =
-        manifestFile(resourceDir).takeIf { it.isFile }
-            ?.let { f -> runCatching { json.parseToJsonElement(f.readText()) as JsonObject }.getOrNull() }
+    override fun invalidateInstalledVersion(resourceDir: File) { manifestFile(resourceDir).delete() }
+    fun manifestFile(resourceDir: File) = File(resourceDir, MANIFEST_NAME)
 
     const val MANIFEST_NAME = "manifest.json"
-
-    /** 与 scripts/pack_engine_resource.py 的 SCHEMA_VERSION 对齐 */
     const val SUPPORTED_SCHEMA = 1
-
-    /**
-     * 引擎实现版本。新增/改变动作语义时递增，并在打包器里同步提高受支持包的
-     * min_engine_version，从而让旧 App 拒绝装载需要新语义的包。
-     */
     const val ENGINE_VERSION = 1
 }

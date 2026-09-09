@@ -56,11 +56,11 @@ class LimbusResourcePackTest {
     @Test
     fun rejectsPackRequiringUnimplementedAction() {
         val reason = LimbusResourcePack.checkCompatibility(
-            manifest(actions = listOf("click", "mirror_choose_star", "battle_winrate"))
+            manifest(actions = listOf("click", "future_unknown_handler"))
         )
         assertNotNull("需要未实现动作的包必须被拒绝", reason)
         // 提示里要点出缺哪些，否则用户无从判断
-        assertTrue(reason!!.contains("mirror_choose_star"))
+        assertTrue(reason!!.contains("future_unknown_handler"))
         assertTrue(reason.contains("升级 App"))
     }
 

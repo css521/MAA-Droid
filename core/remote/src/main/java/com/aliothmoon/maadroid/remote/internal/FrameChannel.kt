@@ -25,6 +25,9 @@ class FrameChannel {
     private var capacity = 0
     private val meta = LongArray(4)
 
+    @Synchronized
+    fun isOpen(): Boolean = memory != null
+
     /**
      * 建立或复用共享内存。尺寸变化时重建。
      *
@@ -32,7 +35,7 @@ class FrameChannel {
      */
     @Synchronized
     fun open(width: Int, height: Int): SharedMemory? {
-        if (width <= 0 || height <= 0) {
+        if (width <= 0 || height <= 0 || width.toLong() * height > Int.MAX_VALUE / BYTES_PER_PIXEL) {
             Ln.w("$TAG: open ignored, bad size ${width}x$height")
             return null
         }
@@ -44,10 +47,10 @@ class FrameChannel {
         }
         return runCatching {
             val shm = SharedMemory.create("maadroid-frame", needed)
+            memory = shm // close the fd as well if mapReadWrite fails
             // 提权侧只写，App 侧只读：去掉写权限前先自己映射为可写
             mapped = shm.mapReadWrite()
             capacity = needed
-            memory = shm
             Ln.i("$TAG: opened ${width}x$height ($needed bytes)")
             shm
         }.onFailure {

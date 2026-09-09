@@ -1,0 +1,112 @@
+package com.aliothmoon.maadroid.engine.resource
+
+import com.aliothmoon.maadroid.engine.ResourcePackSpec
+import com.aliothmoon.maadroid.engine.ResourceRevision
+import com.aliothmoon.maadroid.engine.isSafeResourcePath
+import java.io.File
+import java.io.IOException
+import java.util.UUID
+import java.util.Locale
+import java.nio.file.Files
+import java.util.zip.ZipFile
+
+/** Validate in a sibling directory, then replace; interrupted installs keep the last good pack. */
+class AtomicResourceInstaller(
+    private val move: (File, File) -> Boolean = { from, to -> from.renameTo(to) },
+) {
+    fun install(
+        archive: File,
+        target: File,
+        pack: ResourcePackSpec,
+        revision: ResourceRevision,
+        ensureActive: () -> Unit = {},
+        progress: (Int, Int) -> Unit = { _, _ -> },
+    ) {
+        val source = requireNotNull(pack.upstreamArchive)
+        require(!Files.isSymbolicLink(target.toPath())) { "Resource target must not be a symbolic link" }
+        check(target.parentFile!!.mkdirs() || target.parentFile!!.isDirectory)
+        recover(target)
+        val staging = File(target.parentFile, ".${target.name}.staging-${UUID.randomUUID()}")
+        check(staging.mkdirs()) { "Cannot create resource staging directory" }
+        try {
+            ZipFile(archive).use { zip ->
+                require(zip.size() <= 100_000) { "Too many archive entries" }
+                val roots = HashSet<String>()
+                val entries = zip.entries().asSequence().mapNotNull { entry ->
+                    ensureActive()
+                    val name = if (entry.isDirectory) entry.name.removeSuffix("/") else entry.name
+                    require(isSafeResourcePath(name)) { "Unsafe archive entry: ${entry.name}" }
+                    roots += name.substringBefore('/')
+                    require(roots.size == 1) { "Source archive must have one root directory" }
+                    if (entry.isDirectory) null else source.mapEntry(name)?.let { entry to it }
+                }.toList()
+                require(entries.isNotEmpty() && entries.size <= 50_000) { "Unexpected resource file count: ${entries.size}" }
+                val seen = HashSet<String>()
+                var totalBytes = 0L
+                val buffer = ByteArray(128 * 1024)
+                for ((index, pair) in entries.withIndex()) {
+                    ensureActive()
+                    val (entry, relative) = pair
+                    require(isSafeResourcePath(relative) && seen.add(relative.lowercase(Locale.ROOT))) { "Duplicate or unsafe resource: $relative" }
+                    val dest = File(staging, relative)
+                    check(dest.parentFile!!.mkdirs() || dest.parentFile!!.isDirectory)
+                    var fileBytes = 0L
+                    zip.getInputStream(entry).use { input ->
+                        dest.outputStream().use { output ->
+                            while (true) {
+                                ensureActive()
+                                val read = input.read(buffer)
+                                if (read < 0) break
+                                fileBytes += read
+                                totalBytes += read
+                                require(fileBytes <= 256L * 1024 * 1024 && totalBytes <= 512L * 1024 * 1024) {
+                                    "Resource archive exceeds size limit"
+                                }
+                                output.write(buffer, 0, read)
+                            }
+                        }
+                    }
+                    progress(index + 1, entries.size)
+                }
+            }
+            ensureActive()
+            pack.finalizeUpstreamInstall(staging, revision)
+            pack.verifyInstalledFiles(staging)?.let { throw IOException(it) }
+            check(!pack.readInstalledVersion(staging).isNullOrBlank()) { "Resource version missing after validation" }
+            ensureActive()
+            // No suspension/cancellation point between the two renames.
+            val backup = backupOf(target)
+            if (target.exists()) check(move(target, backup)) { "Cannot back up installed resources" }
+            try {
+                if (!move(staging, target)) throw IOException("Cannot activate resource update")
+            } catch (failure: Exception) {
+                if (!target.exists() && backup.exists()) {
+                    try { check(move(backup, target)) { "Cannot restore previous resources" } }
+                    catch (restore: Exception) { failure.addSuppressed(restore) }
+                }
+                throw failure
+            }
+            backup.deleteRecursively()
+        } finally {
+            staging.deleteRecursively()
+        }
+    }
+
+    /** Called under the pack lock, also before opening an installed pack after process restart. */
+    fun recover(target: File) {
+        val backup = backupOf(target)
+        require(!Files.isSymbolicLink(target.toPath()) && !Files.isSymbolicLink(backup.toPath())) {
+            "Resource target/backup must not be a symbolic link"
+        }
+        if (!target.exists() && backup.exists()) {
+            check(move(backup, target)) { "Cannot restore interrupted resource update" }
+        } else if (target.exists() && backup.exists()) {
+            check(backup.deleteRecursively()) { "Cannot remove previous resource backup" }
+        }
+        target.parentFile?.listFiles()?.filter {
+            it.name.startsWith(".${target.name}.staging-")
+        }?.forEach { it.deleteRecursively() }
+    }
+
+    private fun backupOf(target: File) = File(target.parentFile, ".${target.name}.previous")
+}

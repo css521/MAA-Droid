@@ -1,0 +1,150 @@
+package com.aliothmoon.maadroid.engine
+
+import android.os.Binder
+import android.os.IBinder
+import com.aliothmoon.maadroid.IEngineDeviceSession
+import com.aliothmoon.maadroid.RemoteService
+import com.aliothmoon.maadroid.domain.models.RunMode
+import com.aliothmoon.maadroid.remote.BgrFrameLayout
+import com.aliothmoon.maadroid.remote.PermissionGrantRequest
+import com.aliothmoon.maadroid.remote.RemoteDeviceHandle
+import com.aliothmoon.maadroid.remote.SetupResult
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import timber.log.Timber
+import java.util.concurrent.atomic.AtomicBoolean
+
+/**
+ * One Android display/capture lifetime, independent of resource loading and task/UI state.
+ * Acquire RemoteService through RemoteServiceManager.useRemoteService so the parent's
+ * configured Root/Shizuku authorization and host permission grants remain in effect.
+ * Stop/join engine work before close: a Frame's mapped bytes must have no remaining readers.
+ */
+class EngineDeviceSession private constructor(
+    val device: RemoteDeviceHandle,
+    val packageName: String,
+    val displayId: Int,
+    // Keep the App-process death token alive for the full lease lifetime.
+    @Suppress("unused") private val owner: IBinder,
+) : AutoCloseable {
+    private val closed = AtomicBoolean(false)
+
+    /** A failed engine connection also releases this session's display and mapped frames. */
+    suspend fun connect(engine: AutomationEngine): Result<Unit> {
+        return try {
+            check(!closed.get()) { "设备会话已关闭" }
+            engine.connect(device).getOrThrow()
+            Result.success(Unit)
+        } catch (failure: Throwable) {
+            releaseAfterFailure(failure)
+            if (failure is CancellationException) throw failure
+            Result.failure(failure)
+        }
+    }
+
+    /** Terminal stop. A later run must open a new device session and reconnect the engine. */
+    suspend fun stop(engine: AutomationEngine): Boolean = withContext(NonCancellable + Dispatchers.IO) {
+        try {
+            engine.stop()
+        } finally {
+            close()
+        }
+    }
+
+    override fun close() {
+        if (closed.compareAndSet(false, true)) device.close()
+    }
+
+    private suspend fun releaseAfterFailure(failure: Throwable) = withContext(NonCancellable + Dispatchers.IO) {
+        runCatching { close() }.exceptionOrNull()?.let(failure::addSuppressed)
+    }
+
+    companion object {
+        /**
+         * Select the first installed profile package, create capture, grant game permissions,
+         * launch on that display, and wait for an actual, dimension-checked BGR frame.
+         * Throws on failure; partial acquisition and cancellation always close the owned lease.
+         * The timeout bounds first-frame polling, not blocking Android Binder transactions.
+         */
+        suspend fun open(
+            profile: GameProfile,
+            service: RemoteService,
+            mode: RunMode,
+            firstFrameTimeoutMs: Long = 10_000,
+            framePollIntervalMs: Long = 50,
+        ): EngineDeviceSession = open(
+            profile, service, mode, firstFrameTimeoutMs, framePollIntervalMs,
+            createOwner = { Binder() },
+            createHandle = { remote, width, height, lease -> RemoteDeviceHandle(remote, width, height, lease) },
+        )
+
+        internal suspend fun open(
+            profile: GameProfile,
+            service: RemoteService,
+            mode: RunMode,
+            firstFrameTimeoutMs: Long,
+            framePollIntervalMs: Long,
+            createOwner: () -> IBinder,
+            createHandle: (RemoteService, Int, Int, IEngineDeviceSession) -> RemoteDeviceHandle,
+        ): EngineDeviceSession {
+            require(mode == RunMode.BACKGROUND) { "通用引擎暂不支持前台模式的输入，请使用后台模式" }
+            require(firstFrameTimeoutMs > 0 && framePollIntervalMs > 0)
+            val spec = profile.display
+            require(spec.dpi > 0 && spec.width.toLong() * spec.height <= Int.MAX_VALUE / 3) {
+                "无效显示规格: $spec"
+            }
+            var remote: IEngineDeviceSession? = null
+            var session: EngineDeviceSession? = null
+            try {
+                return withContext(Dispatchers.IO) {
+                    val setup = service.setupDevice()
+                    check(setup == SetupResult.OK) { "设备初始化失败: ${SetupResult.describe(setup)}" }
+                    val pkg = profile.gamePackages.firstOrNull { service.isPackageInstalled(it) }
+                        ?: error("未安装游戏，请安装以下包之一: ${profile.gamePackages.joinToString()}")
+                    val owner = createOwner()
+                    val lease = service.openDeviceSession(owner, mode.displayMode, spec.width, spec.height, spec.dpi)
+                        ?: error("未能创建设备会话，请检查远程服务版本和显示状态")
+                    remote = lease
+                    val handle = createHandle(service, spec.width, spec.height, lease)
+                    val ready = EngineDeviceSession(handle, pkg, lease.displayId, owner)
+                    session = ready
+                    // Same best-effort policy and permission mask as MaaCompositionService.
+                    runCatching {
+                        service.grantPermissions(PermissionGrantRequest(
+                            packageName = pkg,
+                            permissions = PermissionGrantRequest.PERM_BATTERY or PermissionGrantRequest.PERM_BACKGROUND,
+                        ))
+                    }.onFailure { Timber.w(it, "Failed to grant game battery/background permissions: %s", pkg) }
+                    check(handle.control.startApp(pkg)) { "启动游戏失败: $pkg (display=${ready.displayId})" }
+                    val received = withTimeoutOrNull(firstFrameTimeoutMs) {
+                        while (true) {
+                            val frame = handle.frames.grab()
+                            if (frame != null) {
+                                BgrFrameLayout.byteCount(
+                                    longArrayOf(frame.width.toLong(), frame.height.toLong(), frame.stride.toLong(), frame.seq),
+                                    spec.width, spec.height, frame.buffer.remaining(),
+                                )
+                                break
+                            }
+                            delay(framePollIntervalMs)
+                        }
+                        true
+                    }
+                    check(received == true) { "等待游戏 BGR 首帧超时 (${firstFrameTimeoutMs}ms, ${spec.width}x${spec.height})" }
+                    ready
+                }
+            } catch (failure: Throwable) {
+                // Also covers cancellation at withContext's return boundary, after acquisition.
+                withContext(NonCancellable + Dispatchers.IO) {
+                    runCatching { session?.close() ?: remote?.close() }
+                        .exceptionOrNull()?.let(failure::addSuppressed)
+                }
+                throw failure
+            }
+        }
+    }
+}

@@ -24,6 +24,7 @@ import java.io.File
  * 都不该让整条任务链在半路崩掉。
  */
 class JsonLimbusConfig(private val sections: Map<String, JsonObject>) : LimbusConfig {
+    override fun section(section: String): Map<String, JsonElement> = sections[section].orEmpty()
 
     private fun valueOf(section: String, key: String): JsonElement? =
         sections[section]?.get(key)
