@@ -9,7 +9,7 @@ package com.aliothmoon.maadroid.engine
 interface EngineProvider {
     val profile: GameProfile
 
-    /** 惰性创建：未被切换到的游戏不应加载其资源与原生库 */
+    /** 每次创建独立的运行实例；调用者持有它，并在 stop 后 release。 */
     fun createEngine(): AutomationEngine
 
     val ui: EngineUi
@@ -24,7 +24,6 @@ interface EngineProvider {
 object EngineRegistry {
 
     private val providers = LinkedHashMap<String, EngineProvider>()
-    private val engines = HashMap<String, AutomationEngine>()
 
     fun register(provider: EngineProvider) {
         providers[provider.profile.id] = provider
@@ -35,11 +34,8 @@ object EngineRegistry {
 
     fun provider(engineId: String): EngineProvider? = providers[engineId]
 
-    /** 惰性创建并缓存；同一引擎多次取用返回同一实例 */
-    fun engine(engineId: String): AutomationEngine? {
-        val p = providers[engineId] ?: return null
-        return engines.getOrPut(engineId) { p.createEngine() }
-    }
+    /** 注册表只提供工厂，不持有运行实例；实例及其事件流属于创建它的会话。 */
+    fun createEngine(engineId: String): AutomationEngine? = providers[engineId]?.createEngine()
 
     /** 所有引擎声明的资源包，供更新服务遍历 —— 这是「各自跟随各自上游」的入口 */
     fun allResourcePacks(): List<ResourcePackSpec> =
@@ -65,6 +61,5 @@ object EngineRegistry {
     /** 仅测试用：清空以避免用例间互相污染 */
     internal fun clearForTest() {
         providers.clear()
-        engines.clear()
     }
 }

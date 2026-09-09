@@ -3,6 +3,7 @@ package com.aliothmoon.maadroid.engine
 import com.aliothmoon.maadroid.remote.EngineIds
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -13,7 +14,7 @@ import kotlin.io.path.createTempDirectory
 /**
  * 引擎会话的契约。
  *
- * 立这些用例的直接原因：`EngineRegistry.engine(id)`、`RemoteDeviceHandle` 与
+ * 立这些用例的直接原因：引擎工厂、`RemoteDeviceHandle` 与
  * `ResourcePackSpec.checkCompatibility` 三者此前**都没有任何生产调用方** ——
  * 引擎、设备句柄、兼容门闸全都写好了却没串起来，于是边狱引擎跑不起来，
  * 而门闸也等于不存在（只有测试在调）。这里钉住那条链的关键约定。
@@ -116,12 +117,21 @@ class EngineSessionContractTest {
     // ---- 引擎实例化 ----
 
     @Test
-    fun limbusEngineIsInstantiableAndCached() {
-        val first = EngineRegistry.engine(EngineIds.LIMBUS)
-        assertNotNull("边狱引擎应可实例化（曾长期是 TODO()）", first)
-        // 同一引擎多次取用必须是同一实例：它持有模板 Mat 缓存与设备句柄，
-        // 每次新建会让上一次的原生资源泄漏
-        assertTrue(first === EngineRegistry.engine(EngineIds.LIMBUS))
+    fun limbusEngineFactoryCreatesIndependentRuns() {
+        val first = EngineRegistry.createEngine(EngineIds.LIMBUS)
+        try {
+            val second = EngineRegistry.createEngine(EngineIds.LIMBUS)
+            try {
+                assertNotNull("边狱引擎应可实例化", first)
+                assertNotNull(second)
+                assertNotSame("已 release 的运行实例不能交给后来的会话", first, second)
+                assertNotSame(first!!.events, second!!.events)
+            } finally {
+                second?.release()
+            }
+        } finally {
+            first?.release()
+        }
     }
 
     @Test

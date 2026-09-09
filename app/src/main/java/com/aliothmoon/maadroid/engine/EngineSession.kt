@@ -26,9 +26,11 @@ class EngineSession(
 ) {
     private var deviceSession: EngineDeviceSession? = null
     private val resourceLeases = mutableListOf<Closeable>()
-    private val engine get() = EngineRegistry.engine(engineId)
     private var executionLease: EngineExecutionCoordinator.Lease? = null
-    private var ownedEngine: AutomationEngine? = null
+    @Volatile private var ownedEngine: AutomationEngine? = null
+    private val engineLock = Any()
+    private var closing = false
+    private var preparationStarted = false
     private val closeMutex = Mutex()
     private val previewLock = Any()
     private var previewSurface: Surface? = null
@@ -50,13 +52,24 @@ class EngineSession(
 
     private fun trace(phase: String, detail: String = "") = AppDiagnostics.record(engineId, phase, detail)
 
+    /** The VM subscribes before prepare. Both entry points must use this one owned instance. */
+    private fun getOrCreateEngine(): AutomationEngine? = synchronized(engineLock) {
+        if (closing) return@synchronized null
+        ownedEngine ?: EngineRegistry.createEngine(engineId)?.also { ownedEngine = it }
+    }
+
     suspend fun prepare(): String? = withContext(Dispatchers.IO) {
-        val profile = EngineRegistry.provider(engineId)?.profile ?: return@withContext "引擎 $engineId 未注册"
-        check(executionLease == null) { "会话已在准备或运行" }
-        executionLease = EngineExecutionCoordinator.shared.tryStart(engineId)
-            ?: return@withContext "其它任务正在运行或准备资源，请先停止该任务"
-        trace("prepare.begin", "mode=$runMode")
+        synchronized(engineLock) {
+            check(!closing) { "会话已关闭，请创建新会话" }
+            check(!preparationStarted) { "会话已在准备或运行" }
+            preparationStarted = true
+        }
         try {
+            // Admission/resource failures also release an engine already obtained by events().
+            val profile = EngineRegistry.provider(engineId)?.profile ?: error("引擎 $engineId 未注册")
+            executionLease = EngineExecutionCoordinator.shared.tryStart(engineId)
+                ?: error("其它任务正在运行或准备资源，请先停止该任务")
+            trace("prepare.begin", "mode=$runMode")
             for (pack in profile.resourcePacks.sortedBy { it.packId }) {
                 trace("resources.ensure", pack.packId)
                 if (pack.upstreamArchive != null) resources.ensureInstalled(pack).getOrThrow()
@@ -69,8 +82,7 @@ class EngineSession(
                 trace("resources.verified", "${pack.packId} version=${pack.readInstalledVersion(dir)}")
             }
             val mainPack = profile.resourcePacks.firstOrNull() ?: error("引擎未声明资源包")
-            val activeEngine = engine ?: error("无法创建引擎 $engineId")
-            ownedEngine = activeEngine
+            val activeEngine = getOrCreateEngine() ?: error("无法创建引擎 $engineId")
             activeEngine.setDiagnosticSink { phase, detail -> trace(phase, detail) }
             trace("engine.prepare")
             activeEngine.prepare(EngineDataRoot.forPack(context, mainPack)).getOrThrow()
@@ -108,7 +120,7 @@ class EngineSession(
         }
     }
 
-    fun events() = engine?.events
+    fun events() = getOrCreateEngine()?.events
     fun appendTask(type: String, paramsJson: String) = ownedEngine?.appendTask(type, paramsJson) ?: AutomationEngine.INVALID_TASK_ID
     suspend fun start(): Boolean = withContext(Dispatchers.IO) {
         trace("engine.start")
@@ -129,12 +141,17 @@ class EngineSession(
 
     suspend fun close(): Unit = withContext(NonCancellable + Dispatchers.IO) {
         closeMutex.withLock {
+            // Serialize creation with closure: even events() racing close cannot leak a new engine.
+            val activeEngine = synchronized(engineLock) {
+                closing = true
+                ownedEngine
+            }
             synchronized(previewLock) {
                 acceptsManualInput = false
                 deviceSession?.releaseManualInput()
             }
             try {
-                check(ownedEngine?.stop() != false) { "引擎尚未停止，保留设备会话以便重试停止" }
+                check(activeEngine?.stop() != false) { "引擎尚未停止，保留设备会话以便重试停止" }
             } catch (failure: Throwable) {
                 if (!failure.isRecoverableEngineFailure() || isRunning) throw failure
                 AppDiagnostics.failure(engineId, "cleanup.stop", failure)
@@ -148,9 +165,9 @@ class EngineSession(
                 }
             }
             try {
-                cleanup { ownedEngine?.release() }
-                cleanup { ownedEngine?.setDiagnosticSink(null) }
-                ownedEngine = null
+                cleanup { activeEngine?.release() }
+                cleanup { activeEngine?.setDiagnosticSink(null) }
+                synchronized(engineLock) { ownedEngine = null }
                 synchronized(previewLock) {
                     _previewReady.value = false
                     previewSurface = null
