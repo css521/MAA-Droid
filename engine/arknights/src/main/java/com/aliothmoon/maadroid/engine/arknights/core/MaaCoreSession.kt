@@ -43,7 +43,23 @@ class MaaCoreSession(
     private val connectMutex = Mutex()
 
     val isRunning: Boolean get() = client.running()
+    /** native Connect 也会操作设备，即使 AsstRunning 此时仍为 false。 */
+    val isBusy: Boolean get() = pendingConnect.get()?.result?.isCompleted == false || client.running()
     val version: String get() = client.version()
+
+    fun clearTasks(): Boolean = !isBusy && client.stop()
+
+    fun appendTask(type: String, params: String): Int {
+        check(initialized) { "MaaCore session has not been initialized" }
+        return client.appendTask(type, params)
+    }
+
+    fun setTaskParams(taskId: Int, params: String): Boolean = client.setTaskParams(taskId, params)
+
+    fun startQueuedTasks(): Boolean {
+        check(initialized) { "MaaCore session has not been initialized" }
+        return client.start()
+    }
 
     fun initialize(): Initialization {
         if (initialized && client.hasInstance()) return Initialization.READY

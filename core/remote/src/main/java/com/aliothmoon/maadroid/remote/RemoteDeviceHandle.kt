@@ -1,32 +1,67 @@
 package com.aliothmoon.maadroid.remote
 
 import android.content.Intent
+import android.os.IBinder
 import android.os.SharedMemory
 import android.view.Surface
 import com.aliothmoon.maadroid.RemoteService
 import com.aliothmoon.maadroid.IEngineDeviceSession
 import com.aliothmoon.maadroid.engine.DeviceControl
-import com.aliothmoon.maadroid.engine.DeviceHandle
+import com.aliothmoon.maadroid.engine.DisplaySpec
 import com.aliothmoon.maadroid.engine.Frame
 import com.aliothmoon.maadroid.engine.FrameSource
 import com.aliothmoon.maadroid.engine.InputSink
+import com.aliothmoon.maadroid.engine.RemoteEngineDevice
 import java.nio.ByteBuffer
 
 /**
  * 把提权进程的 `RemoteService` 适配成 engine-api 的设备句柄。
  *
- * 这是「跑在 App 进程的引擎」与「跑在提权进程的能力」之间的桥。方舟引擎不用它
- * （MaaCore 在提权进程内直接访问帧缓冲与输入），边狱引擎全靠它。
+ * App 进程内的引擎使用帧、输入与设备控制；提权进程内的引擎通过可选能力获取服务 Binder。
  *
  * @param width 逻辑宽，取自 `GameProfile.display`
  * @param height 逻辑高
+ * @param dpi 显示密度，取自 `GameProfile.display`
+ * @param legacyDisplayId 无独占会话时由调用者明确提供的显示器 ID
  */
 class RemoteDeviceHandle(
     private val service: RemoteService,
     width: Int,
     height: Int,
     private val session: IEngineDeviceSession? = null,
-) : DeviceHandle {
+    dpi: Int = 160,
+    private val legacyDisplayId: Int? = null,
+) : RemoteEngineDevice {
+
+    private val lifecycleLock = Any()
+    private var closed = false
+
+    override val displaySpec: DisplaySpec = DisplaySpec(width, height, dpi)
+
+    override val displayId: Int
+        get() = synchronized(lifecycleLock) {
+            check(!closed) { "设备句柄已关闭" }
+            session?.displayId ?: checkNotNull(legacyDisplayId) {
+                "无设备会话时必须显式提供 legacyDisplayId"
+            }
+        }
+
+    override fun engineService(engineId: String): IBinder? = synchronized(lifecycleLock) {
+        checkActiveSession()
+        val binder = service.getEngineService(engineId)
+        // The remote lease may expire while the service lookup is in flight.
+        checkActiveSession()
+        binder
+    }
+
+    private fun checkActiveSession() {
+        check(!closed) { "设备句柄已关闭" }
+        if (session != null) {
+            check(session.matchesDisplaySpec(displaySpec.width, displaySpec.height, displaySpec.dpi)) {
+                "设备会话显示规格不匹配"
+            }
+        }
+    }
 
     override val frames: FrameSource = SharedMemoryFrameSource(
         width, height,
@@ -44,7 +79,9 @@ class RemoteDeviceHandle(
         if (session != null) session.setPreviewSurface(surface) else service.setMonitorSurface(surface)
     }
 
-    fun close() {
+    fun close() = synchronized(lifecycleLock) {
+        if (closed) return@synchronized
+        closed = true
         try {
             frames.close()
         } finally {

@@ -7,6 +7,7 @@ interface MaaCoreClient {
     fun setInstanceOption(key: Int, value: String): Boolean
     fun asyncConnect(config: String): Int
     fun appendTask(type: String, params: String): Int
+    fun setTaskParams(taskId: Int, params: String): Boolean
     fun start(): Boolean
     fun stop(): Boolean
     fun running(): Boolean

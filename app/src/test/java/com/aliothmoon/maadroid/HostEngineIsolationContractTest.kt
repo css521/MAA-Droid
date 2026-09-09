@@ -77,7 +77,12 @@ class HostEngineIsolationContractTest {
     )
 
     // 混杂目录中的方舟单文件仍属于引擎；只按文件归类，不能豁免同目录宿主类。
-    private val arknightsOwnFiles = listOf("data/config/MaaPathConfig.kt")
+    private val arknightsOwnFiles = listOf(
+        "data/config/MaaPathConfig.kt",
+        // Temporary Arknights-only adapter to its existing resource loader; not generic host code.
+        // Keep an exact file entry so EngineSession and other host orchestration stay checked.
+        "engine/arknights/ArknightsResourcePreparation.kt",
+    )
 
     /**
      * 各宿主目录当前对方舟的 import 行数；0 表示已干净、不得回退。

@@ -55,6 +55,7 @@ class MaaCoreSessionTest {
             queue += type
             return appends
         }
+        override fun setTaskParams(taskId: Int, params: String) = true
         override fun start(): Boolean {
             starts++
             onStart()

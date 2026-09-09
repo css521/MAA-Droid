@@ -15,6 +15,7 @@ class AidlMaaCoreClient(private val service: MaaCoreService) : MaaCoreClient {
     override fun setInstanceOption(key: Int, value: String) = service.SetInstanceOption(key, value)
     override fun asyncConnect(config: String) = service.AsyncConnect("", "Android", config, false)
     override fun appendTask(type: String, params: String) = service.AppendTask(type, params)
+    override fun setTaskParams(taskId: Int, params: String) = service.SetTaskParams(taskId, params)
     override fun start() = service.Start()
     override fun stop() = service.Stop()
     override fun running() = service.Running()
