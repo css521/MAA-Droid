@@ -1,6 +1,6 @@
 ﻿<resources>
     <string name="arknights_game_name">Arknights</string>
-    <string name="app_name">MAA Droid</string>
+    <string name="app_name">MAA-Droid</string>
     <string name="volume_key_service_description">Double-tap volume down to toggle the control panel</string>
     <string name="accessibility_helper_service_description">Accessibility helper: double-tap volume down to toggle the control panel</string>
     <string name="common_confirm">Confirm</string>
@@ -73,7 +73,7 @@
     <string name="settings_monet_color_desc">Generate colors from your wallpaper; off uses the built-in blue theme.</string>
 
     <string name="settings_achievement_title">Achievements</string>
-    <string name="settings_achievement_desc">View MAA Droid milestones and hidden easter eggs</string>
+    <string name="settings_achievement_desc">View MAA-Droid milestones and hidden easter eggs</string>
     <string name="settings_achievement_debug_title">Achievement Debug</string>
     <string name="settings_achievement_debug_desc">Manually unlock, unlock all, or clear achievement records</string>
     <string name="settings_theme_title">Theme</string>
@@ -169,13 +169,13 @@
     <string name="achievement_progress">Progress %1$d / %2$d</string>
     <string name="achievement_unlocked_at">Unlocked at %1$s</string>
     <string name="achievement_first_launch_title">First Encounter</string>
-    <string name="achievement_first_launch_desc">Welcome to MAA Droid.</string>
-    <string name="achievement_first_launch_condition">Launch MAA Droid once</string>
+    <string name="achievement_first_launch_desc">Welcome to MAA-Droid.</string>
+    <string name="achievement_first_launch_condition">Launch MAA-Droid once</string>
     <string name="achievement_use_daily_1_title">Steady Check-in</string>
-    <string name="achievement_use_daily_1_desc">Use MAA Droid for a full week in a row.</string>
+    <string name="achievement_use_daily_1_desc">Use MAA-Droid for a full week in a row.</string>
     <string name="achievement_use_daily_1_condition">Use the app for 7 consecutive days</string>
     <string name="achievement_use_daily_2_title">Long-term Companion</string>
-    <string name="achievement_use_daily_2_desc">MAA Droid has become part of your routine.</string>
+    <string name="achievement_use_daily_2_desc">MAA-Droid has become part of your routine.</string>
     <string name="achievement_use_daily_2_condition">Use the app for 30 consecutive days</string>
     <string name="achievement_task_starter_1_title">First Commission</string>
     <string name="achievement_task_starter_1_desc">Start your first task run.</string>
@@ -197,7 +197,7 @@
     <string name="achievement_observer_condition">Open the achievements page once</string>
     <string name="achievement_midnight_launch_title">Night Owl Doctor</string>
     <string name="achievement_midnight_launch_desc">Still watching over Rhodes Island at midnight.</string>
-    <string name="achievement_midnight_launch_condition">Launch MAA Droid between 00:00 and 04:00</string>
+    <string name="achievement_midnight_launch_condition">Launch MAA-Droid between 00:00 and 04:00</string>
     <string name="achievement_debug_title">Achievement Debug</string>
     <string name="achievement_debug_desc">Debug achievement data. Entry: tap the version number on the Settings page 20 times.</string>
     <string name="achievement_debug_select_label">Achievement</string>
@@ -421,7 +421,7 @@
     <string name="dialog_mute_game_message">This relies on system APIs and may not work or may fail to restore audio on some devices.\nA more reliable option is to set media volume to 0 with the volume keys.</string>
     <string name="dialog_mute_game_confirm">Mute anyway</string>
     <string name="dialog_hardware_screen_off_title">Enable hardware screen-off?</string>
-    <string name="dialog_hardware_screen_off_message">When enabled, tapping "Screen Off" fully turns off the screen for maximum power saving.\n• Stays awake: while enabled, the screen won\'t turn off automatically when MAA Droid is in the foreground, preventing the system from sleeping and interrupting tasks.\n• Wake-up: press the power button twice (the lock screen lights up first, then unlock).\n• Screen-saver mode: if disabled, a screen-saver clock is shown so you can monitor task progress and battery at any time.</string>
+    <string name="dialog_hardware_screen_off_message">When enabled, tapping "Screen Off" fully turns off the screen for maximum power saving.\n• Stays awake: while enabled, the screen won\'t turn off automatically when MAA-Droid is in the foreground, preventing the system from sleeping and interrupting tasks.\n• Wake-up: press the power button twice (the lock screen lights up first, then unlock).\n• Screen-saver mode: if disabled, a screen-saver clock is shown so you can monitor task progress and battery at any time.</string>
 
     <!-- update card -->
     <string name="update_card_title">Updates</string>
@@ -489,9 +489,9 @@
     <string name="dialog_shizuku_not_running_message">Shizuku is installed but the service is not running. Please open Shizuku and start the service.</string>
     <string name="dialog_shizuku_open_app">Open Shizuku</string>
     <string name="dialog_sui_detected_title">Sui Detected</string>
-    <string name="dialog_sui_detected_message">Sui is providing the Shizuku service with root privileges. MAA Droid may not work correctly; please verify by actual testing.</string>
+    <string name="dialog_sui_detected_message">Sui is providing the Shizuku service with root privileges. MAA-Droid may not work correctly; please verify by actual testing.</string>
     <string name="dialog_shizuku_need_auth_title">Shizuku Not Authorized</string>
-    <string name="dialog_shizuku_need_auth_message">Shizuku is running but has not authorized MAA Droid yet. Please grant access. This prompt will keep showing until access is granted.</string>
+    <string name="dialog_shizuku_need_auth_message">Shizuku is running but has not authorized MAA-Droid yet. Please grant access. This prompt will keep showing until access is granted.</string>
 
     <string name="settings_section_about">About</string>
     <string name="settings_about_version">Version</string>
@@ -524,7 +524,7 @@
     <string name="maa_try_to_reconnect">Emulator disconnected, trying to reconnect</string>
     <string name="maa_fastest_way_to_screencap">Screenshot test tasks: %1$sms (%2$s)</string>
     <string name="maa_task_error">Task error: </string>
-    <string name="maa_out_of_memory_error">The %1$s task stopped due to insufficient memory. Close some background apps or restart MAA Droid and try again</string>
+    <string name="maa_out_of_memory_error">The %1$s task stopped due to insufficient memory. Close some background apps or restart MAA-Droid and try again</string>
     <string name="maa_combat_error">Combat error</string>
     <string name="maa_start_task">Start task: </string>
     <string name="maa_complete_task">Complete task: </string>
@@ -1540,7 +1540,7 @@
     <string name="notification_event_recruit_high_rarity">Found a %1$d-star combination</string>
     <string name="notification_event_subtask_failure">Subtask Error</string>
     <string name="notification_test_title">Test Notification</string>
-    <string name="notification_test_message_full">This is a test notification from MAA Droid</string>
+    <string name="notification_test_message_full">This is a test notification from MAA-Droid</string>
     <string name="notification_feedback_no_channel">Enable at least one notification channel first</string>
     <string name="notification_feedback_send_success">%1$s sent successfully</string>
     <string name="notification_feedback_send_failed">%1$s failed to send</string>
@@ -1931,7 +1931,7 @@
     <string name="onboarding_next">Next</string>
     <string name="onboarding_done">Get Started</string>
     <string name="onboarding_step_counter">%1$d / %2$d</string>
-    <string name="onboarding_welcome_title">Welcome to MAA Droid</string>
+    <string name="onboarding_welcome_title">Welcome to MAA-Droid</string>
     <string name="onboarding_welcome_body">An Arknights assistant for Android — daily chores on autopilot.\n\nShizuku or Root is needed for privileges. Take a minute to learn the key areas of the home screen — you can skip at any time.</string>
     <string name="onboarding_status_title">Status Overview</string>
     <string name="onboarding_status_body">Shows screen resolution, resource and app versions, and the connection state of the service.\nTasks can only start properly once the service is connected.</string>
@@ -2013,7 +2013,7 @@
     <string name="achievement_RoguelikeGoldMax_desc">Cannott, bring out your most expensive stuff!</string>
     <string name="achievement_RoguelikeGoldMax_condition">Integrated Strategies Originium Ingots reach 999</string>
     <string name="achievement_FirstLaunch_title">First Timer</string>
-    <string name="achievement_FirstLaunch_desc">Welcome to MAA Droid.</string>
+    <string name="achievement_FirstLaunch_desc">Welcome to MAA-Droid.</string>
     <string name="achievement_FirstLaunch_condition">Launch the software for the first time</string>
     <string name="achievement_SanityExpire_title">About to Expire</string>
     <string name="achievement_SanityExpire_desc">Hurry up and use them!!!</string>
@@ -2048,12 +2048,12 @@
     <string name="achievement_QueueSimplifier_title">Queue Simplifier</string>
     <string name="achievement_QueueSimplifier_desc">Cutting the clutter is optimization too.</string>
     <string name="achievement_QueueSimplifier_condition">Manually delete a task</string>
-    <string name="achievement_MaaMeowFirstTaskStart_title">MAA Droid, Start!</string>
-    <string name="achievement_MaaMeowFirstTaskStart_desc">MAA Droid has started running.</string>
-    <string name="achievement_MaaMeowFirstTaskStart_condition">Start a MAA Droid task successfully for the first time</string>
+    <string name="achievement_MaaMeowFirstTaskStart_title">MAA-Droid, Start!</string>
+    <string name="achievement_MaaMeowFirstTaskStart_desc">MAA-Droid has started running.</string>
+    <string name="achievement_MaaMeowFirstTaskStart_condition">Start a MAA-Droid task successfully for the first time</string>
     <string name="achievement_MaaMeowFirstTaskComplete_title">Our First Voyage</string>
     <string name="achievement_MaaMeowFirstTaskComplete_desc">The first task reached its destination.</string>
-    <string name="achievement_MaaMeowFirstTaskComplete_condition">Complete a task with MAA Droid successfully for the first time</string>
+    <string name="achievement_MaaMeowFirstTaskComplete_condition">Complete a task with MAA-Droid successfully for the first time</string>
     <string name="achievement_MirrorChyanFirstUse_title">Mirror～～☆</string>
     <string name="achievement_MirrorChyanFirstUse_desc">It\'s MirrorChyan! We\'re saved!</string>
     <string name="achievement_MirrorChyanFirstUse_condition">Successfully use MirrorChyan for the first time</string>

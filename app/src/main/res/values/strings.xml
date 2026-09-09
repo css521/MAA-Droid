@@ -1,6 +1,6 @@
 ﻿<resources>
     <string name="arknights_game_name">明日方舟</string>
-    <string name="app_name">MAA Droid</string>
+    <string name="app_name">MAA-Droid</string>
     <string name="volume_key_service_description">双击音量下键快速切换操作面板</string>
     <string name="accessibility_helper_service_description">无障碍辅助服务：双击音量下键快速切换操作面板</string>
 
@@ -17,7 +17,7 @@
 
     <!-- taskchain -->
     <string name="maa_task_error">任务出错: </string>
-    <string name="maa_out_of_memory_error">%1$s任务因内存不足停止，请关闭部分后台应用或重启 MAA Droid 后重试</string>
+    <string name="maa_out_of_memory_error">%1$s任务因内存不足停止，请关闭部分后台应用或重启 MAA-Droid 后重试</string>
     <string name="maa_combat_error">战斗出错</string>
     <string name="maa_start_task">开始任务: </string>
     <string name="maa_complete_task">完成任务: </string>
@@ -280,7 +280,7 @@
     <string name="settings_monet_color_desc">根据壁纸动态取色，关闭则使用内置蓝色主题</string>
 
     <string name="settings_achievement_title">成就</string>
-    <string name="settings_achievement_desc">查看 MAA Droid 使用记录与隐藏彩蛋</string>
+    <string name="settings_achievement_desc">查看 MAA-Droid 使用记录与隐藏彩蛋</string>
     <string name="settings_achievement_debug_title">成就调试</string>
     <string name="settings_achievement_debug_desc">手动解锁、全解锁或清空成就记录</string>
     <string name="settings_theme_title">主题模式</string>
@@ -381,13 +381,13 @@
     <string name="achievement_progress">进度 %1$d / %2$d</string>
     <string name="achievement_unlocked_at">解锁于 %1$s</string>
     <string name="achievement_first_launch_title">初次见面</string>
-    <string name="achievement_first_launch_desc">欢迎来到 MAA Droid。</string>
-    <string name="achievement_first_launch_condition">启动一次 MAA Droid</string>
+    <string name="achievement_first_launch_desc">欢迎来到 MAA-Droid。</string>
+    <string name="achievement_first_launch_condition">启动一次 MAA-Droid</string>
     <string name="achievement_use_daily_1_title">稳定上线</string>
-    <string name="achievement_use_daily_1_desc">连续使用 MAA Droid 一周。</string>
+    <string name="achievement_use_daily_1_desc">连续使用 MAA-Droid 一周。</string>
     <string name="achievement_use_daily_1_condition">连续使用 7 天</string>
     <string name="achievement_use_daily_2_title">长期陪伴</string>
-    <string name="achievement_use_daily_2_desc">MAA Droid 已经成为你的日常工具。</string>
+    <string name="achievement_use_daily_2_desc">MAA-Droid 已经成为你的日常工具。</string>
     <string name="achievement_use_daily_2_condition">连续使用 30 天</string>
     <string name="achievement_task_starter_1_title">第一次委托</string>
     <string name="achievement_task_starter_1_desc">开始执行第一轮任务。</string>
@@ -409,7 +409,7 @@
     <string name="achievement_observer_condition">打开一次成就页面</string>
     <string name="achievement_midnight_launch_title">夜猫子博士</string>
     <string name="achievement_midnight_launch_desc">深夜也在照看罗德岛。</string>
-    <string name="achievement_midnight_launch_condition">0 点至 4 点启动 MAA Droid</string>
+    <string name="achievement_midnight_launch_condition">0 点至 4 点启动 MAA-Droid</string>
     <string name="achievement_debug_title">成就调试</string>
     <string name="achievement_debug_desc">用于调试成就数据。入口：连续点击设置页版本号 20 次。</string>
     <string name="achievement_debug_select_label">指定成就</string>
@@ -634,7 +634,7 @@
     <string name="dialog_mute_game_message">该功能依赖系统接口，部分机型可能无效或无法自动恢复声音。\n更稳妥的做法是直接用音量键把媒体音量调到 0。</string>
     <string name="dialog_mute_game_confirm">仍要静音</string>
     <string name="dialog_hardware_screen_off_title">确认开启硬件熄屏？</string>
-    <string name="dialog_hardware_screen_off_message">开启后，点击「熄屏挂机」将彻底关闭屏幕，进入极致省电状态。\n• 屏幕常亮：启用期间 MAA Droid 在前台时不会自动息屏，以防系统休眠中断任务。\n• 唤醒说明：需按两次电源键（先亮锁屏，再解锁定）。\n• 屏保模式：不开启则显示屏保时钟，可随时查看任务进度与电量。</string>
+    <string name="dialog_hardware_screen_off_message">开启后，点击「熄屏挂机」将彻底关闭屏幕，进入极致省电状态。\n• 屏幕常亮：启用期间 MAA-Droid 在前台时不会自动息屏，以防系统休眠中断任务。\n• 唤醒说明：需按两次电源键（先亮锁屏，再解锁定）。\n• 屏保模式：不开启则显示屏保时钟，可随时查看任务进度与电量。</string>
 
     <!-- update card -->
     <string name="update_card_title">更新管理</string>
@@ -702,9 +702,9 @@
     <string name="dialog_shizuku_not_running_message">检测到 Shizuku 已安装但服务未启动，请打开 Shizuku 应用并启动服务。</string>
     <string name="dialog_shizuku_open_app">打开 Shizuku</string>
     <string name="dialog_sui_detected_title">检测到 Sui</string>
-    <string name="dialog_sui_detected_message">当前使用 Sui 提供 Shizuku 服务，Sui 以 Root 权限运行，MAA Droid 可能无法正常工作，请以实际测试为主</string>
+    <string name="dialog_sui_detected_message">当前使用 Sui 提供 Shizuku 服务，Sui 以 Root 权限运行，MAA-Droid 可能无法正常工作，请以实际测试为主</string>
     <string name="dialog_shizuku_need_auth_title">Shizuku 未授权</string>
-    <string name="dialog_shizuku_need_auth_message">检测到 Shizuku 服务正在运行但尚未授权 MAA Droid，请完成授权。授权成功前将持续显示该提示。</string>
+    <string name="dialog_shizuku_need_auth_message">检测到 Shizuku 服务正在运行但尚未授权 MAA-Droid，请完成授权。授权成功前将持续显示该提示。</string>
 
     <!-- settings: about section -->
     <string name="settings_section_about">关于</string>
@@ -1596,7 +1596,7 @@
     <string name="notification_event_recruit_high_rarity">发现 %1$d ★ 组合</string>
     <string name="notification_event_subtask_failure">子任务异常</string>
     <string name="notification_test_title">测试通知</string>
-    <string name="notification_test_message_full">这是一条来自 MAA Droid 的测试通知</string>
+    <string name="notification_test_message_full">这是一条来自 MAA-Droid 的测试通知</string>
     <string name="notification_feedback_no_channel">请先启用至少一个通知渠道</string>
     <string name="notification_feedback_send_success">%1$s 发送成功</string>
     <string name="notification_feedback_send_failed">%1$s 发送失败</string>
@@ -1987,7 +1987,7 @@
     <string name="onboarding_next">下一步</string>
     <string name="onboarding_done">开始使用</string>
     <string name="onboarding_step_counter">%1$d / %2$d</string>
-    <string name="onboarding_welcome_title">欢迎使用 MAA Droid</string>
+    <string name="onboarding_welcome_title">欢迎使用 MAA-Droid</string>
     <string name="onboarding_welcome_body">《明日方舟》小助手 Android 版，全日常一键长草。\n\n运行前需要 Shizuku 或 Root 提供权限。接下来花一分钟了解首页的几个关键区域，随时可以跳过</string>
     <string name="onboarding_status_title">状态总览</string>
     <string name="onboarding_status_body">这里显示屏幕分辨率、资源与应用版本，以及服务的连接状态。\n服务连接成功后才能正常开始任务</string>
@@ -2069,7 +2069,7 @@
     <string name="achievement_RoguelikeGoldMax_desc">坎诺特，把你店里最贵的端出来！</string>
     <string name="achievement_RoguelikeGoldMax_condition">肉鸽源石锭到达 999</string>
     <string name="achievement_FirstLaunch_title">初来乍到</string>
-    <string name="achievement_FirstLaunch_desc">欢迎使用 MAA Droid.</string>
+    <string name="achievement_FirstLaunch_desc">欢迎使用 MAA-Droid.</string>
     <string name="achievement_FirstLaunch_condition">第一次启动软件</string>
     <string name="achievement_SanityExpire_title">要过期了</string>
     <string name="achievement_SanityExpire_desc">赶紧冲哇！！！</string>
@@ -2105,11 +2105,11 @@
     <string name="achievement_QueueSimplifier_desc">删繁就简，也是一种优化。</string>
     <string name="achievement_QueueSimplifier_condition">手动删除一个任务</string>
     <string name="achievement_MaaMeowFirstTaskStart_title">安卓牛？启动！</string>
-    <string name="achievement_MaaMeowFirstTaskStart_desc">MAA Droid 已经开始运转。</string>
-    <string name="achievement_MaaMeowFirstTaskStart_condition">第一次成功启动 MAA Droid 任务</string>
+    <string name="achievement_MaaMeowFirstTaskStart_desc">MAA-Droid 已经开始运转。</string>
+    <string name="achievement_MaaMeowFirstTaskStart_condition">第一次成功启动 MAA-Droid 任务</string>
     <string name="achievement_MaaMeowFirstTaskComplete_title">启航，我们的开端</string>
     <string name="achievement_MaaMeowFirstTaskComplete_desc">第一段任务顺利抵达终点。</string>
-    <string name="achievement_MaaMeowFirstTaskComplete_condition">第一次成功使用 MAA Droid 完成一个任务</string>
+    <string name="achievement_MaaMeowFirstTaskComplete_condition">第一次成功使用 MAA-Droid 完成一个任务</string>
     <string name="achievement_MirrorChyanFirstUse_title">Mirror～～☆</string>
     <string name="achievement_MirrorChyanFirstUse_desc">是 Mirror酱！我们有救了！</string>
     <string name="achievement_MirrorChyanFirstUse_condition">初次成功使用 Mirror酱</string>
