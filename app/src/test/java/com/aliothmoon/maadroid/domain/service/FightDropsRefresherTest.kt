@@ -25,7 +25,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import com.aliothmoon.maadroid.maa.maaCoreService
+import com.aliothmoon.maadroid.engine.arknights.core.maaCoreService
 
 /**
  * 目标库存运行时重算契约。
@@ -54,8 +54,8 @@ class FightDropsRefresherTest {
 
         mockkObject(RemoteServiceManager)
         every { RemoteServiceManager.getInstanceOrNull() } returns remoteService
-        // maaCoreService 现为扩展属性（按 engineId 取引擎），编译成 com.aliothmoon.maadroid.maa.MaaCoreServiceAccessKt 的静态方法
-        mockkStatic("com.aliothmoon.maadroid.maa.MaaCoreServiceAccessKt")
+        // maaCoreService 现为扩展属性（按 engineId 取引擎），编译成 com.aliothmoon.maadroid.engine.arknights.core.MaaCoreServiceAccessKt 的静态方法
+        mockkStatic("com.aliothmoon.maadroid.engine.arknights.core.MaaCoreServiceAccessKt")
         every { remoteService.maaCoreService } returns maaCore
         every { maaCore.SetTaskParams(any(), any()) } answers {
             lastParamsJson = secondArg()

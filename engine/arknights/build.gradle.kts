@@ -8,6 +8,11 @@ android {
 
     defaultConfig {
         minSdk = 28
+        consumerProguardFiles("consumer-rules.pro")
+    }
+
+    buildFeatures {
+        aidl = true
     }
 
     compileOptions {
@@ -18,6 +23,8 @@ android {
 
 dependencies {
     api(project(":engine:api"))
+    implementation(project(":core:remote"))
+    implementation(libs.jna) { artifact { type = "aar" } }
 
     testImplementation(libs.junit)
 }

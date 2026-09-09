@@ -16,10 +16,10 @@ import com.aliothmoon.maadroid.domain.models.RemoteBackend
 import com.aliothmoon.maadroid.domain.models.RunMode
 import com.aliothmoon.maadroid.domain.notification.LiveSessionCoordinator
 import com.aliothmoon.maadroid.engine.arknights.state.MaaExecutionState
-import com.aliothmoon.maadroid.maa.AsstMsg
-import com.aliothmoon.maadroid.maa.MaaInstanceOptions.ANDROID
-import com.aliothmoon.maadroid.maa.MaaInstanceOptions.DEPLOYMENT_WITH_PAUSE
-import com.aliothmoon.maadroid.maa.MaaInstanceOptions.TOUCH_MODE
+import com.aliothmoon.maadroid.engine.arknights.core.AsstMsg
+import com.aliothmoon.maadroid.engine.arknights.core.MaaInstanceOptions.ANDROID
+import com.aliothmoon.maadroid.engine.arknights.core.MaaInstanceOptions.DEPLOYMENT_WITH_PAUSE
+import com.aliothmoon.maadroid.engine.arknights.core.MaaInstanceOptions.TOUCH_MODE
 import com.aliothmoon.maadroid.maa.callback.MaaCallbackDispatcher
 import com.aliothmoon.maadroid.maa.callback.MaaExecutionStateHolder
 import com.aliothmoon.maadroid.maa.callback.SubTaskHandler
@@ -55,7 +55,7 @@ import org.koin.java.KoinJavaComponent.inject
 import timber.log.Timber
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
-import com.aliothmoon.maadroid.maa.maaCoreService
+import com.aliothmoon.maadroid.engine.arknights.core.maaCoreService
 import com.aliothmoon.maadroid.engine.EngineExecutionCoordinator
 import com.aliothmoon.maadroid.remote.EngineIds
 

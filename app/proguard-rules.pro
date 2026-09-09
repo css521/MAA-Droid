@@ -19,13 +19,7 @@
     public static boolean keyUp(int, int);
 }
 
-# JNA：方法名即 C 符号；嵌套 Callback 整包留
--keep class com.aliothmoon.maadroid.maa.** { *; }
-# libjnidispatch 只 FindClass 顶层；ptr/internal/win32 交给 R8
--keep class com.sun.jna.* { *; }
--keepclassmembers class * extends com.sun.jna.Structure { <fields>; }
--keepclassmembers class * implements com.sun.jna.Callback { <methods>; }
--dontwarn java.awt.**
+# MaaCore JNA/AIDL keep rules are supplied by engine:arknights consumer-rules.pro.
 
 # Shizuku / Root 按类名拉起
 # 提权进程反射实例化的引擎装配子类（父类 RemoteServiceImpl 在 core-remote）
@@ -40,10 +34,6 @@
 # AIDL
 -keep class com.aliothmoon.maadroid.RemoteService { *; }
 -keep class com.aliothmoon.maadroid.RemoteService$Stub { *; }
--keep class com.aliothmoon.maadroid.MaaCoreService { *; }
--keep class com.aliothmoon.maadroid.MaaCoreService$Stub { *; }
--keep class com.aliothmoon.maadroid.MaaCoreCallback { *; }
--keep class com.aliothmoon.maadroid.MaaCoreCallback$Stub { *; }
 -keep class com.aliothmoon.maadroid.ILogcatService { *; }
 -keep class com.aliothmoon.maadroid.ILogcatService$Stub { *; }
 -keep class com.aliothmoon.maadroid.ITouchEventCallback { *; }

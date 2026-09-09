@@ -10,7 +10,7 @@
 app/                    宿主：导航、游戏切换、资源中心、定时、通知、引擎装配
 engine/
   api/                  插件契约：GameProfile / AutomationEngine / EngineUi / ResourcePackSpec
-  arknights/            明日方舟（MaaCore）— 已建模块，主体仍在 :app 待搬
+  arknights/            明日方舟：任务配置、资源模型、游戏声明、MaaCore JNA/AIDL 与提权服务
   limbus/               边狱公司（移植自 LALC）    ┘ 每个游戏一个模块
 core/
   bridge/               native 截图桥、AIDL 契约、输入注入
@@ -26,7 +26,15 @@ build-logic/            构建约定插件
 
 Gradle 路径与目录一致：`:engine:limbus`、`:core:bridge`、`:tooling:ksp-processor`。
 
-依赖方向**严格单向**：`app → engine:<游戏> → engine:api → core:* → hidden-api`。
+方舟的 `MaaCoreService` / `MaaCoreCallback` AIDL 和 JNA 桥接已由 `engine:arknights`
+持有，AIDL 包名与接口内容保持不变。模块通过 consumer rules 保留 C 符号和 Binder
+入口；宿主只在提权进程装配点注册工厂。`maa.DriverClass` 仍由 native JNI 按原名查找，
+暂留宿主。方舟的任务编排、面板、原生库与打包素材也尚未全部迁出宿主，
+`ArknightsEngineProvider.createEngine()` 尚未实现，不能视为已经完成全量引擎抽取。
+
+`app` 装配具体引擎；引擎依赖 `engine:api` 及需要的平台模块。
+`core:remote` 实现设备契约，因此可以依赖 `engine:api`，但不依赖任何具体游戏。
+底层截图、输入与 IPC 在 `core:bridge`，共用界面和文本能力分别在 `core:ui`、`core:common`。
 
 四条边界由 `ModuleBoundaryContractTest` 钉住，且它**动态发现模块目录**（不写死名字，
 挪模块与加引擎都不必回来改）：

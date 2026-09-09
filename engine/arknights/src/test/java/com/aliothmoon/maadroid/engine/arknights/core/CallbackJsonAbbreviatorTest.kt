@@ -1,4 +1,4 @@
-package com.aliothmoon.maadroid.maa
+package com.aliothmoon.maadroid.engine.arknights.core
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

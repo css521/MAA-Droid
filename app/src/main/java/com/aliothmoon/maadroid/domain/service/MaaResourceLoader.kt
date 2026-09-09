@@ -34,7 +34,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
-import com.aliothmoon.maadroid.maa.maaCoreService
+import com.aliothmoon.maadroid.engine.arknights.core.maaCoreService
 import com.aliothmoon.maadroid.engine.EngineExecutionCoordinator
 import com.aliothmoon.maadroid.remote.EngineIds
 

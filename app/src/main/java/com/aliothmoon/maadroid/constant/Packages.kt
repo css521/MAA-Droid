@@ -1,18 +1,12 @@
 package com.aliothmoon.maadroid.constant
 
-object Packages : Iterable<Map.Entry<String, String>> {
-    private val packageName = mapOf(
-        "Official" to "com.hypergryph.arknights",
-        "Bilibili" to "com.hypergryph.arknights.bilibili",
-        "YoStarEN" to "com.YoStarEN.Arknights",
-        "YoStarJP" to "com.YoStarJP.Arknights",
-        "YoStarKR" to "com.YoStarKR.Arknights",
-        "txwy" to "tw.txwy.and.arknights"
-    )
+import com.aliothmoon.maadroid.engine.arknights.ArknightsPackages
 
-    operator fun get(type: String): String? = packageName[type]
+/** 宿主兼容入口，客户端映射由方舟引擎维护。 */
+object Packages : Iterable<Map.Entry<String, String>> {
+    operator fun get(type: String): String? = ArknightsPackages[type]
 
     override fun iterator(): Iterator<Map.Entry<String, String>> {
-        return packageName.iterator()
+        return ArknightsPackages.iterator()
     }
 }

@@ -1,13 +1,10 @@
-package com.aliothmoon.maadroid.remote
+package com.aliothmoon.maadroid.engine.arknights.core
 
 import android.annotation.SuppressLint
 import android.os.MemoryFile
 import android.os.ParcelFileDescriptor
 import com.aliothmoon.maadroid.MaaCoreCallback
 import com.aliothmoon.maadroid.MaaCoreService
-import com.aliothmoon.maadroid.maa.AsstApiCallback
-import com.aliothmoon.maadroid.maa.CallbackJsonAbbreviator
-import com.aliothmoon.maadroid.maa.MaaCoreLibrary
 import com.aliothmoon.maadroid.third.Ln
 import com.sun.jna.Memory
 import com.sun.jna.Pointer

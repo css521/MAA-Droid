@@ -101,7 +101,7 @@ class HostEngineIsolationContractTest {
         "presentation/view/settings" to 8,   // 成就 UI
         "(顶层文件)" to 6,                    // MainActivity / MaaApplication
         "data/preferences" to 7,             // TaskChainState 整体是方舟任务链状态机
-        "remote" to 5,                       // MaaCoreServiceImpl / MaaCoreManager
+        "remote" to 1,                       // 只保留提权进程的引擎工厂装配
         "overlay" to 3,
         "presentation/state" to 2,
         "presentation/navigation" to 0,
@@ -112,6 +112,7 @@ class HostEngineIsolationContractTest {
         "data/datasource" to 3,
         "data/api" to 3,
         "data/log" to 1,
+        "constant" to 1,                     // Packages 兼容入口转发到 ArknightsPackages
         "engine" to 1,                       // EngineSetup 装配方舟，设计如此
         "domain/launch" to 1,
         "domain/models" to 1,
@@ -120,7 +121,6 @@ class HostEngineIsolationContractTest {
         // ---- 已干净，严格锁 0 ----
         "theme" to 0,
         "service" to 0,
-        "constant" to 0,
         "announcement" to 0,
         "data/notification" to 0,
         "domain/notification" to 0,

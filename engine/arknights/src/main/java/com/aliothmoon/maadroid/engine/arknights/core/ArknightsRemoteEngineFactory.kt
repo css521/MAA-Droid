@@ -1,8 +1,7 @@
-package com.aliothmoon.maadroid.maa
+package com.aliothmoon.maadroid.engine.arknights.core
 
 import android.os.IBinder
 import com.aliothmoon.maadroid.remote.EngineIds
-import com.aliothmoon.maadroid.remote.MaaCoreManager
 import com.aliothmoon.maadroid.remote.RemoteEngineFactory
 import com.aliothmoon.maadroid.third.Ln
 
@@ -14,7 +13,6 @@ import com.aliothmoon.maadroid.third.Ln
  * 边狱引擎则相反 —— Kotlin + OpenCV/ONNX 跑在 App 进程，只向提权进程要帧和输入。
  * [RemoteEngineFactory] 同时容纳这两种执行位置。
  *
- * 随 maa 包一起归入 engine-arknights（步骤 5）。
  */
 object ArknightsRemoteEngineFactory : RemoteEngineFactory {
 

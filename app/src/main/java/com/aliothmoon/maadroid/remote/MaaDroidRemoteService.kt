@@ -1,6 +1,6 @@
 package com.aliothmoon.maadroid.remote
 
-import com.aliothmoon.maadroid.maa.ArknightsRemoteEngineFactory
+import com.aliothmoon.maadroid.engine.arknights.core.ArknightsRemoteEngineFactory
 import com.aliothmoon.maadroid.third.Ln
 
 /**

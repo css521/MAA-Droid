@@ -1,6 +1,6 @@
 package com.aliothmoon.maadroid.engine
 
-import com.aliothmoon.maadroid.maa.ArknightsProfile
+import com.aliothmoon.maadroid.engine.arknights.ArknightsProfile
 import com.aliothmoon.maadroid.engine.limbus.LimbusEngine
 import com.aliothmoon.maadroid.engine.limbus.LimbusProfile
 import com.aliothmoon.maadroid.engine.limbus.ui.LimbusUi

@@ -1,6 +1,6 @@
-package com.aliothmoon.maadroid.remote
+package com.aliothmoon.maadroid.engine.arknights.core
 
-import com.aliothmoon.maadroid.maa.MaaCoreLibrary
+import com.aliothmoon.maadroid.remote.RemoteBootTrace
 import com.aliothmoon.maadroid.third.Ln
 import com.sun.jna.Native
 

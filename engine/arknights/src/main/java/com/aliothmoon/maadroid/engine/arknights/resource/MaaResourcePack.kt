@@ -1,4 +1,4 @@
-package com.aliothmoon.maadroid.maa
+package com.aliothmoon.maadroid.engine.arknights.resource
 
 import com.aliothmoon.maadroid.constant.MaaFiles
 import com.aliothmoon.maadroid.engine.ResourcePackSpec

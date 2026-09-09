@@ -1,21 +1,17 @@
-package com.aliothmoon.maadroid.maa
+package com.aliothmoon.maadroid.engine.arknights
 
-import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.constant.DefaultDisplayConfig
-import com.aliothmoon.maadroid.constant.Packages
 import com.aliothmoon.maadroid.engine.Capability
 import com.aliothmoon.maadroid.engine.DisplaySpec
 import com.aliothmoon.maadroid.engine.GameProfile
 import com.aliothmoon.maadroid.engine.ResourcePackSpec
+import com.aliothmoon.maadroid.engine.arknights.resource.MaaResourcePack
 import com.aliothmoon.maadroid.remote.EngineIds
 
 /**
  * 明日方舟游戏方案。
  *
- * 把既有的散落常量（Packages、DefaultDisplayConfig）收敛成一份方案声明，让宿主
- * 与边狱一视同仁地对待方舟 —— 这是「同一应用操控两个游戏」在应用层的前提。
- *
- * 随 maa 包一起归入 engine-arknights 模块。
+ * 由方舟引擎声明客户端、显示规格与资源包，供宿主读取。
  */
 object ArknightsProfile : GameProfile {
 
@@ -23,10 +19,10 @@ object ArknightsProfile : GameProfile {
 
     override val displayNameRes: Int = R.string.arknights_game_name
 
-    override val iconRes: Int = R.drawable.ic_maa_logo
+    override val iconRes: Int = R.drawable.ic_arknights_logo
 
     /** 六个渠道服。宿主用它探测装了哪个客户端 */
-    override val gamePackages: List<String> = Packages.map { it.value }
+    override val gamePackages: List<String> = ArknightsPackages.map { it.value }
 
     /**
      * 1280x720 / dpi 160。dpi 与边狱（320）不同是刻意的：方舟在 160 下是手机布局，

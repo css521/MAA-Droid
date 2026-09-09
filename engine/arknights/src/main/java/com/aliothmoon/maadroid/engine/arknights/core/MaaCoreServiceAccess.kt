@@ -1,4 +1,4 @@
-package com.aliothmoon.maadroid.maa
+package com.aliothmoon.maadroid.engine.arknights.core
 
 import com.aliothmoon.maadroid.MaaCoreService
 import com.aliothmoon.maadroid.RemoteService
@@ -9,8 +9,7 @@ import com.aliothmoon.maadroid.remote.EngineIds
  *
  * 原先 `RemoteService` 上有一个专属方法 `getMaaCoreService()`，等于把「明日方舟」写进了
  * 进程层契约，第二个游戏无处安放。现在契约只剩通用的 `getEngineService(String)`，
- * 由各引擎自己把 binder 转回自己的接口 —— 本文件就是方舟侧的这一层转换，
- * 后续随 maa 包一起归入 engine-arknights。
+ * 由各引擎自己把 binder 转回自己的接口，本文件属于 engine:arknights 的协议适配。
  *
  * 旧的 getMaaCoreService() 返回非空（MaaCoreManager.maaService 是惰性非空对象），而方舟
  * 引擎在 RemoteServiceImpl.init 里必定注册，故这里维持非空语义、缺失时抛出便于定位

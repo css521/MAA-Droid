@@ -260,7 +260,6 @@ dependencies {
     implementation(libs.koin.androidx.compose)
 
     // Third-party
-    implementation(libs.jna) { artifact { type = "aar" } }
     implementation(libs.fastjson2)
     implementation(libs.shizuku.api)
     implementation(libs.shizuku.provider)

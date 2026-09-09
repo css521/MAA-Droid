@@ -30,7 +30,7 @@ import org.junit.Test
 import java.io.File
 import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicBoolean
-import com.aliothmoon.maadroid.maa.maaCoreService
+import com.aliothmoon.maadroid.engine.arknights.core.maaCoreService
 
 class MaaResourceLoaderTest {
 
@@ -364,8 +364,8 @@ class MaaResourceLoaderTest {
             coEvery { activityManager.load(any()) } returns Unit
             every { service.setup(any(), any()) } returns setupCode
             justRun { service.setForceFullscreenOnVirtualDisplay(any()) }
-            // maaCoreService 现为扩展属性（按 engineId 取引擎），编译成 com.aliothmoon.maadroid.maa.MaaCoreServiceAccessKt 的静态方法
-            mockkStatic("com.aliothmoon.maadroid.maa.MaaCoreServiceAccessKt")
+            // maaCoreService 现为扩展属性（按 engineId 取引擎），编译成 com.aliothmoon.maadroid.engine.arknights.core.MaaCoreServiceAccessKt 的静态方法
+            mockkStatic("com.aliothmoon.maadroid.engine.arknights.core.MaaCoreServiceAccessKt")
             every { service.maaCoreService } returns maaCore
             every { maaCore.LoadResource(any()) } answers {
                 loadedDirs += firstArg<String>()

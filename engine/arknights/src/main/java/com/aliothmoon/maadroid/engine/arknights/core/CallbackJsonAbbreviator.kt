@@ -1,4 +1,4 @@
-package com.aliothmoon.maadroid.maa
+package com.aliothmoon.maadroid.engine.arknights.core
 
 /**
  * MaaCore 回调 JSON 的日志缩略。

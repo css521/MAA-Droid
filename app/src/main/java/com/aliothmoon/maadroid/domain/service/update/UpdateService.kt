@@ -39,7 +39,7 @@ import com.aliothmoon.maadroid.domain.service.update.checker.ResourceVersionChec
 import com.aliothmoon.maadroid.domain.service.update.resolver.AppDownloadUrlResolver
 import com.aliothmoon.maadroid.domain.service.update.resolver.ResourceDownloadUrlResolver
 import com.aliothmoon.maadroid.engine.ResourcePackSpec
-import com.aliothmoon.maadroid.maa.MaaResourcePack
+import com.aliothmoon.maadroid.engine.arknights.resource.MaaResourcePack
 import com.aliothmoon.maadroid.common.i18n.LocalizedException
 import com.aliothmoon.maadroid.common.i18n.resolve
 import com.aliothmoon.maadroid.common.i18n.uiTextOf

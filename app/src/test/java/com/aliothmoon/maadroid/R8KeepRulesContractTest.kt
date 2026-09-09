@@ -13,7 +13,10 @@ class R8KeepRulesContractTest {
         assertTrue(Regex("""isMinifyEnabled\s*=\s*true""").containsMatchIn(gradle))
         assertTrue(Regex("""isShrinkResources\s*=\s*true""").containsMatchIn(gradle))
 
-        val rules = resolve("proguard-rules.pro").readText()
+        val engineRules = TestSources.inModuleOwning(
+            "src/main/aidl/com/aliothmoon/maadroid/MaaCoreService.aidl", "consumer-rules.pro",
+        ).readText()
+        val rules = resolve("proguard-rules.pro").readText() + "\n" + engineRules
         val activeRules = rules.lineSequence()
             .map { it.substringBefore('#').trim() }
             .filter { it.isNotEmpty() }
@@ -26,7 +29,10 @@ class R8KeepRulesContractTest {
         listOf(
             "com.aliothmoon.maadroid.bridge.NativeBridgeLib",
             "com.aliothmoon.maadroid.maa.DriverClass",
-            "com.aliothmoon.maadroid.maa.**",
+            "com.aliothmoon.maadroid.engine.arknights.core.MaaCoreLibrary",
+            "com.aliothmoon.maadroid.engine.arknights.core.AsstApiCallback",
+            "com.aliothmoon.maadroid.MaaCoreService",
+            "com.aliothmoon.maadroid.MaaCoreCallback",
             "com.sun.jna.*",
             "com.sun.jna.Structure",
             "com.sun.jna.Callback",

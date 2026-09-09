@@ -1,4 +1,4 @@
-package com.aliothmoon.maadroid.maa;
+package com.aliothmoon.maadroid.engine.arknights.core;
 
 import com.sun.jna.Callback;
 import com.sun.jna.Pointer;

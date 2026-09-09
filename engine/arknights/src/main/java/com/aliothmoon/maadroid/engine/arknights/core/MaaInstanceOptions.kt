@@ -1,4 +1,4 @@
-package com.aliothmoon.maadroid.maa
+package com.aliothmoon.maadroid.engine.arknights.core
 
 object MaaInstanceOptions {
     const val TOUCH_MODE = 2
