@@ -3,6 +3,7 @@ package com.aliothmoon.maadroid.engine.limbus.action
 import com.aliothmoon.maadroid.engine.limbus.action.InputHelper.click
 import com.aliothmoon.maadroid.engine.limbus.action.InputHelper.keyPress
 import com.aliothmoon.maadroid.engine.limbus.action.InputHelper.swipe
+import com.aliothmoon.maadroid.engine.limbus.recognize.BattlePerception
 import com.aliothmoon.maadroid.engine.limbus.recognize.Crop
 
 /**
@@ -49,26 +50,97 @@ private const val LAST_PAGE_FIRST_TEAM = 18
 private const val LAST_PAGE_OFFSET = 14
 
 private object BattleWinrateAction : ActionBackend {
-    /**
-     * 战斗推进：按 `p` 让本回合自动战斗。
-     *
-     * 上游在这之后还有一整套「主动触发 EGO」逻辑，本项目**尚未实现**，原因是它依赖
-     * 三个当前 [Recognizer] 表达不出的能力：
-     *
-     * 1. `pyramid_template_match` 要返回命中的**缩放比**（上游按 scale >= 1.2 切换偏移量）
-     * 2. skill_icon 分类器要连**每个图标的中心坐标**一起返回，才能把「劣势拼点」对到罪人
-     * 3. 罪人头像检测（多边形涂黑 + 颜色筛选 + 打分）整条链路
-     *
-     * 这三样做完之前，这里只按 `p` —— 战斗仍能正常打完，只是不会为了保硬币主动开 EGO。
-     * 不做「简化版」猜坐标：点错位置会打断战斗流程，比不开 EGO 糟得多。
-     *
-     * 与上游一致，EGO 触发本身受 `ego_enable` 开关控制且默认关闭，故默认路径无差异。
-     */
     override suspend fun execute(ctx: ActionContext): ActionOutcome {
+        ctx.ensureActive()
         keyPress(ctx.input, "p")
+        if (!ctx.config.bool("other_task", "ego_enable", false)) return ActionOutcome.Continue
 
-        if (ctx.config.bool("other_task", "ego_enable", false)) {
-            ctx.log("EGO 主动触发尚未实现（需罪人头像检测），本回合按默认战斗推进")
+        ctx.delay(0.5)
+        ctx.ensureActive()
+        val skills = ctx.recognize.battleSkillIcons()
+        ctx.ensureActive()
+        if (skills.isEmpty()) {
+            ctx.log("未取得技能图标分类，本回合跳过主动 EGO")
+            return ActionOutcome.Continue
+        }
+        if (BattlePerception.allUnselected(skills)) {
+            // 720 是图外一行；等价的左下角点击限制在逻辑画面内。
+            click(ctx.input, 10, 719)
+            ctx.delay(1.0)
+            ctx.ensureActive()
+            return ActionOutcome.RetrySelf
+        }
+        if (!BattlePerception.hasDanger(skills)) return ActionOutcome.Continue
+        val avatars = BattlePerception.threatenedAvatars(skills, ctx.recognize.battleSinnerAvatars())
+        var anySelected = false
+        for (avatar in avatars) {
+            ctx.ensureActive()
+            ctx.input.touchDown(avatar.x, avatar.y)
+            try {
+                ctx.delay(3.0)
+                ctx.ensureActive()
+            } finally {
+                // InputHelper.longPress 没有 finally；这里必须保证取消/异常也抬起触点。
+                ctx.input.touchUp(avatar.x, avatar.y)
+            }
+            var panel = ctx.recognize.battleEgoPanel()
+            ctx.ensureActive()
+            var selected = false // 每名罪人独立，不能沿用前一人的成功状态。
+            val tried = mutableSetOf<Int>()
+            while (panel != null && panel.details.isNotEmpty()) {
+                ctx.ensureActive()
+                val card = BattlePerception.safeEgoDetails(panel).firstOrNull { it.x !in tried } ?: break
+                tried += card.x
+                // 第一次点击可能已关闭面板；观察后才决定是否需要上游的第二次点击。
+                click(ctx.input, card.x - 20, card.y + 100)
+                ctx.delay(0.3)
+                ctx.ensureActive()
+                panel = ctx.recognize.battleEgoPanel()
+                ctx.ensureActive()
+                if (panel?.closed == true) {
+                    selected = true
+                    break
+                }
+                val sameCard = panel?.let { BattlePerception.safeEgoDetails(it) }
+                    ?.any { it.x == card.x && it.y == card.y } == true
+                if (sameCard) {
+                    click(ctx.input, card.x - 20, card.y + 100)
+                    ctx.delay(0.5)
+                    ctx.ensureActive()
+                    panel = ctx.recognize.battleEgoPanel()
+                    ctx.ensureActive()
+                    if (panel?.closed == true) {
+                        selected = true
+                        break
+                    }
+                }
+            }
+            if (selected) {
+                anySelected = true
+                ctx.log("已确认 EGO 选择界面关闭（罪人位置 ${avatar.x}）")
+                click(ctx.input, 30, 700)
+            } else {
+                ctx.log("未确认安全 EGO 选择（罪人位置 ${avatar.x}）")
+                if (panel?.closed != true) {
+                    ctx.ensureActive()
+                    click(ctx.input, avatar.x, avatar.y)
+                    ctx.delay(0.3)
+                    ctx.ensureActive()
+                    val dismissed = ctx.recognize.battleEgoPanel()
+                    ctx.ensureActive()
+                    if (dismissed?.closed != true) {
+                        // 未知界面上继续 p 或长按下一人会误操作；明确失败交给宿主展示。
+                        return ActionOutcome.Finish(false, "无法确认 EGO 选择界面已关闭，停止战斗操作")
+                    }
+                }
+            }
+        }
+        if (anySelected) {
+            repeat(3) { i ->
+                ctx.ensureActive()
+                keyPress(ctx.input, "p")
+                if (i < 2) ctx.delay(0.3)
+            }
         }
         return ActionOutcome.Continue
     }

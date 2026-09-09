@@ -139,15 +139,23 @@ class LimbusEngine(
 
         this.device = device
         recognizer?.release()
+        recognizer = null
         val dir = resourceDir ?: throw IllegalStateException("请先 prepare 装载资源")
-        recognizer = LimbusRecognizer(
-            frames = device.frames,
-            index = index,
-            templateFileOf = index::fileOf,
-            classifier = OnnxClassifier(dir) { warn(it) },
-            ocr = PpOcrEngine.load(dir) { warn(it) } ?: error("OCR 模型加载失败，请重新安装边狱资源"),
-            onLog = { warn(it) },
-        )
+        val classifier = OnnxClassifier(dir) { warn(it) }
+        try {
+            classifier.prepare()
+            recognizer = LimbusRecognizer(
+                frames = device.frames,
+                index = index,
+                templateFileOf = index::fileOf,
+                classifier = classifier,
+                ocr = PpOcrEngine.load(dir) { warn(it) } ?: error("OCR 模型加载失败，请重新安装边狱资源"),
+                onLog = { warn(it) },
+            )
+        } catch (failure: Throwable) {
+            classifier.release()
+            throw failure
+        }
 
         // 强制显示规格：全部模板都按 1280x720 截取，分辨率不对就全都匹配不上
         val display = profile.display
@@ -156,6 +164,9 @@ class LimbusEngine(
 
         emit(EngineEvent.Connection(ConnectionState.Connected))
     }.onFailure {
+        recognizer?.release()
+        recognizer = null
+        this.device = null
         emit(EngineEvent.Connection(ConnectionState.Failed, it.message))
     }
 
@@ -237,11 +248,12 @@ class LimbusEngine(
             selected.any { it.nodeName == node }
         }
         // 各任务的配置分节合并成一份：镜牢的动作要同时读 mirror / theme_pack / other_task
-        val config = mergeConfigs(tasks)
+        val mergedConfig = mergeConfigs(tasks)
+        val language = mergedConfig.str("other_task", "language", loadedLanguage)
+        val config = mergedConfig.withLanguage(requireNotNull(resourceDir), language)
         val effectiveRegistry = reg.withEnabled(enableOverrides).withTargetCounts(
             listOf("exp", "thread", "mirror").associate { "${it}_check" to config.int(it, "check_node_target_count", 1) },
         )
-        val language = config.str("other_task", "language", loadedLanguage)
         if (language != loadedLanguage) {
             require(language in setOf("en", "zh")) { "不支持的游戏语言: $language" }
             templateIndex = ResourcePackTemplateIndex.load(requireNotNull(resourceDir), language) { warn(it) }

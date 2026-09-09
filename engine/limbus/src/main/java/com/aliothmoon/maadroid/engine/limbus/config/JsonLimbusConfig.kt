@@ -26,6 +26,9 @@ import java.io.File
 class JsonLimbusConfig(private val sections: Map<String, JsonObject>) : LimbusConfig {
     override fun section(section: String): Map<String, JsonElement> = sections[section].orEmpty()
 
+    internal fun withLanguage(resourceDir: File, language: String) =
+        JsonLimbusConfig(sections + ("language" to LimbusLanguage.load(resourceDir, language)))
+
     private fun valueOf(section: String, key: String): JsonElement? =
         sections[section]?.get(key)
 

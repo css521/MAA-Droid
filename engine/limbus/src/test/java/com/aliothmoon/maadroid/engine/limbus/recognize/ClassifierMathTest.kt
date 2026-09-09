@@ -203,6 +203,29 @@ class ClassifierMathTest {
         assertEquals("缺输入尺寸应判为不可用", null, ClassifierSpec.load(root, "bad"))
     }
 
+    @Test
+    fun `非法模型尺寸在创建原生会话前被拒绝`() {
+        for (width in listOf(0, -1, Int.MAX_VALUE)) {
+            val root = writeModel("bad_size", """{"config":{"input_width":$width,"input_height":80}}""",
+                "classes.txt", "0 a\n")
+            assertEquals(null, ClassifierSpec.load(root, "bad_size"))
+        }
+    }
+
+    @Test
+    fun `缺分类模型明确失败而非返回没有识别到目标`() {
+        val classifier = OnnxClassifier(tmp.root)
+        val error = org.junit.Assert.assertThrows(IllegalStateException::class.java) { classifier.prepare() }
+        assertTrue(error.message!!.contains("mirror_legend"))
+        org.junit.Assert.assertThrows(IllegalStateException::class.java) {
+            classifier.classify("skill_icon", listOf(ByteArray(80 * 80 * 3)))
+        }
+        org.junit.Assert.assertThrows(IllegalStateException::class.java) {
+            classifier.classifyMultiLabel("mirror_path", listOf(ByteArray(224 * 224 * 3)))
+        }
+        classifier.release()
+    }
+
     /** 对着上游 clone 的真实模型目录读一遍，确认三个模型的元数据都能解出来 */
     @Test
     fun `真实模型目录的元数据与上游一致`() {

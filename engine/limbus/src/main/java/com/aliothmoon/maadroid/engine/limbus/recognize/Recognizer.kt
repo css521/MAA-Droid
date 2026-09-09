@@ -31,6 +31,15 @@ data class Crop(val x: Int, val y: Int, val width: Int, val height: Int)
  */
 interface Recognizer {
 
+    /** 战斗专用：同一帧内定位、裁剪并分类，标签与中心坐标不可分开取帧。 */
+    suspend fun battleSkillIcons(): List<BattleSkillIcon> = emptyList()
+
+    /** 血条识别点（也是长按点）及头像边缘的 EGO 亮度分组。 */
+    suspend fun battleSinnerAvatars(): List<BattleSinnerAvatar> = emptyList()
+
+    /** 同一帧的 EGO 卡片与 0% 侵蚀标识。null 表示无法观察，不能当作面板已关闭。 */
+    suspend fun battleEgoPanel(): BattleEgoPanel? = null
+
     /** 灰度模板匹配。[template] 是素材基名（不含扩展名与语言目录） */
     suspend fun templateMatch(
         template: String,
@@ -43,7 +52,7 @@ interface Recognizer {
     /** 文本检测：返回画面里所有识别到的文本块 */
     suspend fun detectText(crop: Crop? = null, threshold: Double = 0.3): List<TextMatch>
 
-    /** 文本查找：在检测结果里做模糊匹配，对应上游 find_text_in_image */
+    /** 文本查找：包含目标子串，对应上游 find_text_in_image；threshold 是 OCR 置信度。 */
     suspend fun findText(target: String, crop: Crop? = null, threshold: Double = 0.5): List<TextMatch>
 
     /**

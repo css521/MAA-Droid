@@ -56,7 +56,7 @@ private object EventMakeChoiceAction : ActionBackend {
         val specialPhrases = listOf(
             "Select to gain", "Pass to level up", "Pass to gain",
             "check to gain", "depending on"
-        )
+        ).map { localizedName(ctx.config, it) }
 
         val results = ctx.recognize.detectText(Crop(670, 140, 620, 500))
         var specialCase = false

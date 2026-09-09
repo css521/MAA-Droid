@@ -126,6 +126,20 @@ internal fun closestName(text: String, candidates: Collection<String>, cutoff: D
     return best
 }
 
+internal fun localizedName(config: LimbusConfig, name: String): String {
+    val translated = config.str("language", name, name)
+    // 上游罪人资源名是 RyoShu，前端队伍配置使用 Ryoshu。
+    return if (translated == name && name.equals("Ryoshu", ignoreCase = true))
+        config.str("language", "RyoShu", name) else translated
+}
+
+/** 在显示语言中比较 OCR，返回原始资源标识，保持流派和黑白名单比较不变。 */
+internal fun closestLocalizedName(text: String, candidates: Collection<String>, config: LimbusConfig): String? {
+    val localized = candidates.associateBy { localizedName(config, it) }
+    val hit = closestName(text, localized.keys) ?: return null
+    return localized[hit]
+}
+
 /**
  * Python `difflib.SequenceMatcher(None, a, b).ratio()` 的等价实现：
  * `2 * M / T`，M 为匹配字符总数，T 为两串长度和。

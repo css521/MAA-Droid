@@ -152,14 +152,14 @@ class MirrorAndBattleActionsTest {
     }
 
     @Test
-    fun `开了 ego_enable 也不乱点，只提示尚未实现`() = runTest {
+    fun `开了 ego_enable 但无技能感知结果时不乱点`() = runTest {
         val ctx = ctxFor("battle_winrate")
         ctx.fakeConfig.put("other_task", "ego_enable", true)
 
         ActionRegistry["battle_winrate"]!!.execute(ctx)
 
         assertTrue("不该产生任何点击", ctx.fakeInput.clicks().isEmpty())
-        assertTrue("应明确告知用户", ctx.logs.any { "尚未实现" in it })
+        assertTrue("应明确告知用户", ctx.logs.any { "未取得技能图标分类" in it })
     }
 
     // ---- mirror_select_floor_ego_gift：已持有判定与倒序点击 ----

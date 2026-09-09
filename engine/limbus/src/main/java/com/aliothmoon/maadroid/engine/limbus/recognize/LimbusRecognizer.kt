@@ -2,10 +2,13 @@ package com.aliothmoon.maadroid.engine.limbus.recognize
 
 import com.aliothmoon.maadroid.engine.Frame
 import com.aliothmoon.maadroid.engine.FrameSource
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import org.opencv.core.CvType
 import org.opencv.core.Mat
 import org.opencv.core.Rect
 import org.opencv.imgcodecs.Imgcodecs
+import org.opencv.imgproc.Imgproc
 import java.io.File
 
 /**
@@ -29,7 +32,7 @@ class LimbusRecognizer(
     private val onLog: (String) -> Unit = {},
 ) : Recognizer {
 
-    private val templateCache = HashMap<String, Mat?>()
+    private val templateCache = HashMap<Pair<String, Boolean>, Mat?>()
 
     override suspend fun templateMatch(
         template: String,
@@ -45,13 +48,13 @@ class LimbusRecognizer(
         try {
             // crop 语义是裁剪，返回坐标要加回偏移（照抄上游的 mask 语义）
             val region = crop?.clampTo(screen.cols(), screen.rows())
+            if (crop != null && region == null) return emptyList()
             val work = if (region == null) screen else Mat(screen, region.toRect())
             try {
                 // maskTemplate 是对**模板**取子区域，用于「只比对卡包左上角那块」
-                val effectiveTpl = maskTemplate
-                    ?.clampTo(tpl.cols(), tpl.rows())
-                    ?.let { Mat(tpl, it.toRect()) }
-                    ?: tpl
+                val templateRegion = maskTemplate?.clampTo(tpl.cols(), tpl.rows())
+                if (maskTemplate != null && templateRegion == null) return emptyList()
+                val effectiveTpl = templateRegion?.let { Mat(tpl, it.toRect()) } ?: tpl
                 try {
                     return TemplateMatcher.match(
                         screen = work,
@@ -72,12 +75,6 @@ class LimbusRecognizer(
         }
     }
 
-    // ---- 以下识别方式尚未实现 ----
-    //
-    // 都返回空表（等价于「识别不中」）而不是抛异常：流水线遇到识别不中会走
-    // next 的下一个候选或 interrupt，是有定义的行为；抛异常则会中断整条任务链。
-    // 每个都留一条日志，让用户知道是能力缺失而不是画面不对。
-
     /**
      * 文本检测 + 识别。上游用量第二（22 处）：饰品名、主题卡包、队伍人数、现金都靠它。
      *
@@ -93,6 +90,7 @@ class LimbusRecognizer(
         val screen = frame.toMat()
         try {
             val region = crop?.clampTo(screen.cols(), screen.rows())
+            if (crop != null && region == null) return emptyList()
             val work = if (region == null) screen else Mat(screen, region.toRect())
             try {
                 val offsetX = region?.x ?: 0
@@ -198,33 +196,118 @@ class LimbusRecognizer(
         }
     }
 
+    override suspend fun battleSkillIcons(): List<BattleSkillIcon> {
+        val cls = classifier ?: return emptyList()
+        val spec = cls.specOf("skill_icon") ?: return emptyList()
+        val templates = listOf("skill_blunt", "skill_pierce", "skill_slash")
+            .map { templateOf(it, color = true) ?: return emptyList() }
+        val frame = frames.grab() ?: return emptyList()
+        if (frame.width != 1280 || frame.height != 720) return emptyList()
+        val screen = frame.toMat()
+        try {
+            val area = BattlePerception.SKILL_AREA
+            val strip = Mat(screen, area.toRect())
+            val anchors = try {
+                templates.flatMap { BattleImageOps.skillAnchors(strip, it) }
+            } finally {
+                strip.release()
+            }
+            val winRateX = templateOf("win_rate")?.let {
+                TemplateMatcher.match(screen, it, 0.85).firstOrNull()?.x
+            } ?: 1280
+            val regions = BattlePerception.skillRegions(anchors, winRateX)
+            val images = regions.map { region ->
+                val tile = BattleImageOps.paddedCrop(screen, region)
+                try {
+                    MirrorRegions.toRgbBytes(tile, spec.inputWidth, spec.inputHeight) ?: return emptyList()
+                } finally {
+                    tile.release()
+                }
+            }
+            if (images.isEmpty()) return emptyList()
+            return BattlePerception.bindSkills(regions, cls.classify("skill_icon", images))
+        } finally {
+            screen.release()
+        }
+    }
+
+    override suspend fun battleSinnerAvatars(): List<BattleSinnerAvatar> {
+        val frame = frames.grab() ?: return emptyList()
+        if (frame.width != 1280 || frame.height != 720) return emptyList()
+        val screen = frame.toMat()
+        try {
+            return BattleImageOps.sinnerAvatars(screen)
+        } finally {
+            screen.release()
+        }
+    }
+
+    override suspend fun battleEgoPanel(): BattleEgoPanel? {
+        val detail = templateOf("ego_details") ?: return null
+        val corrode = templateOf("to_corrode_0%") ?: return null
+        val winRate = templateOf("win_rate") ?: return null
+        val frame = frames.grab() ?: return null
+        if (frame.width != 1280 || frame.height != 720) return null
+        val screen = frame.toMat()
+        try {
+            val area = BattlePerception.EGO_AREA
+            val strip = Mat(screen, area.toRect())
+            try {
+                return BattleEgoPanel(
+                    TemplateMatcher.match(strip, detail, 0.85, offsetY = area.y),
+                    TemplateMatcher.match(strip, corrode, 0.85, offsetY = area.y),
+                    TemplateMatcher.match(screen, winRate, 0.85).isNotEmpty(),
+                )
+            } finally {
+                strip.release()
+            }
+        } finally {
+            screen.release()
+        }
+    }
+
     override suspend fun colorTemplateMatch(template: String, threshold: Double, crop: Crop?):
-            List<Match> = fallbackToGray("color_template_match", template, threshold, crop)
+            List<Match> = advancedMatch(AdvancedTemplateMatcher.Mode.COLOR, template, threshold, crop)
 
     override suspend fun featureMatch(template: String, threshold: Double, crop: Crop?):
-            List<Match> = fallbackToGray("feature_match", template, threshold, crop)
+            List<Match> = advancedMatch(AdvancedTemplateMatcher.Mode.FEATURE, template, threshold, crop)
 
     override suspend fun pyramidTemplateMatch(template: String, threshold: Double, crop: Crop?):
-            List<Match> = fallbackToGray("pyramid_template_match", template, threshold, crop)
+            List<Match> = advancedMatch(AdvancedTemplateMatcher.Mode.PYRAMID, template, threshold, crop)
 
     override suspend fun preciseTemplateMatch(template: String, threshold: Double, crop: Crop?):
-            List<Match> = fallbackToGray("precise_template_match", template, threshold, crop)
+            List<Match> = advancedMatch(AdvancedTemplateMatcher.Mode.PRECISE, template, threshold, crop)
 
-    /**
-     * 四个冷门匹配器暂以灰度模板匹配代替（上游各只有一处调用）。
-     *
-     * 这是**近似**而非等价，故留日志：precise 会比灰度更严、pyramid 抗缩放、
-     * color 看颜色、feature 抗形变。用灰度顶上时结果可能偏松或偏紧，
-     * 但比返回空表更接近可用 —— 这四处上游都是「找到就点、找不到就跳过」的形态。
-     */
-    private suspend fun fallbackToGray(
-        kind: String,
+    /** 四种匹配共用取帧、彩色模板缓存和裁剪坐标还原。 */
+    private suspend fun advancedMatch(
+        mode: AdvancedTemplateMatcher.Mode,
         template: String,
         threshold: Double,
         crop: Crop?,
     ): List<Match> {
-        warnOnce(kind, "$kind 尚未实现，暂以灰度模板匹配近似")
-        return templateMatch(template, threshold, crop)
+        val context = currentCoroutineContext()
+        context.ensureActive()
+        val tpl = templateOf(template, color = true) ?: return emptyList()
+        val frame = frames.grab() ?: return emptyList()
+        val screen = frame.toMat()
+        try {
+            val region = crop?.clampTo(screen.cols(), screen.rows())
+            if (crop != null && region == null) return emptyList()
+            val work = if (region == null) screen else Mat(screen, region.toRect())
+            try {
+                return if (mode == AdvancedTemplateMatcher.Mode.PYRAMID) {
+                    AdvancedTemplateMatcher.pyramidMatch(work, tpl, threshold,
+                        region?.x ?: 0, region?.y ?: 0, checkActive = { context.ensureActive() })
+                        .map { it.asMatch() }
+                } else {
+                    AdvancedTemplateMatcher.match(mode, work, tpl, threshold, region?.x ?: 0, region?.y ?: 0)
+                }
+            } finally {
+                if (work !== screen) work.release()
+            }
+        } finally {
+            screen.release()
+        }
     }
 
     private val warned = HashSet<String>()
@@ -234,20 +317,32 @@ class LimbusRecognizer(
         if (warned.add(key)) onLog(message)
     }
 
-    private fun templateOf(name: String): Mat? = templateCache.getOrPut(name) {
+    private fun templateOf(name: String, color: Boolean = false): Mat? = templateCache.getOrPut(name to color) {
         val f = templateFileOf(name)
         if (f == null || !f.isFile) {
             onLog("素材缺失: $name")
             return@getOrPut null
         }
-        // IMREAD_GRAYSCALE：模板匹配全程走灰度，早转省一次转换
-        val mat = Imgcodecs.imread(f.absolutePath, Imgcodecs.IMREAD_GRAYSCALE)
+        // 统一用 BGR2GRAY：imread 的灰度解码与屏幕的 cvtColor 存在取整差异，
+        // CLAHE 会放大该差异，甚至使原样截取的模板也达不到严格阈值。
+        val mat = Imgcodecs.imread(f.absolutePath, Imgcodecs.IMREAD_COLOR)
         if (mat.empty()) {
             onLog("素材解码失败: $name")
             mat.release()
             return@getOrPut null
         }
-        mat
+        if (color) mat else {
+            val gray = Mat()
+            try {
+                Imgproc.cvtColor(mat, gray, Imgproc.COLOR_BGR2GRAY)
+                gray
+            } catch (failure: Throwable) {
+                gray.release()
+                throw failure
+            } finally {
+                mat.release()
+            }
+        }
     }
 
     /** 释放缓存的模板与推理会话。引擎停止或换语言时调用 */
@@ -281,8 +376,8 @@ class LimbusRecognizer(
         fun Crop.clampTo(width: Int, height: Int): Crop? {
             val x0 = x.coerceIn(0, width)
             val y0 = y.coerceIn(0, height)
-            val w = this.width.coerceAtMost(width - x0)
-            val h = this.height.coerceAtMost(height - y0)
+            val w = ((x.toLong() + this.width).coerceIn(0, width.toLong()) - x0).toInt()
+            val h = ((y.toLong() + this.height).coerceIn(0, height.toLong()) - y0).toInt()
             return if (w <= 0 || h <= 0) null else Crop(x0, y0, w, h)
         }
 

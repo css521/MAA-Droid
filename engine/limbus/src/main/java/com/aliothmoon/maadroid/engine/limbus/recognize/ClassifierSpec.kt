@@ -47,8 +47,7 @@ data class ClassifierSpec(
         const val MODEL_ROOT = "ai/model"
 
         /**
-         * 从资源包目录加载。缺文件返回 null，调用方按「该分类器不可用」处理 ——
-         * 分类失败会让对应步骤走兜底分支，而不是让整条任务链崩掉。
+         * 从资源包目录加载。缺文件或配置不完整返回 null，启动预检据此拒绝执行。
          */
         fun load(resourceDir: File, name: String): ClassifierSpec? {
             val dir = File(File(resourceDir, MODEL_ROOT), name)
@@ -60,6 +59,8 @@ data class ClassifierSpec(
             val inner = config?.get("config") as? JsonObject
             val width = (inner?.get("input_width") as? JsonPrimitive)?.intOrNull ?: return null
             val height = (inner?.get("input_height") as? JsonPrimitive)?.intOrNull ?: return null
+            // 输入图来自 1280x720 游戏画面，拒绝零尺寸和无法合理分配的元数据。
+            if (width !in 1..4096 || height !in 1..4096) return null
 
             // connections.txt 存在即为多标签模型（上游只有 mirror_path 是这样）
             val connectionsFile = File(dir, CONNECTIONS_FILE)

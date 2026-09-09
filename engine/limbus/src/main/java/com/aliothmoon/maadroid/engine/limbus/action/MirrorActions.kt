@@ -180,7 +180,7 @@ private object SelectFloorEgoGiftAction : ActionBackend {
 
         // OCR 出的饰品名先模糊匹配回已知名单，再看是否在倾向名单里
         val preferWithoutOwned = curGifts.mapNotNull { gift ->
-            val matched = closestName(gift.text, allGiftNames)
+            val matched = closestLocalizedName(gift.text, allGiftNames, ctx.config)
             if (matched == null) {
                 ctx.log("识别不出饰品文字: ${gift.text}")
                 null
@@ -323,7 +323,7 @@ private object ShopEnhanceEgoGiftsAction : ActionBackend {
             ctx.log("饰品升级区域识别不出文字")
             return
         }
-        val matched = closestName(curGift[0].text, allGiftNames) ?: return
+        val matched = closestLocalizedName(curGift[0].text, allGiftNames, ctx.config) ?: return
         if (matched !in preferGifts) return
 
         keyPress(ctx.input, "enter")
@@ -431,7 +431,8 @@ private object ShopReplacePurchaseAction : ActionBackend {
         val detected = nameOcr[0].text
 
         for ((sinner, slotsJson) in replaceMap) {
-            val probe = if (sinner == OCR_UNSTABLE_SINNER) OCR_UNSTABLE_SINNER_PREFIX else sinner
+            val translated = localizedName(ctx.config, sinner)
+            val probe = if (translated == sinner && sinner == OCR_UNSTABLE_SINNER) OCR_UNSTABLE_SINNER_PREFIX else translated
             if (probe !in detected) continue
 
             val slots = runCatching {
@@ -473,12 +474,19 @@ private object ShopReplacePurchaseAction : ActionBackend {
 
         if (gifts.size == purchasedList.size) return false
 
+        // 先保留原槽位，再剔除已购标记下方的饰品。过滤后重新编号会点错商品。
+        val available = gifts.withIndex().filterNot { (_, gift) ->
+            purchasedList.any { purchased ->
+                gift.y > purchased.y && gift.y < purchased.y + 150 &&
+                    kotlin.math.abs(purchased.x - gift.x) < 50
+            }
+        }
         var purchasedThisTurn = 0
-        for ((idx, gift) in gifts.withIndex()) {
-            val matched = closestName(gift.text, allGiftNames) ?: continue
+        for ((idx, gift) in available) {
+            val matched = closestLocalizedName(gift.text, allGiftNames, ctx.config) ?: continue
             if (matched in preferGifts) {
                 val adjustedIdx = idx - purchasedThisTurn
-                if (adjustedIdx < SHOP_PURCHASE_PLACES.size) {
+                if (adjustedIdx in SHOP_PURCHASE_PLACES.indices) {
                     click(ctx.input, SHOP_PURCHASE_PLACES[adjustedIdx].first, SHOP_PURCHASE_PLACES[adjustedIdx].second)
                     ctx.delay(1.0)
                     click(ctx.input, 740, 480)
