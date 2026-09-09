@@ -29,7 +29,7 @@ import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.data.model.RoguelikeConfig
 import com.aliothmoon.maadroid.data.resource.ResourceDataManager
 import com.aliothmoon.maadroid.engine.arknights.enums.RoguelikeMode
-import com.aliothmoon.maadroid.presentation.components.CoreCharSelector
+import com.aliothmoon.maadroid.presentation.view.panel.CoreCharSelector
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import com.aliothmoon.maadroid.engine.arknights.enums.UiUsageConstants.Roguelike as RoguelikeUi

@@ -1,5 +1,7 @@
-package com.aliothmoon.maadroid.presentation.components
+package com.aliothmoon.maadroid.presentation.view.panel
 
+// 方舟专属组件（干员/公招选择器），原误放在通用的 presentation/components 里。
+// 归入 panel 目录后随 engine/arknights 一起走，不再算作宿主→方舟的耦合。
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height

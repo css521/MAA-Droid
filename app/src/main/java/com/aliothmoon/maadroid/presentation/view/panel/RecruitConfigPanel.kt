@@ -47,7 +47,7 @@ import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.data.model.RecruitConfig
 import com.aliothmoon.maadroid.data.resource.ResourceDataManager
 import com.aliothmoon.maadroid.ui.components.INumericField
-import com.aliothmoon.maadroid.presentation.components.RecruitTimeSelector
+import com.aliothmoon.maadroid.presentation.view.panel.RecruitTimeSelector
 import com.aliothmoon.maadroid.ui.components.tip.ExpandableTipContent
 import com.aliothmoon.maadroid.ui.components.tip.ExpandableTipIcon
 import kotlinx.coroutines.launch

@@ -84,7 +84,7 @@ class UiI18nHardcodedStringsTest {
             TargetFile("src/main/java/com/aliothmoon/maadroid/presentation/components/OverlayDialog.kt"),
             TargetFile("src/main/java/com/aliothmoon/maadroid/ui/components/PanelComponents.kt"),
             TargetFile(
-                "src/main/java/com/aliothmoon/maadroid/presentation/components/CoreCharSelector.kt",
+                "src/main/java/com/aliothmoon/maadroid/presentation/view/panel/CoreCharSelector.kt",
                 allowedLiterals = setOf(
                     "[CoreCharSelector] 空字符串，设置 isValid=true",
                     "[CoreCharSelector] 更新配置为空字符串",

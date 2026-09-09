@@ -34,7 +34,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.data.model.toolbox.RecruitCalcResult
-import com.aliothmoon.maadroid.presentation.components.RecruitTimeSelector
+import com.aliothmoon.maadroid.presentation.view.panel.RecruitTimeSelector
 import com.aliothmoon.maadroid.presentation.viewmodel.ToolboxViewModel
 import com.aliothmoon.maadroid.ui.asString
 import org.koin.compose.koinInject

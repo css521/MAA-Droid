@@ -102,7 +102,7 @@ class HostEngineIsolationContractTest {
         "overlay" to 3,
         "presentation/state" to 2,
         "presentation/navigation" to 0,
-        "presentation/components" to 1,      // RecruitTimeSelector / CoreCharSelector 误放
+        "presentation/components" to 0,      // RecruitTimeSelector / CoreCharSelector 已归入 panel
         "schedule" to 1,
         "utils" to 1,
         "manager" to 1,                      // RemoteServiceManager 取 MaaPathConfig
@@ -148,10 +148,9 @@ class HostEngineIsolationContractTest {
     private val arknightsToHost = mapOf(
         // → core:ui。主体已下沉（组件 76→4、主题 22→2）。
         // 残留的都是**方舟专属**、该去 engine/arknights 而非 core:ui 的东西：
-        // RecruitTimeSelector(2) / CoreCharSelector(1) 是误放在宿主的方舟组件，
-        // ResourceLoadingOverlay(1) 依赖 MaaResourceLoader，
-        // LocalLogPalette + themedColor(2) 是日志色板，依赖宿主的日志模型（待 core:common）
-        "com.aliothmoon.maadroid.presentation.components." to 4,
+        // 已把误放的 RecruitTimeSelector/CoreCharSelector 归入 panel（4→1）。
+        // 残留 1 处是 ResourceLoadingOverlay，依赖 MaaResourceLoader，属方舟，待随模块走
+        "com.aliothmoon.maadroid.presentation.components." to 1,
         "com.aliothmoon.maadroid.theme." to 2,
         // → core:common。UiText 主体已下沉（20→4）。残留 4 处是**方舟专属**的：
         // formatToolboxSyncTime(3) 只有方舟三个面板在用、wakeUpClientTypeDisplayName(1)
