@@ -1,6 +1,9 @@
 package com.aliothmoon.maadroid.engine.limbus.pipeline
 
 import com.aliothmoon.maadroid.engine.limbus.action.ActionRegistry
+import com.aliothmoon.maadroid.engine.limbus.action.ActionBackend
+import com.aliothmoon.maadroid.engine.limbus.action.ActionContext
+import com.aliothmoon.maadroid.engine.limbus.action.ActionOutcome
 import com.aliothmoon.maadroid.engine.limbus.action.FakeConfig
 import com.aliothmoon.maadroid.engine.limbus.action.FakeInput
 import com.aliothmoon.maadroid.engine.limbus.action.FakeRecognizer
@@ -8,9 +11,12 @@ import com.aliothmoon.maadroid.engine.limbus.action.FakeTemplateIndex
 import com.aliothmoon.maadroid.engine.limbus.action.LimbusActions
 import com.aliothmoon.maadroid.engine.limbus.action.TestActionContext
 import com.aliothmoon.maadroid.engine.limbus.recognize.Match
+import com.aliothmoon.maadroid.engine.limbus.recognize.GameLanguageObservation
+import com.aliothmoon.maadroid.engine.limbus.recognize.Recognizer
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -48,7 +54,7 @@ class UpstreamPipelineRunTest {
     }
 
     private fun runnerFor(
-        recognizer: FakeRecognizer,
+        recognizer: Recognizer,
         input: FakeInput,
         config: FakeConfig = FakeConfig(),
         onLog: (String) -> Unit = {},
@@ -74,6 +80,66 @@ class UpstreamPipelineRunTest {
             recognizeGate = { nodeRecognizer.recognize(it) },
             onLog = onLog,
         )
+    }
+
+    @Test fun confirmedLanguageReturnsToRealLuxcavationRouteWithoutErrorHandlerLoop() = runTest {
+        for (task in listOf("exp", "thread")) {
+            val fake = FakeRecognizer().apply {
+                onTemplate("main_drive_no_text", Match(978, 649, .95))
+                onTemplate("inferno", Match(1136, 148, .93))
+                onTemplate("luxcavation", Match(640, 100, .95))
+                // The inverse language gate misses during the transition, as in build 749.
+            }
+            var observations = 0
+            val recognizer = object : Recognizer by fake {
+                override suspend fun observeGameLanguage() =
+                    if (++observations == 1) GameLanguageObservation.Uncertain else GameLanguageObservation.Confirmed
+            }
+            val stages = mutableListOf<String>()
+            // Stop at stage selection: the supplied frames cover navigation, not a battle.
+            ActionRegistry.register("${task}_select_stage", object : ActionBackend {
+                override suspend fun execute(ctx: ActionContext): ActionOutcome {
+                    stages += ctx.nodeName
+                    return ActionOutcome.Finish(true)
+                }
+            })
+            val input = FakeInput()
+            val logs = mutableListOf<String>()
+            assertEquals(listOf("error_handler"), registry.interruptsOf("game_language_confirm"))
+            val runner = runnerFor(recognizer, input, onLog = logs::add).also { it.delayer = {} }
+
+            assertNull(runner.run("${task}_entry"))
+            assertEquals(2, observations)
+            assertEquals(listOf("${task}_select_stage"), stages)
+            assertEquals(listOf(978 to 649, 440 to 160), input.clicks())
+            assertTrue(logs.any { "节点 game_language_confirm 执行动作 report_error" in it })
+            assertTrue(logs.none { "节点 error_handler 执行动作" in it })
+        }
+    }
+
+    @Test fun unconfirmedLanguageNeverResumesParentTask() = runTest {
+        for (observation in listOf(GameLanguageObservation.Uncertain, GameLanguageObservation.Mismatch("zh", "en"))) {
+            val fake = FakeRecognizer().apply {
+                onTemplate("main_drive_no_text", Match(978, 649, .95))
+                onTemplate("inferno", Match(1136, 148, .93))
+            }
+            var observations = 0
+            val recognizer = object : Recognizer by fake {
+                override suspend fun observeGameLanguage(): GameLanguageObservation {
+                    observations++
+                    return observation
+                }
+            }
+            val input = FakeInput()
+            val logs = mutableListOf<String>()
+            val runner = runnerFor(recognizer, input, onLog = logs::add).also { it.delayer = {} }
+            val failure = runner.run("exp_entry")
+            val uncertain = observation == GameLanguageObservation.Uncertain
+            assertTrue(failure?.contains(if (uncertain) "暂时无法识别主页导航" else "游戏画面为英文") == true)
+            assertEquals(if (uncertain) 3 else 1, observations)
+            assertEquals(listOf(978 to 649), input.clicks())
+            assertTrue(logs.none { "节点 exp_enter 执行动作" in it || "节点 error_handler 执行动作" in it })
+        }
     }
 
     @Test

@@ -8,6 +8,7 @@ import com.aliothmoon.maadroid.IEngineDeviceSession
 import com.aliothmoon.maadroid.RemoteService
 import com.aliothmoon.maadroid.domain.models.RunMode
 import com.aliothmoon.maadroid.remote.BgrFrameLayout
+import com.aliothmoon.maadroid.remote.AppAliveStatus
 import com.aliothmoon.maadroid.remote.PermissionGrantRequest
 import com.aliothmoon.maadroid.remote.RemoteDeviceHandle
 import com.aliothmoon.maadroid.remote.SetupResult
@@ -101,6 +102,29 @@ class EngineDeviceSession private constructor(
     @Synchronized
     fun setPreviewSurface(surface: Surface?) {
         if (!closed.get()) device.setPreviewSurface(surface)
+    }
+
+    @Synchronized
+    fun canReuse(profile: GameProfile, service: RemoteService, mode: RunMode): Boolean =
+        !closed.get() && mode == RunMode.BACKGROUND && packageName in profile.gamePackages &&
+            device.isActiveOn(service, profile.display)
+
+    /** Never send a launch intent to an existing process just because automation starts again. */
+    @Synchronized
+    fun resumeGame(service: RemoteService) {
+        check(!closed.get()) { "设备会话已关闭" }
+        if (service.isAppAlive(packageName) == AppAliveStatus.DEAD) {
+            check(device.control.startApp(packageName)) { "重新打开游戏失败: $packageName" }
+        }
+    }
+
+    @Synchronized
+    fun readGameFps(): Float? = if (closed.get()) null else device.readGameFps()
+
+    /** Only the owning session calls this, after the automation engine confirms stop. */
+    @Synchronized
+    internal fun stopGame() {
+        if (!closed.get()) device.control.stopApp(packageName)
     }
 
     /** A failed connection may still own native work; release the display only after stop confirms. */

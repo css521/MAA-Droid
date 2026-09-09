@@ -108,9 +108,6 @@ class ArknightsEngine internal constructor(
             check(!released && !invalidated && !stopRequested && session == null) { "方舟会话已经连接或关闭" }
             val snapshot = checkNotNull(prepared) { "请先准备方舟资源" }
             val remote = device as? RemoteEngineDevice ?: error("设备不支持远程自动化引擎")
-            val display = remote.displaySpec
-            val displayId = remote.displayId
-            require(displayId >= 0) { "无效游戏显示器：$displayId" }
             val client = clientFactory(remote)
             val owner = MaaCoreSession(client, ::onNativeEvent, connectTimeoutMillis, stopTimeoutMillis)
             synchronized(stateLock) {
@@ -126,6 +123,11 @@ class ArknightsEngine internal constructor(
             check(!invalidated) { "方舟远程服务已断开" }
             check(owner.clearTasks()) { "无法清理方舟任务队列" }
             check(!invalidated) { "方舟远程服务已断开" }
+            // The host may prepare its display lazily. BUSY/failed initialization must not
+            // touch display metadata; engineService lookup must remain independent of it.
+            val display = remote.displaySpec
+            val displayId = remote.displayId
+            require(displayId >= 0) { "无效游戏显示器：$displayId" }
             val config = buildJsonObject {
                 put("library_path", "libbridge.so")
                 put("screen_resolution", buildJsonObject {

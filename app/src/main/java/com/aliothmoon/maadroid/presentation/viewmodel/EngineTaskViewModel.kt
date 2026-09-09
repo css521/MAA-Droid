@@ -57,6 +57,7 @@ class EngineTaskViewModel(
     private val canStart: () -> Boolean = { true },
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
     private val previewDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val quickActions: EngineTaskQuickActions? = null,
 ) : ViewModel(scope) {
 
     /** 该引擎声明的面板；引擎未提供则为空表，UI 据此显示「该引擎暂无任务面板」 */
@@ -99,6 +100,78 @@ class EngineTaskViewModel(
     private val previewSurface = AtomicReference<Surface?>(null)
     private val previewMutex = Mutex()
     private var previewJob: Job? = null
+
+    val mutedGamePackage: StateFlow<String> = quickActions?.mutedPackage ?: MutableStateFlow("")
+    val gamePackageName: String? get() = session?.gamePackageName
+
+    suspend fun readGameFps(): Float? = withContext(previewDispatcher) {
+        val current = session
+        if (!_previewReady.value || current == null) return@withContext null
+        try {
+            current.readGameFps()?.takeIf { session === current && it.isFinite() && it >= 0f }
+        } catch (failure: Throwable) {
+            if (failure is CancellationException || !failure.isRecoverableEngineFailure()) throw failure
+            null
+        }
+    }
+
+    fun onToggleGameSound() {
+        val current = session ?: return
+        val pkg = current.gamePackageName ?: return
+        if (!_previewReady.value || _stopping.value) return
+        runQuickAction {
+            if (session === current && current.previewReady.value) {
+                check(quickActions?.toggleGameSound(pkg) == true) { "游戏声音设置失败" }
+            }
+        }
+    }
+
+    fun onScreenOff() = runQuickAction { quickActions?.turnScreenOff() }
+
+    private fun runQuickAction(action: suspend () -> Unit) {
+        viewModelScope.launch(previewDispatcher) {
+            try { action() }
+            catch (failure: Throwable) {
+                if (failure is CancellationException || !failure.isRecoverableEngineFailure()) throw failure
+                // A menu operation failing is not an automation crash.
+                _status.value = UiText.Dynamic(failure.message ?: "快捷操作失败")
+            }
+        }
+    }
+
+    /** Explicit user action: stop automation and close this game's owned display/process. */
+    fun onCloseGame() {
+        val current = session ?: return
+        if (!_stopping.compareAndSet(false, true)) return
+        viewModelScope.launch {
+            try {
+                startJob?.cancelAndJoin()
+                if (session === current) {
+                    val pkg = current.gamePackageName
+                    current.closeGame()
+                    restoreGameSound(pkg)
+                    closeSession()
+                }
+            } catch (failure: Throwable) {
+                if (failure is CancellationException || !failure.isRecoverableEngineFailure()) throw failure
+                _status.value = UiText.Dynamic(failure.message ?: "关闭游戏失败")
+            } finally {
+                _stopping.value = false
+            }
+        }
+    }
+
+    private suspend fun restoreGameSound(packageName: String?) {
+        if (packageName == null) return
+        try {
+            if (quickActions?.onGameClosed(packageName) == false) {
+                _status.value = uiTextOf(R.string.bg_toast_mute_failed)
+            }
+        } catch (failure: Throwable) {
+            if (failure is CancellationException || !failure.isRecoverableEngineFailure()) throw failure
+            _status.value = UiText.Dynamic(failure.message ?: "恢复游戏声音失败")
+        }
+    }
 
     /** Capture the current device once; queued events must not look up a newer session. */
     fun openPreviewInput(): PreviewInput? {
@@ -220,6 +293,8 @@ class EngineTaskViewModel(
         _diagnosticFailure.value = null
         AppDiagnostics.record(engineId, "ui.start.clicked")
         startJob = viewModelScope.launch {
+            val previous = session
+            val previousPackage = previous?.gamePackageName
             try {
                 saveJob?.join()
                 workspace?.let { w ->
@@ -240,26 +315,28 @@ class EngineTaskViewModel(
                     return@launch
                 }
 
-                // A finished task may still own the user's playable preview. Dispose that
-                // old lease before replacement, without giving up this new start's admission.
-                session?.close()
+                // EngineSession.prepare adopts the retained device for this engine. Closing
+                // it here would discard the playable preview and restart the game on each run.
                 previewJob?.cancel()
                 previewJob = null
                 session = null
                 _previewReady.value = false
                 val s = sessionFactory(engineId).also { session = it }
                 _logs.value = emptyList()
-                previewJob = viewModelScope.launch {
-                    s.previewReady.collect { if (session === s) _previewReady.value = it }
-                }
+                observePreview(s)
                 syncPreview(s)
                 collectEvents(s)
                 val failure = s.prepare()
                 ensureActive()
                 if (failure != null) {
                     reportFailure(UiText.Dynamic(failure))
-                    closeSession()
+                    closeFailedStart(previous, previousPackage)
                     return@launch
+                }
+                s.gamePackageName?.let { pkg ->
+                    if (quickActions?.onGameReady(pkg) == false) {
+                        _status.value = uiTextOf(R.string.bg_toast_mute_failed)
+                    }
                 }
                 selected.forEach { (type, params) ->
                     check(s.appendTask(type, params) != com.aliothmoon.maadroid.engine.AutomationEngine.INVALID_TASK_ID) { "引擎拒绝任务 $type" }
@@ -267,17 +344,47 @@ class EngineTaskViewModel(
 
                 if (!s.start()) {
                     reportFailure(uiTextOf(R.string.engine_start_rejected))
-                    closeSession()
+                    closeFailedStart(previous, previousPackage)
                 }
             } catch (cancelled: CancellationException) {
                 // stop() 先等启动协程退出，再释放它的会话，不能在取消后继续 append/start。
+                if (previous?.previewReady?.value == true) {
+                    withContext(NonCancellable) { closeFailedStart(previous, previousPackage) }
+                }
                 throw cancelled
             } catch (error: Throwable) {
                 if (!error.isRecoverableEngineFailure()) throw error
                 AppDiagnostics.failure(engineId, "ui.start.failed", error)
                 reportFailure(uiTextOf(R.string.engine_start_failed, "${error.javaClass.simpleName}: ${error.message.orEmpty()}"))
-                closeSession()
+                closeFailedStart(previous, previousPackage)
             }
+        }
+    }
+
+    private fun observePreview(current: EngineSession) {
+        previewJob?.cancel()
+        _previewReady.value = current.previewReady.value
+        previewJob = viewModelScope.launch {
+            current.previewReady.collect { if (session === current) _previewReady.value = it }
+        }
+    }
+
+    private suspend fun closeFailedStart(previous: EngineSession?, previousPackage: String?) {
+        if (previous != null && session === previous && previous.previewReady.value) {
+            releaseTaskReservation()
+            return
+        }
+        if (!closeSession()) return
+        if (previous?.previewReady?.value == true) {
+            // Preparation failed before transfer. Its predecessor still owns the playable
+            // display; observe it again, including a later cross-game handoff invalidation.
+            session = previous
+            observePreview(previous)
+            syncPreview(previous)
+        } else {
+            // The failed replacement already consumed the old display. Restore its audio
+            // marker too, since neither session has a package getter after disposal.
+            restoreGameSound(previousPackage)
         }
     }
 
@@ -342,7 +449,18 @@ class EngineTaskViewModel(
                         )
                         if (event.success) _status.value = terminal
                         else reportFailure(_diagnosticFailure.value ?: terminal)
-                        closeSession(keepPreview = true)
+                        if (quickActions?.closeOnTaskEnd == true) {
+                            val pkg = s.gamePackageName
+                            try {
+                                s.closeGame()
+                                restoreGameSound(pkg)
+                                closeSession()
+                            } catch (failure: Throwable) {
+                                if (failure is CancellationException || !failure.isRecoverableEngineFailure()) throw failure
+                                _status.value = UiText.Dynamic(failure.message ?: "自动关闭游戏失败")
+                                closeSession(keepPreview = true)
+                            }
+                        } else closeSession(keepPreview = true)
                     }
                     else -> Unit
                 }
@@ -361,6 +479,7 @@ class EngineTaskViewModel(
     private suspend fun closeSession(keepPreview: Boolean = false): Boolean = withContext(NonCancellable) {
         val collector = eventsJob
         val current = session
+        val packageName = current?.gamePackageName
         val stopped = try {
             if (keepPreview) current?.finishTask() != false
             else { current?.close(); true }
@@ -381,6 +500,7 @@ class EngineTaskViewModel(
             previewJob = null
             session = null
             _previewReady.value = false
+            restoreGameSound(packageName)
         }
         releaseTaskReservation()
         // Update terminal state before cancelling a collector that may be this coroutine.

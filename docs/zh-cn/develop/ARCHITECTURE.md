@@ -40,7 +40,7 @@ Gradle 路径与目录对应，例如 `:engine:limbus`、`:core:bridge`。`app` 
 |---|---|---|
 | 业务执行 | App 进程内 Kotlin、OpenCV、ONNX Runtime | 提权进程内 MaaCore，由宿主业务代码编排 |
 | 设备访问 | `DeviceHandle`，共享内存 BGR 帧与 AIDL 输入 | MaaCore 与 native 桥及其专属 AIDL |
-| App 注册 | `EngineSetup` 中的 provider | provider 已可创建独立 `ArknightsEngine`；现有任务页仍走 `MaaCompositionService` |
+| App 注册 | `EngineSetup` 中的 provider | provider 可创建独立 `ArknightsEngine`；现有任务页由 `MaaCompositionService` 接线，每轮创建独立引擎 |
 | 提权注册 | 只使用通用设备服务，不需注册一个边狱 Binder | [MaaDroidRemoteService](../../../app/src/main/java/com/aliothmoon/maadroid/remote/MaaDroidRemoteService.kt) 注册 `ArknightsRemoteEngineFactory` |
 
 只有需要自有提权引擎服务的游戏才实现 `RemoteEngineFactory`。工厂注册仍在 App 的装配点，不能让 `core:remote` import 新游戏。游戏无关的 `RemoteService.getEngineService(engineId)` 返回 Binder，由该引擎自己的代理还原接口。
@@ -53,7 +53,9 @@ Gradle 路径与目录对应，例如 `:engine:limbus`、`:core:bridge`。`app` 
 
 边狱工作区保留 LALC 的 `taskConfigs`、`teamConfigs`、`themePackWeights`，再转换为执行分节。图鉴由已下载资源生成，资源更新不会改写用户队伍、权重或饰品允许/排除配置。`EngineWorkspace.Content` 当前只收到资源目录 `File?`；边狱在页面存活时检查 manifest revision，更新图鉴与图片，避免同路径替换后继续显示旧内容。
 
-预览外框、紧凑标签、日志面板与行样式、主/次操作按钮在 `core/ui`，方舟和边狱使用同一套组件。首页的两种资源更新卡片也共用 `MaaSurfaceCard`。这些组件只负责呈现；预览 Surface 与设备租约、任务开关、日志详情和执行行为仍由各调用方提供。
+预览外框、FPS、紧凑标签、左右任务/配置布局、任务选择行、日志面板与行样式、主/次操作按钮在 `core/ui`，方舟和边狱使用同一套组件。首页的两种资源更新卡片也共用 `MaaSurfaceCard`。这些组件只负责呈现；预览 Surface 与设备租约、任务开关、日志详情和执行行为仍由各调用方提供。
+
+宿主 `TaskQuickActionsOverlay` 提供两个游戏共用的快捷菜单：熄屏、关闭游戏、声音控制、导出日志和自动设置。游戏声音复用 `GameMuteCoordinator` 的持久化与恢复逻辑，以已解析的安装包名区分游戏；边狱关闭游戏走当前 `IEngineDeviceSession`，不能通过无归属的全局 API 误关另一个游戏。停止后的预览继续可用，普通视图显示待执行蒙版，点击后进入可交互的大屏；画中画沿用同一预览 Surface。
 
 `EngineUi.SettingsSection()` 与 `OnboardingSteps()` 是预留接口，当前没有宿主调用点。`Capability` 也只是声明；不能仅添加 `SCHEDULE` 或 `COPILOT` 就宣称已接通定时或外部作业入口。
 
@@ -63,9 +65,12 @@ Gradle 路径与目录对应，例如 `:engine:limbus`、`:core:bridge`。`app` 
 
 1. 启动时取得准入、等待配置保存，验证 workspace，并固定本次执行配置。任务列表为空或配置无效时不启动。
 2. 先订阅引擎事件，再准备资源；源码归档包缺失时安装，随后持有资源包锁并重新验证版本与兼容性。
-3. `AutomationEngine.prepare` 接收主资源目录。宿主按 profile 选择已安装包、创建后台显示会话、启动游戏并等待尺寸正确的首帧，然后调用 `connect`。
+3. `AutomationEngine.prepare` 接收主资源目录。首次启动时，宿主按 profile 选择已安装包、创建后台显示会话、启动游戏并等待尺寸正确的首帧，然后调用 `connect`。同游戏再次执行时，优先接管保留的设备会话。
 4. 依次 `appendTask(type, paramsJson)`，拒绝无效任务 ID，再调用 `start`。引擎通过 `EngineEvent` 报告状态；`AllTasksFinished` 是宿主自动收尾的终态，`Failure` 本身只是错误报告。
-5. 完成、停止或失败收尾时，先停止并等待引擎任务退出，再释放模型、帧映射、输入/显示会话及资源和执行租约。若引擎仍在运行，应保留占用并允许重试停止。
+5. 完成或手动停止时，先确认引擎停止并等待任务退出，再释放引擎模型、资源锁及执行准入，保留设备、帧通道、预览和手动输入。关闭游戏或退出会话才关闭设备。未确认停止时继续持有占用，允许重试停止。
+6. 复用需要同一游戏、运行模式、远程服务 Binder、显示规格和仍有效的设备租约。接管前释放旧页面触点并撤销旧页面对设备的引用；旧回调不能关闭新任务。确认游戏进程仍在或状态未知时不发送启动 Intent；仅确认进程退出才重新打开。准备新引擎失败且尚未转移时恢复原预览。跨游戏或需要重启提权服务的资源准备会先关闭不兼容的旧设备。
+
+`IEngineDeviceSession.getGameFps` 读取该设备租约对应的 `GameFpsMonitor`，与方舟使用相同的系统任务 FPS 回调和帧计数回退。采样器在游戏打开时启动、设备释放时停止；过期设备 Binder 不能读取新游戏的帧率。
 
 [EngineExecutionCoordinator](../../../engine/api/src/main/java/com/aliothmoon/maadroid/engine/EngineExecutionCoordinator.kt) 负责 App 进程内任务与资源准备的准入；当前通用会话和方舟的 `MaaCompositionService` / `MaaResourceLoader` 已有接入点。它与按包的 `ResourcePackLocks`、提权侧显示租约分工不同：分别限制业务准入、资源换版、实际设备访问。运行时协调仍在收敛，新增入口需检查它是否参与现有准入与清理，不能只靠隐藏按钮实现互斥。
 
@@ -91,10 +96,10 @@ Gradle 路径与目录对应，例如 `:engine:limbus`、`:core:bridge`。`app` 
 
 ## 方舟迁移的实际边界
 
-已迁入 `engine/arknights` 的部分包括 `core/` 下的 JNA、MaaCore 管理与服务、对应 AIDL、profile、包名、资源声明及部分枚举/状态。[MaaCoreSession](../../../engine/arknights/src/main/java/com/aliothmoon/maadroid/engine/arknights/core/MaaCoreSession.kt) 已承担实例初始化、连接回调确认、完整任务队列提交与停止确认；宿主 `MaaCompositionService` 调用它，仍负责资源/设备准备、任务参数与业务回调接线。以下边界仍需区分：
+已迁入 `engine/arknights` 的部分包括 `core/` 下的 JNA、MaaCore 管理与服务、对应 AIDL、profile、包名、资源声明及部分枚举/状态。[MaaCoreSession](../../../engine/arknights/src/main/java/com/aliothmoon/maadroid/engine/arknights/core/MaaCoreSession.kt) 承担实例初始化、连接回调确认、完整任务队列提交与停止确认，由 `ArknightsEngine` 使用；宿主 `MaaCompositionService` 已改为每轮创建该引擎，仍负责资源/设备适配、任务参数与业务回调接线。以下边界仍需区分：
 
 - `ArknightsEngineProvider.createEngine()` 已实现，注册和创建不读取 Koin 或加载 native；`prepare` 才固定客户端/暂停部署选项，并通过 `MaaResourcePreparation` 调用宿主资源适配。`ArknightsEngine` 使用设备契约提供的显示规格和专属 Binder，经 `MaaCoreSession` 连接、追加真实 task ID、启动和确认停止。失败或取消时未确认停止不能释放；旧实例失效后不再访问旧 Binder。
-- 当前方舟任务页仍由宿主 `MaaCompositionService` 编排，provider 的 `taskPanels` 仍为空。已有 Fake MaaCoreClient 生命周期与宿主装配测试，但新代理未替换现有任务页入口，也未经真实 Binder/native 联调。同步业务回调预留 `onRawEvent`，不能用异步事件流替代任务开始时必须同步回写参数的回调。
+- 当前方舟任务页仍由宿主 `MaaCompositionService` 编排，provider 的 `taskPanels` 仍为空；执行入口已使用 `ArknightsEngine`。`ArknightsDeviceAdapter` 惰性打开显示，核心 BUSY 时不能先改变当前游戏画面。同步业务回调通过本轮引擎的 `setTaskParams` 回写；库存刷新不再查询全局 MaaCore Binder。自然完成先确认停止，再发出业务终态、释放执行准入，保留 VD；服务死亡和旧回调按绑定实例隔离。已有 Fake MaaCoreClient 与真实宿主入口的生命周期测试，尚未经这次改动后的真实 Binder/native 联调。
 - 任务配置/资源模型、业务回调、面板和部分状态仍在 `app`。`maa.DriverClass` 也仍由 native JNI 按旧类名查找。
 - MaaCore 下载路径现为 `engine/arknights/src/main/assets/MaaSync/MaaResource` 与 `engine/arknights/src/main/jniLibs`；[setup_maa_core.py](../../../scripts/setup_maa_core.py) 和[方舟模块构建声明](../../../engine/arknights/build.gradle.kts)已接线，模块生成自己的 JNI 打包目录与资源 manifest。[app 构建声明](../../../app/build.gradle.kts)仍为旧调用点转接版本字段。构建接线迁移不等于整包验收或业务迁移完成，APK 资源前缀及已安装用户的数据路径继续保持。
 - 方舟持久化任务中的 `@SerialName` 保留旧全限定名。搬包不能改这个存档标识；[TaskConfigWireFormatTest](../../../app/src/test/java/com/aliothmoon/maadroid/data/model/TaskConfigWireFormatTest.kt) 是迁移时需要保留的约束。

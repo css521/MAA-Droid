@@ -31,6 +31,7 @@ class EngineSessionLifecycleTest {
         every { checkCompatibility(any()) } returns null
         every { verifyInstalledFiles(any()) } returns null
         every { readInstalledVersion(any()) } returns "test"
+        every { requiresPrivilegedDelivery } returns false
     }
     private val profile = mockk<GameProfile> {
         every { id } returns ENGINE_ID
@@ -59,6 +60,8 @@ class EngineSessionLifecycleTest {
             EngineDeviceSession.open(profile, remote, RunMode.BACKGROUND, any(), any())
         } returns device
         coEvery { device.connect(any()) } returns Result.success(Unit)
+        every { device.canReuse(profile, remote, RunMode.BACKGROUND) } returns true
+        every { device.packageName } returns "test.game"
     }
 
     @After fun tearDown() {
@@ -315,6 +318,112 @@ class EngineSessionLifecycleTest {
         assertTrue(session.finishTask())
         assertTrue(session.previewReady.value)
         assertNull(EngineExecutionCoordinator.shared.activeEngineId.value)
+    }
+
+    @Test fun stoppedRunTransfersDeviceButUsesANewEngineAndRevokesTheOldPreview() = runBlocking {
+        val first = session()
+        assertNull(first.prepare())
+        assertTrue(first.finishTask())
+        val second = session()
+        assertNull(second.prepare())
+
+        assertFalse(first.previewReady.value)
+        assertNull(first.gamePackageName)
+        assertNull(first.openManualInput())
+        assertTrue(second.previewReady.value)
+        assertEquals("test.game", second.gamePackageName)
+        assertNotSame(engines[0], engines[1])
+        coVerify(exactly = 1) { EngineDeviceSession.open(profile, remote, RunMode.BACKGROUND, any(), any()) }
+        coVerify { device.connect(engines[0]); device.connect(engines[1]) }
+        verify(exactly = 1) { device.resumeGame(remote); device.releaseManualInput() }
+        val surface = mockk<android.view.Surface>()
+        second.setPreviewSurface(surface)
+        clearMocks(device, answers = false)
+
+        // Stale callbacks from the previous view/session must never target the adopted display.
+        first.setPreviewSurface(null)
+        first.close()
+        first.closeGame()
+        verify { device wasNot Called }
+        assertTrue(second.previewReady.value)
+        assertEquals(ENGINE_ID, EngineExecutionCoordinator.shared.activeEngineId.value)
+        second.close()
+        verify(exactly = 1) { device.close() }
+    }
+
+    @Test fun resourceFailureBeforeTransferKeepsThePreviousPlayableSession() = runBlocking {
+        val first = session()
+        assertNull(first.prepare())
+        assertTrue(first.finishTask())
+        every { pack.verifyInstalledFiles(any()) } returns "bad new resource"
+        val second = session()
+        assertTrue(second.prepare()!!.contains("bad new resource"))
+        assertTrue(first.previewReady.value)
+        assertEquals("test.game", first.gamePackageName)
+        verify(exactly = 0) { device.close(); device.releaseManualInput() }
+        assertFalse(second.previewReady.value)
+        assertNull(EngineExecutionCoordinator.shared.activeEngineId.value)
+    }
+
+    @Test fun incompatibleDisplayCannotBeAdoptedAndIsClosedBeforeReplacement() = runBlocking {
+        val first = session()
+        assertNull(first.prepare())
+        assertTrue(first.finishTask())
+        every { device.canReuse(profile, remote, RunMode.BACKGROUND) } returns false
+        val replacement = mockk<EngineDeviceSession>(relaxed = true)
+        coEvery { replacement.connect(any()) } returns Result.success(Unit)
+        coEvery { EngineDeviceSession.open(profile, remote, RunMode.BACKGROUND, any(), any()) } returns replacement
+        val second = session()
+        assertNull(second.prepare())
+        assertFalse(first.previewReady.value)
+        coVerifyOrder { device.close(); EngineDeviceSession.open(profile, remote, RunMode.BACKGROUND, any(), any()); replacement.connect(any()) }
+        first.close()
+        verify(exactly = 0) { replacement.close() }
+    }
+
+    @Test fun privilegedResourcesCloseTheRetainedDisplayBeforePreparingTheirEngine() = runBlocking {
+        val first = session()
+        assertNull(first.prepare())
+        assertTrue(first.finishTask())
+        every { pack.requiresPrivilegedDelivery } returns true
+        val next = session()
+        next.events()
+        coEvery { engines.last().prepare(any()) } coAnswers {
+            assertFalse(first.previewReady.value)
+            verify(exactly = 1) { device.close() }
+            Result.success(Unit)
+        }
+        assertNull(next.prepare())
+        verify(exactly = 0) { device.resumeGame(any()) }
+    }
+
+    @Test fun explicitCloseGameWaitsForAutomationStopAndUsesTheOwnedDeviceOnly() = runBlocking {
+        val session = session()
+        assertNull(session.prepare())
+        val engine = engines.single()
+        coEvery { engine.stop() } returns false
+        assertTrue(runCatching { session.closeGame() }.isFailure)
+        verify(exactly = 0) { device.stopGame(); device.close() }
+        assertRetained(engine)
+
+        coEvery { engine.stop() } returns true
+        session.closeGame()
+        coVerifyOrder { engine.stop(); device.stopGame(); engine.release(); device.close() }
+        session.closeGame()
+        verify(exactly = 1) { device.stopGame(); device.close() }
+        assertFalse(session.previewReady.value)
+    }
+
+    @Test fun fpsRemainsAvailableAfterFinishingButNotAfterDisposal() = runBlocking {
+        val session = session()
+        assertNull(session.readGameFps())
+        assertNull(session.prepare())
+        every { device.readGameFps() } returns 59.5f
+        assertEquals(59.5f, session.readGameFps())
+        assertTrue(session.finishTask())
+        assertEquals(59.5f, session.readGameFps())
+        session.close()
+        assertNull(session.readGameFps())
     }
 
     @Test fun prepareWithoutAnEarlySubscriberStillUsesOneInstance() = runBlocking {

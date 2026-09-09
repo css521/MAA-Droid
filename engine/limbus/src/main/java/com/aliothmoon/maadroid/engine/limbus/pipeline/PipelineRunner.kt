@@ -122,6 +122,15 @@ class PipelineRunner(
         if (outcome !is ActionOutcome.Finish) actionDelay(step.node, "post_delay")
         when (outcome) {
             ActionOutcome.Continue -> Unit
+            ActionOutcome.Return -> {
+                // Every Action has its own Route directly underneath, including retries
+                // and Goto targets. Drop only that continuation, never the caller's Route.
+                check(stack.lastOrNull() == Step.Route(step.name, step.node)) {
+                    "节点 ${step.name} 缺少待返回的路由"
+                }
+                stack.removeLast()
+                onLog("节点 ${step.name} 完成子分支，返回调用方")
+            }
             ActionOutcome.RetrySelf -> {
                 // 上游用于「技能全未选中，点一下重开 p」这类重试
                 stack.addLast(Step.Action(step.name, step.node))

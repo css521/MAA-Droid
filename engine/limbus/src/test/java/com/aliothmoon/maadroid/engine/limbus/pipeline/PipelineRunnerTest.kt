@@ -177,6 +177,63 @@ class PipelineRunnerTest {
         assertEquals("main 和子节点 act_a 都必须执行 empty", listOf("EMPTY", "EMPTY"), trace)
     }
 
+    @Test fun returnFromNestedChainSkipsItsNextAndDefaultInterruptButResumesCaller() = runTest {
+        val reg = PipelineRegistry.load(mapOf(
+            "flow.json" to """{
+                "empty":{"action":"empty"},
+                "return_action":{"action":"empty"},
+                "act_a":{"action":"empty"},
+                "main":{"action":"child","next":["after"],"interrupt":[]},
+                "child":{"action":"empty","next":["leaf"],"interrupt":[]},
+                "leaf":{"action":"return_action","next":["forbidden"]},
+                "forbidden":{"action":"empty","interrupt":[]},
+                "after":{"action":"act_a","interrupt":[]}
+            }""",
+            "error.json" to """{"error_handler":{"action":"empty"}}""",
+        ))
+        assertEquals(listOf("error_handler"), reg.interruptsOf("leaf"))
+        var attempts = 0
+        ActionRegistry.register("return_action", object : ActionBackend {
+            override suspend fun execute(ctx: ActionContext): ActionOutcome {
+                trace += "RETURN${++attempts}"
+                return if (attempts == 1) ActionOutcome.RetrySelf else ActionOutcome.Return
+            }
+        })
+        ActionRegistry.register("act_a", recordingAction("PARENT"))
+        hits = reg.names()
+
+        assertNull(runner(reg).run("main"))
+        assertEquals(listOf("EMPTY", "RETURN1", "RETURN2", "PARENT"), trace)
+    }
+
+    @Test fun returnFromInterruptPreservesInterruptedRoute() = runTest {
+        val reg = basicRegistry()
+        ActionRegistry.register("act_a", recordingAction("A"))
+        ActionRegistry.register("act_err", object : ActionBackend {
+            override suspend fun execute(ctx: ActionContext): ActionOutcome {
+                trace += "RECOVERED"
+                hits = setOf("a")
+                return ActionOutcome.Return
+            }
+        })
+        hits = setOf("error_handler")
+
+        assertNull(runner(reg).run("main"))
+        assertEquals(listOf("EMPTY", "RECOVERED", "A"), trace)
+    }
+
+    @Test fun returnAtEntryEndsOnlyThatBranch() = runTest {
+        val reg = basicRegistry()
+        ActionRegistry.register("empty", object : ActionBackend {
+            override suspend fun execute(ctx: ActionContext) = ActionOutcome.Return
+        })
+        hits = reg.names()
+        val r = runner(reg)
+        assertNull(r.run("main"))
+        assertTrue(!r.isRunning)
+        assertTrue(trace.isEmpty())
+    }
+
     @Test fun checkCountRepeatsOriginThenDisablesEntryAndResetsNextRun() = runTest {
         val reg = PipelineRegistry.load(mapOf("flow.json" to """{
             "empty":{"action":"empty","interrupt":[]},

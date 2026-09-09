@@ -25,22 +25,19 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.aliothmoon.maadroid.R
+import com.aliothmoon.maadroid.ui.components.TaskSelectionRow
 import com.aliothmoon.maadroid.data.model.TaskChainNode
 import com.aliothmoon.maadroid.ui.theme.MaaAnimatedVisibility
 import sh.calvin.reorderable.ReorderableColumn
@@ -237,44 +234,12 @@ private fun TaskNodeRow(
     onSelected: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth(),
-        shape = RoundedCornerShape(4.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
-        ),
-        border = if (isSelected) BorderStroke(
-            1.dp,
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-        ) else null
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onSelected() }
-                .padding(horizontal = 4.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // 在编辑模式下也可以保留勾选框，或者隐藏以展示纯粹的排序视图
-            // 依然显示勾选框以便快速切换状态，但调整间距
-            CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
-                Checkbox(
-                    checked = node.enabled,
-                    onCheckedChange = onEnabledChange,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = node.name,
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-        }
-    }
+    TaskSelectionRow(
+        label = node.name,
+        selected = isSelected,
+        checked = node.enabled,
+        onCheckedChange = onEnabledChange,
+        onSelected = onSelected,
+        modifier = modifier,
+    )
 }

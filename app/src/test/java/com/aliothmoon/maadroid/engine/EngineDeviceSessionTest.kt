@@ -5,6 +5,7 @@ import com.aliothmoon.maadroid.IEngineDeviceSession
 import com.aliothmoon.maadroid.RemoteService
 import com.aliothmoon.maadroid.domain.models.RunMode
 import com.aliothmoon.maadroid.remote.RemoteDeviceHandle
+import com.aliothmoon.maadroid.remote.AppAliveStatus
 import io.mockk.*
 import kotlinx.coroutines.*
 import org.junit.Assert.*
@@ -316,5 +317,53 @@ class EngineDeviceSessionTest {
         verify { h.input.touchUp(2, 1, 9) }
         verify(exactly = 1) { h.handle.close() }
         verify(exactly = 0) { h.input.touchCancel() }
+    }
+
+    @Test fun reuseRequiresMatchingProfileModeAndLiveRemoteHandle() = runBlocking {
+        val h = Harness()
+        val session = h.open()
+        every { h.handle.isActiveOn(h.service, DisplaySpec(3, 2, 320)) } returns true
+        assertTrue(session.canReuse(h.profile, h.service, RunMode.BACKGROUND))
+        assertFalse(session.canReuse(h.profile, h.service, RunMode.FOREGROUND))
+        every { h.handle.isActiveOn(h.service, DisplaySpec(3, 2, 320)) } returns false
+        assertFalse(session.canReuse(h.profile, h.service, RunMode.BACKGROUND))
+        every { h.handle.isActiveOn(h.service, DisplaySpec(3, 2, 320)) } returns true
+        every { h.profile.gamePackages } returns listOf("other.game")
+        assertFalse(session.canReuse(h.profile, h.service, RunMode.BACKGROUND))
+        session.close()
+        assertFalse(session.canReuse(h.profile, h.service, RunMode.BACKGROUND))
+    }
+
+    @Test fun resumingDoesNotSendLaunchIntentUnlessGameIsConfirmedDead() = runBlocking {
+        val h = Harness()
+        val session = h.open()
+        clearMocks(h.control, answers = false)
+        for (status in listOf(AppAliveStatus.ALIVE, AppAliveStatus.UNKNOWN)) {
+            every { h.service.isAppAlive("installed") } returns status
+            session.resumeGame(h.service)
+        }
+        verify { h.control wasNot Called }
+        every { h.service.isAppAlive("installed") } returns AppAliveStatus.DEAD
+        session.resumeGame(h.service)
+        verify(exactly = 1) { h.control.startApp("installed") }
+        verify(exactly = 0) { h.control.stopApp(any()) }
+        session.close()
+        assertTrue(runCatching { session.resumeGame(h.service) }.isFailure)
+    }
+
+    @Test fun gameCloseAndFpsUseTheOwnedHandleAndCannotActAfterDisposal() = runBlocking {
+        val h = Harness()
+        val session = h.open()
+        every { h.handle.readGameFps() } returns 59.25f
+        every { h.control.stopApp("installed") } just Runs
+        assertEquals(59.25f, session.readGameFps())
+        session.stopGame()
+        verify(exactly = 1) { h.control.stopApp("installed") }
+        verify(exactly = 0) { h.service.forceStopApp(any()); h.service.gameFps }
+        session.close()
+        clearMocks(h.control, h.handle, answers = false)
+        session.stopGame()
+        assertNull(session.readGameFps())
+        verify { h.control wasNot Called; h.handle wasNot Called }
     }
 }

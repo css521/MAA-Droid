@@ -66,12 +66,18 @@ internal class EngineDeviceSessionHost(private val legacyFrames: FrameChannel) {
         }
 
         override fun startApp(packageName: String): Boolean = lease.use(this) {
-            ActivityUtils.startApp(packageName, id)
+            val started = ActivityUtils.startApp(packageName, id, forceStop = false) &&
+                ActivityUtils.ensureAppOnDisplay(packageName, id)
+            if (started) GameFpsMonitor.start(packageName)
+            started
         }
 
         override fun stopApp(packageName: String) = lease.use(this) {
             ServiceManager.getActivityManager().forceStopPackage(packageName)
+            GameFpsMonitor.stop()
         }
+
+        override fun getGameFps(): Float = lease.use(this) { GameFpsMonitor.currentFps() }
 
         override fun touchDown(x: Int, y: Int, contact: Int) = lease.use(this) {
             check(InputControlUtils.down(x, y, contact, id)) { "触摸按下注入失败" }
@@ -105,6 +111,7 @@ internal class EngineDeviceSessionHost(private val legacyFrames: FrameChannel) {
             runCatching { owner.unlinkToDeath(this, 0) }
             runCatching { frames.close() }
             if (captureStarted) {
+                runCatching { GameFpsMonitor.stop() }
                 runCatching { NativeBridgeLib.setPreviewSurface(null) }
                 runCatching { VirtualDisplayManager.setMonitorSurface(null) }
                 runCatching { InputControlUtils.cancel(id) }

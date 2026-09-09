@@ -8,6 +8,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -40,6 +41,7 @@ class GameMuteCoordinator internal constructor(
     private val mutex = Mutex()
 
     private val markedPackage = MutableStateFlow(appSettingsManager.initialMutedGamePackage)
+    val mutedPackage: StateFlow<String> = markedPackage.asStateFlow()
 
     val isMuted: StateFlow<Boolean> = markedPackage
         .map { it.isNotEmpty() }
@@ -60,18 +62,42 @@ class GameMuteCoordinator internal constructor(
         }
     }
 
-    suspend fun mute(clientType: String?): Boolean = mutex.withLock { muteLocked(clientType) }
+    suspend fun mute(clientType: String?): Boolean = mutex.withLock {
+        val pkg = clientType?.let { Packages[it] } ?: return@withLock false
+        mutePackageLocked(pkg)
+    }
+
+    /** Engine profiles already resolved the installed package; do not map it as an Ark client. */
+    suspend fun mutePackage(packageName: String): Boolean = mutex.withLock {
+        mutePackageLocked(packageName)
+    }
+
+    suspend fun togglePackage(packageName: String): Boolean = mutex.withLock {
+        if (packageName.isBlank()) return@withLock false
+        if (markedPackage.value == packageName) unmuteLocked() else mutePackageLocked(packageName)
+    }
+
+    /** A delayed old-session cleanup must not restore a newer game's audio. */
+    suspend fun unmutePackage(packageName: String): Boolean = mutex.withLock {
+        if (markedPackage.value == packageName) unmuteLocked() else true
+    }
 
     suspend fun unmute(): Boolean = mutex.withLock { unmuteLocked() }
 
     suspend fun toggle(clientType: String?): Boolean = mutex.withLock {
         val marked = markedPackage.value
         Timber.i("Toggle game mute, direction=%s", if (marked.isNotEmpty()) "unmute" else "mute")
-        if (marked.isNotEmpty()) unmuteLocked() else muteLocked(clientType)
+        if (marked.isNotEmpty()) unmuteLocked()
+        else {
+            val pkg = clientType?.let { Packages[it] } ?: return@withLock false
+            mutePackageLocked(pkg)
+        }
     }
 
-    private suspend fun muteLocked(clientType: String?): Boolean {
-        val pkg = clientType?.let { Packages[it] } ?: return false
+    private suspend fun mutePackageLocked(pkg: String): Boolean {
+        if (pkg.isBlank()) return false
+        // Keep the previous marker until restoration succeeds, then persist the new one.
+        if (markedPackage.value.isNotEmpty() && markedPackage.value != pkg && !unmuteLocked()) return false
         setMarker(pkg)
         val ok = gameAudioAdapter.setMuted(pkg, muted = true)
         if (ok) {

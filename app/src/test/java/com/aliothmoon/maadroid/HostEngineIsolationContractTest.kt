@@ -2,6 +2,7 @@ package com.aliothmoon.maadroid
 
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 /**
@@ -85,6 +86,16 @@ class HostEngineIsolationContractTest {
         "engine/arknights/ArknightsEngineProvider.kt",
     )
 
+    // The existing Ark orchestrator now delegates to its engine. Track only these four
+    // assembly types separately; do not exempt the file or increase the general host budget.
+    private val runtimeAssemblyFile = "domain/service/MaaCompositionService.kt"
+    private val runtimeAssemblyImports = setOf(
+        "com.aliothmoon.maadroid.engine.arknights.ArknightsEngine",
+        "com.aliothmoon.maadroid.engine.arknights.ArknightsDeviceAdapter",
+        "com.aliothmoon.maadroid.engine.arknights.MaaResourcePreparation",
+        "com.aliothmoon.maadroid.engine.arknights.MaaRunOptions",
+    )
+
     /**
      * 各宿主目录当前对方舟的 import 行数；0 表示已干净、不得回退。
      *
@@ -99,7 +110,7 @@ class HostEngineIsolationContractTest {
     private val hostToArknights = mapOf(
         // ---- 待清理：抽 engine/arknights 时逐条归零 ----
         "presentation/viewmodel" to 61,      // 方舟 ViewModel 尚未随面板迁出
-        "domain/service" to 43,              // MaaCore 生命周期已委托给引擎模块
+        "domain/service" to 43,              // 另有 4 个精确限定的方舟运行装配 import，见下方独立约束
         "data/model" to 39,                  // 方舟任务配置与宿主模型混居
         "koin" to 22,                        // 含方舟资源准备实现及其契约绑定
         "presentation/view/background" to 10, // BackgroundTaskView 直连方舟 panel 符号
@@ -141,6 +152,18 @@ class HostEngineIsolationContractTest {
         val srcRoot = TestSources.inApp(APP_SOURCE_ROOT)
         val actual = countHostToArknights(srcRoot)
         assertRatchet("宿主 → 方舟", hostToArknights, actual)
+    }
+
+    @Test
+    fun arknightsRuntimeAssemblyDoesNotRecreateNativeSessions() {
+        val source = File(TestSources.inApp(APP_SOURCE_ROOT), runtimeAssemblyFile).readText()
+        val imports = source.lineSequence().map(String::trim)
+            .filter { it.startsWith("import ") }.map { it.removePrefix("import ") }.toSet()
+        assertEquals(runtimeAssemblyImports, imports.intersect(runtimeAssemblyImports))
+        assertFalse("宿主不能绕过引擎创建 native 会话", Regex("\\b(?:AidlMaaCoreClient|MaaCoreSession)\\s*\\(").containsMatchIn(source))
+        assertFalse("宿主不能恢复全局 MaaCore Binder 访问", imports.any {
+            it.endsWith(".AidlMaaCoreClient") || it.endsWith(".MaaCoreService") || it.endsWith(".maaCoreService")
+        })
     }
 
     // ------------------------------------------------------------------
@@ -216,7 +239,8 @@ class HostEngineIsolationContractTest {
             val key = hostDirectoryKeyOf(rel) ?: continue
             val n = file.readLines().count { line ->
                 val t = line.trim()
-                t.startsWith("import ") && isArknightsImport(t)
+                t.startsWith("import ") && isArknightsImport(t) &&
+                    !(rel == runtimeAssemblyFile && t.removePrefix("import ") in runtimeAssemblyImports)
             }
             if (n > 0) counts[key] = (counts[key] ?: 0) + n
         }

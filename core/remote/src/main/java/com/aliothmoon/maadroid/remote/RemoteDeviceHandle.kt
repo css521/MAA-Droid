@@ -79,6 +79,17 @@ class RemoteDeviceHandle(
         if (session != null) session.setPreviewSurface(surface) else service.setMonitorSurface(surface)
     }
 
+    /** A retained display may only be adopted from the same live remote service and exact spec. */
+    fun isActiveOn(remote: RemoteService, spec: DisplaySpec): Boolean = synchronized(lifecycleLock) {
+        !closed && session != null && displaySpec == spec && service.asBinder() == remote.asBinder() &&
+            session.matchesDisplaySpec(spec.width, spec.height, spec.dpi)
+    }
+
+    fun readGameFps(): Float? = synchronized(lifecycleLock) {
+        if (closed || session == null) return@synchronized null
+        session.gameFps.takeIf { it.isFinite() && it >= 0f }
+    }
+
     fun close() = synchronized(lifecycleLock) {
         if (closed) return@synchronized
         closed = true

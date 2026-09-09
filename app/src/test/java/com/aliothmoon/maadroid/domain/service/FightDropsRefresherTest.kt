@@ -1,7 +1,6 @@
 package com.aliothmoon.maadroid.domain.service
 
 import com.aliothmoon.maadroid.MaaCoreService
-import com.aliothmoon.maadroid.RemoteService
 import com.aliothmoon.maadroid.data.repository.DepotRepository
 import com.aliothmoon.maadroid.data.resource.ItemHelper
 import com.aliothmoon.maadroid.data.resource.ItemInfo
@@ -9,30 +8,24 @@ import com.aliothmoon.maadroid.data.resource.StageApCostHelper
 import com.aliothmoon.maadroid.domain.models.DropTarget
 import com.aliothmoon.maadroid.maa.callback.SubTaskHandler
 import com.aliothmoon.maadroid.maa.task.TaskSlot
-import com.aliothmoon.maadroid.manager.RemoteServiceManager
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.mockkObject
-import io.mockk.unmockkObject
 import io.mockk.verify
-import io.mockk.mockkStatic
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import com.aliothmoon.maadroid.engine.arknights.core.maaCoreService
 
 /**
  * 目标库存运行时重算契约。
  * 对齐上游 FightSettingsUserControlModel.RefreshFightTaskDrops。
  *
  * 登记分 stage(TaskSlot) + bind(TaskSlot, taskId)；单测用 [stageAndBind] 一步完成。
- * SetTaskParams 经 [RemoteServiceManager] 下发。
+ * SetTaskParams 使用测试显式传入的同步函数。
  */
 class FightDropsRefresherTest {
 
@@ -40,7 +33,6 @@ class FightDropsRefresherTest {
     private val itemHelper: ItemHelper = mockk()
     private val stageApCostHelper: StageApCostHelper = mockk()
     private val subTaskHandler: SubTaskHandler = mockk()
-    private val remoteService: RemoteService = mockk()
     private val maaCore: MaaCoreService = mockk()
     private lateinit var refresher: FightDropsRefresher
 
@@ -52,11 +44,6 @@ class FightDropsRefresherTest {
         every { itemHelper.getItemInfo(ITEM) } returns ItemInfo(id = ITEM, name = "源岩")
         every { itemHelper.getItemInfo(match { it != ITEM }) } returns null
 
-        mockkObject(RemoteServiceManager)
-        every { RemoteServiceManager.getInstanceOrNull() } returns remoteService
-        // maaCoreService 现为扩展属性（按 engineId 取引擎），编译成 com.aliothmoon.maadroid.engine.arknights.core.MaaCoreServiceAccessKt 的静态方法
-        mockkStatic("com.aliothmoon.maadroid.engine.arknights.core.MaaCoreServiceAccessKt")
-        every { remoteService.maaCoreService } returns maaCore
         every { maaCore.SetTaskParams(any(), any()) } answers {
             lastParamsJson = secondArg()
             true
@@ -75,6 +62,10 @@ class FightDropsRefresherTest {
         lastParamsJson = null
     }
 
+    private fun refresh(taskId: Int) = refresher.onTaskStarted(taskId) { id, json ->
+        maaCore.SetTaskParams(id, json)
+    }
+
     /** 无药剂/源石预算的目标，理智判定才会介入 */
     private fun budgetlessTarget(dropCount: Int = 100, expireDays: Int? = null) =
         target(dropCount = dropCount, medicine = 0, stone = 0)
@@ -86,11 +77,6 @@ class FightDropsRefresherTest {
             max = max,
             reportTimeMillis = System.currentTimeMillis() - reportedMinutesAgo * 60_000,
         )
-    }
-
-    @After
-    fun tearDown() {
-        unmockkObject(RemoteServiceManager)
     }
 
     private fun target(
@@ -121,7 +107,7 @@ class FightDropsRefresherTest {
 
     @Test
     fun unregisteredTaskId_isSkipped() {
-        val outcome = refresher.onTaskStarted(99)
+        val outcome = refresh(99)
         assertEquals(FightDropsRefresher.RefreshOutcome.Skipped, outcome)
         verify(exactly = 0) { maaCore.SetTaskParams(any(), any()) }
     }
@@ -129,7 +115,7 @@ class FightDropsRefresherTest {
     @Test
     fun stageWithoutBind_isSkipped() {
         refresher.stage(TaskSlot(NODE, 0), target())
-        val outcome = refresher.onTaskStarted(1)
+        val outcome = refresh(1)
         assertEquals(FightDropsRefresher.RefreshOutcome.Skipped, outcome)
         verify(exactly = 0) { maaCore.SetTaskParams(any(), any()) }
     }
@@ -137,7 +123,7 @@ class FightDropsRefresherTest {
     @Test
     fun bindWithoutStage_isNoOp() {
         refresher.bind(TaskSlot(NODE, 0), 1)
-        val outcome = refresher.onTaskStarted(1)
+        val outcome = refresh(1)
         assertEquals(FightDropsRefresher.RefreshOutcome.Skipped, outcome)
     }
 
@@ -147,8 +133,8 @@ class FightDropsRefresherTest {
         stageAndBind(2, target(dropCount = 50), index = 1)
         withInventory(mapOf(ITEM to 0))
 
-        val o1 = refresher.onTaskStarted(1) as FightDropsRefresher.RefreshOutcome.Updated
-        val o2 = refresher.onTaskStarted(2) as FightDropsRefresher.RefreshOutcome.Updated
+        val o1 = refresh(1) as FightDropsRefresher.RefreshOutcome.Updated
+        val o2 = refresh(2) as FightDropsRefresher.RefreshOutcome.Updated
         assertEquals(100, o1.need)
         assertEquals(50, o2.need)
     }
@@ -157,7 +143,7 @@ class FightDropsRefresherTest {
     fun needPositive_updatesDropsToDeficit() {
         stageAndBind(1, target(dropCount = 100))
         withInventory(mapOf(ITEM to 30))
-        val outcome = refresher.onTaskStarted(1)
+        val outcome = refresh(1)
         val json = Json.parseToJsonElement(lastParamsJson!!).jsonObject
 
         assertTrue(outcome is FightDropsRefresher.RefreshOutcome.Updated)
@@ -180,7 +166,7 @@ class FightDropsRefresherTest {
     fun needZero_setsTimesToZero() {
         stageAndBind(1, target(dropCount = 100))
         withInventory(mapOf(ITEM to 100))
-        val outcome = refresher.onTaskStarted(1)
+        val outcome = refresh(1)
         val json = Json.parseToJsonElement(lastParamsJson!!).jsonObject
 
         assertTrue(outcome is FightDropsRefresher.RefreshOutcome.Sufficient)
@@ -198,7 +184,7 @@ class FightDropsRefresherTest {
     fun needNegative_alsoSetsTimesToZero() {
         stageAndBind(1, target(dropCount = 50))
         withInventory(mapOf(ITEM to 80))
-        refresher.onTaskStarted(1)
+        refresh(1)
         val json = Json.parseToJsonElement(lastParamsJson!!).jsonObject
 
         assertEquals(0, json["times"]!!.jsonPrimitive.content.toInt())
@@ -209,7 +195,7 @@ class FightDropsRefresherTest {
     fun missingInventory_treatedAsZero() {
         stageAndBind(1, target(dropCount = 40))
         withInventory(emptyMap())
-        val outcome = refresher.onTaskStarted(1)
+        val outcome = refresh(1)
         val json = Json.parseToJsonElement(lastParamsJson!!).jsonObject
 
         assertTrue(outcome is FightDropsRefresher.RefreshOutcome.Updated)
@@ -220,7 +206,7 @@ class FightDropsRefresherTest {
     @Test
     fun blankDropId_isSkipped() {
         stageAndBind(1, target(dropId = ""))
-        val outcome = refresher.onTaskStarted(1)
+        val outcome = refresh(1)
         assertEquals(FightDropsRefresher.RefreshOutcome.Skipped, outcome)
         verify(exactly = 0) { maaCore.SetTaskParams(any(), any()) }
     }
@@ -228,7 +214,7 @@ class FightDropsRefresherTest {
     @Test
     fun nonPositiveDropCount_isSkipped() {
         stageAndBind(1, target(dropCount = 0))
-        val outcome = refresher.onTaskStarted(1)
+        val outcome = refresh(1)
         assertEquals(FightDropsRefresher.RefreshOutcome.Skipped, outcome)
         verify(exactly = 0) { maaCore.SetTaskParams(any(), any()) }
     }
@@ -237,7 +223,7 @@ class FightDropsRefresherTest {
     fun clear_removesStagedAndBound() {
         stageAndBind(1, target())
         refresher.clear()
-        val outcome = refresher.onTaskStarted(1)
+        val outcome = refresh(1)
         assertEquals(FightDropsRefresher.RefreshOutcome.Skipped, outcome)
         verify(exactly = 0) { maaCore.SetTaskParams(any(), any()) }
     }
@@ -247,7 +233,7 @@ class FightDropsRefresherTest {
         every { depotRepository.countOf(any()) } returns 0
         every { maaCore.SetTaskParams(any(), any()) } returns false
         stageAndBind(1, target(dropCount = 10))
-        val outcome = refresher.onTaskStarted(1)
+        val outcome = refresh(1)
         assertTrue(outcome is FightDropsRefresher.RefreshOutcome.Updated)
         assertFalse((outcome as FightDropsRefresher.RefreshOutcome.Updated).applied)
     }
@@ -257,17 +243,16 @@ class FightDropsRefresherTest {
         every { depotRepository.countOf(any()) } returns 100
         every { maaCore.SetTaskParams(any(), any()) } returns false
         stageAndBind(1, target(dropCount = 50))
-        val outcome = refresher.onTaskStarted(1)
+        val outcome = refresh(1)
         assertTrue(outcome is FightDropsRefresher.RefreshOutcome.Sufficient)
         assertFalse((outcome as FightDropsRefresher.RefreshOutcome.Sufficient).applied)
     }
 
     @Test
-    fun serviceUnavailable_reportsAppliedFalse() {
+    fun unavailableSessionWriter_reportsAppliedFalse() {
         every { depotRepository.countOf(any()) } returns 0
-        every { RemoteServiceManager.getInstanceOrNull() } returns null
         stageAndBind(1, target(dropCount = 10))
-        val outcome = refresher.onTaskStarted(1)
+        val outcome = refresher.onTaskStarted(1) { _, _ -> false }
         assertTrue(outcome is FightDropsRefresher.RefreshOutcome.Updated)
         assertFalse((outcome as FightDropsRefresher.RefreshOutcome.Updated).applied)
         verify(exactly = 0) { maaCore.SetTaskParams(any(), any()) }
@@ -280,7 +265,7 @@ class FightDropsRefresherTest {
             target(dropCount = 100).copy(medicineExpireDays = 3, drGrandet = true),
         )
         withInventory(mapOf(ITEM to 10))
-        refresher.onTaskStarted(1)
+        refresh(1)
         val json = Json.parseToJsonElement(lastParamsJson!!).jsonObject
         assertEquals(3, json["medicine_expire_days"]!!.jsonPrimitive.content.toInt())
         assertTrue(json["DrGrandet"]!!.jsonPrimitive.content.toBoolean())
@@ -290,7 +275,7 @@ class FightDropsRefresherTest {
     fun unknownItemName_fallsBackToId() {
         every { depotRepository.countOf(any()) } returns 5
         stageAndBind(1, target(dropId = "99999", dropCount = 1))
-        val outcome = refresher.onTaskStarted(1)
+        val outcome = refresh(1)
         assertTrue(outcome is FightDropsRefresher.RefreshOutcome.Sufficient)
         assertEquals("99999", (outcome as FightDropsRefresher.RefreshOutcome.Sufficient).dropName)
     }
@@ -304,7 +289,7 @@ class FightDropsRefresherTest {
         stageAndBind(1, budgetlessTarget())
         withInventory(mapOf(ITEM to 0))
 
-        val outcome = refresher.onTaskStarted(1)
+        val outcome = refresh(1)
         val json = Json.parseToJsonElement(lastParamsJson!!).jsonObject
 
         assertTrue(outcome is FightDropsRefresher.RefreshOutcome.SanityInsufficient)
@@ -322,7 +307,7 @@ class FightDropsRefresherTest {
         stageAndBind(1, budgetlessTarget())
         withInventory(mapOf(ITEM to 0))
 
-        assertTrue(refresher.onTaskStarted(1) is FightDropsRefresher.RefreshOutcome.Updated)
+        assertTrue(refresh(1) is FightDropsRefresher.RefreshOutcome.Updated)
     }
 
     @Test
@@ -333,7 +318,7 @@ class FightDropsRefresherTest {
         stageAndBind(1, budgetlessTarget())
         withInventory(mapOf(ITEM to 0))
 
-        assertTrue(refresher.onTaskStarted(1) is FightDropsRefresher.RefreshOutcome.Updated)
+        assertTrue(refresh(1) is FightDropsRefresher.RefreshOutcome.Updated)
     }
 
     @Test
@@ -343,7 +328,7 @@ class FightDropsRefresherTest {
         stageAndBind(1, budgetlessTarget())
         withInventory(mapOf(ITEM to 0))
 
-        val outcome = refresher.onTaskStarted(1)
+        val outcome = refresh(1)
         assertTrue(outcome is FightDropsRefresher.RefreshOutcome.SanityInsufficient)
         assertEquals(
             135,
@@ -358,7 +343,7 @@ class FightDropsRefresherTest {
         stageAndBind(1, target(dropCount = 100, medicine = 3, stone = 0))
         withInventory(mapOf(ITEM to 0))
 
-        assertTrue(refresher.onTaskStarted(1) is FightDropsRefresher.RefreshOutcome.Updated)
+        assertTrue(refresh(1) is FightDropsRefresher.RefreshOutcome.Updated)
     }
 
     @Test
@@ -368,7 +353,7 @@ class FightDropsRefresherTest {
         stageAndBind(1, budgetlessTarget())
         withInventory(mapOf(ITEM to 0))
 
-        assertTrue(refresher.onTaskStarted(1) is FightDropsRefresher.RefreshOutcome.Updated)
+        assertTrue(refresh(1) is FightDropsRefresher.RefreshOutcome.Updated)
     }
 
     @Test
@@ -377,7 +362,7 @@ class FightDropsRefresherTest {
         stageAndBind(1, budgetlessTarget())
         withInventory(mapOf(ITEM to 0))
 
-        assertTrue(refresher.onTaskStarted(1) is FightDropsRefresher.RefreshOutcome.Updated)
+        assertTrue(refresh(1) is FightDropsRefresher.RefreshOutcome.Updated)
     }
 
     @Test
@@ -388,14 +373,14 @@ class FightDropsRefresherTest {
 
         // 还没有任何任务证明 2 天窗口内的临期药已用完 → 照常进图
         stageAndBind(1, budgetlessTarget(expireDays = 2))
-        assertTrue(refresher.onTaskStarted(1) is FightDropsRefresher.RefreshOutcome.Updated)
+        assertTrue(refresh(1) is FightDropsRefresher.RefreshOutcome.Updated)
 
         // 该任务未达标就正常结束 → 窗口被证明耗尽
         refresher.onTaskCompleted(1)
 
         stageAndBind(2, budgetlessTarget(expireDays = 2), index = 1)
         assertTrue(
-            refresher.onTaskStarted(2) is FightDropsRefresher.RefreshOutcome.SanityInsufficient
+            refresh(2) is FightDropsRefresher.RefreshOutcome.SanityInsufficient
         )
     }
 
@@ -410,7 +395,7 @@ class FightDropsRefresherTest {
 
         withInventory(mapOf(ITEM to 0))
         stageAndBind(2, budgetlessTarget(expireDays = 2), index = 1)
-        assertTrue(refresher.onTaskStarted(2) is FightDropsRefresher.RefreshOutcome.Updated)
+        assertTrue(refresh(2) is FightDropsRefresher.RefreshOutcome.Updated)
     }
 
     @Test
@@ -424,7 +409,7 @@ class FightDropsRefresherTest {
         refresher.clear()
 
         stageAndBind(2, budgetlessTarget(expireDays = 2), index = 1)
-        assertTrue(refresher.onTaskStarted(2) is FightDropsRefresher.RefreshOutcome.Updated)
+        assertTrue(refresh(2) is FightDropsRefresher.RefreshOutcome.Updated)
     }
 
     private companion object {

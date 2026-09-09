@@ -1,20 +1,19 @@
 package com.aliothmoon.maadroid.presentation.view.engine
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.rounded.FolderZip
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -24,9 +23,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -34,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.ViewModelStoreOwner
@@ -48,6 +50,12 @@ import com.aliothmoon.maadroid.engine.EngineSession
 import com.aliothmoon.maadroid.engine.EngineTaskStore
 import com.aliothmoon.maadroid.manager.RemoteServiceManager
 import com.aliothmoon.maadroid.presentation.viewmodel.EngineTaskViewModel
+import com.aliothmoon.maadroid.presentation.viewmodel.EngineTaskQuickActions
+import com.aliothmoon.maadroid.domain.service.GameMuteCoordinator
+import com.aliothmoon.maadroid.overlay.screensaver.ScreenSaverOverlayManager
+import com.aliothmoon.maadroid.presentation.components.TaskQuickActionsButton
+import com.aliothmoon.maadroid.presentation.components.TaskQuickActionsOverlay
+import com.aliothmoon.maadroid.ui.components.AdaptiveTaskPromptDialog
 import com.aliothmoon.maadroid.presentation.components.LogExportController
 import com.aliothmoon.maadroid.presentation.state.EngineTaskExecutionState
 import com.aliothmoon.maadroid.presentation.pip.LocalIsInPip
@@ -57,6 +65,7 @@ import com.aliothmoon.maadroid.data.preferences.AppSettingsManager
 import com.aliothmoon.maadroid.ui.components.TaskPrimaryButton
 import com.aliothmoon.maadroid.ui.components.TaskSecondaryButton
 import org.koin.compose.koinInject
+import kotlinx.coroutines.launch
 
 /**
  * 按引擎声明渲染的任务页。
@@ -117,6 +126,9 @@ fun EngineTaskContent(
         val context = LocalContext.current.applicationContext
         val resourceService = koinInject<EngineResourceService>()
         val settings = koinInject<AppSettingsManager>()
+        val audio = koinInject<GameMuteCoordinator>()
+        val screenSaver = koinInject<ScreenSaverOverlayManager>()
+        val coroutineScope = rememberCoroutineScope()
         val executionState = engineTaskExecutionState(viewModelStoreOwner)
         val activeEngineId by executionState.activeEngineId.collectAsStateWithLifecycle()
         val viewModel = viewModel<EngineTaskViewModel>(
@@ -128,6 +140,7 @@ fun EngineTaskContent(
                 store = EngineTaskStore(context),
                 executionState = executionState,
                 canStart = canStart,
+                quickActions = EngineTaskQuickActions(settings, audio),
                 sessionFactory = { id ->
                     EngineSession(
                         context = context,
@@ -150,15 +163,21 @@ fun EngineTaskContent(
         val workspaceDraft by viewModel.workspaceDraft.collectAsStateWithLifecycle()
         val logs by viewModel.logs.collectAsStateWithLifecycle()
         val previewReady by viewModel.previewReady.collectAsStateWithLifecycle()
+        val mutedPackage by viewModel.mutedGamePackage.collectAsStateWithLifecycle()
         val pipOnHome by settings.pipOnHome.collectAsStateWithLifecycle()
         val profile = EngineRegistry.provider(engineId)?.profile
         val workspace = viewModel.workspace
-        // Start idle workspaces with room to configure teams/packs; later task state changes
-        // must not override the user's choice. The surrounding game key also isolates restoration.
+        // Match the task page's visible preview; task changes never override a user's collapse.
         var previewExpanded by rememberSaveable(engineId) {
-            mutableStateOf(workspace == null || running)
+            mutableStateOf(true)
         }
         var showLogExport by rememberSaveable { mutableStateOf(false) }
+        var showMoreActions by rememberSaveable { mutableStateOf(false) }
+        var showCloseConfirm by rememberSaveable { mutableStateOf(false) }
+        val chromeHidden = LocalIsInPip.current || LocalEnginePreviewNavigation.current?.fullscreenEngineId == engineId
+        LaunchedEffect(isActivePage, chromeHidden, showCloseConfirm) {
+            if (!isActivePage || chromeHidden || showCloseConfirm) showMoreActions = false
+        }
         // Keep the document launcher registered even while the sheet is closed or the task is idle.
         LogExportController(
             sheetVisible = showLogExport && !LocalIsInPip.current &&
@@ -196,7 +215,7 @@ fun EngineTaskContent(
                                         preview()
                                         EnginePreviewControls(
                                             expanded = true,
-                                            isRunning = previewReady || running,
+                                            isRunning = running,
                                             onToggleExpanded = { previewExpanded = false },
                                             canEnterFullscreen = previewReady && !stopping && isActivePage,
                                             onEnterFullscreen = enterFullscreen,
@@ -206,7 +225,7 @@ fun EngineTaskContent(
                                     }
                                 } else EnginePreviewControls(
                                     expanded = false,
-                                    isRunning = previewReady || running,
+                                    isRunning = running,
                                     onToggleExpanded = { previewExpanded = true },
                                     canEnterFullscreen = previewReady && !stopping && isActivePage,
                                     onEnterFullscreen = enterFullscreen,
@@ -265,13 +284,37 @@ fun EngineTaskContent(
                                     color = MaterialTheme.colorScheme.error)
                                 else Text(stringResource(R.string.task_btn_stop), maxLines = 1)
                             }
-                            TaskSecondaryButton(onClick = { showLogExport = true }) {
-                                Icon(Icons.Rounded.FolderZip, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text(stringResource(R.string.settings_log_export_chooser_title), maxLines = 1)
-                            }
+                            TaskQuickActionsButton(showMoreActions) { showMoreActions = !showMoreActions }
                         }
                     }
+                    BackHandler(enabled = showMoreActions) { showMoreActions = false }
+                    if (showMoreActions) TaskQuickActionsOverlay(
+                        onDismissRequest = { showMoreActions = false },
+                        isGameMuted = mutedPackage.isNotEmpty() && mutedPackage == viewModel.gamePackageName,
+                        gameActionsEnabled = previewReady && !stopping,
+                        onToggleGameSound = viewModel::onToggleGameSound,
+                        onScreenOff = viewModel::onScreenOff,
+                        onShowScreenSaver = { coroutineScope.launch { screenSaver.show() } },
+                        onCloseApp = {
+                            if (running) showCloseConfirm = true
+                            else { showMoreActions = false; viewModel.onCloseGame() }
+                        },
+                        onExportLogs = { showMoreActions = false; showLogExport = true },
+                        showTouchPreviewSetting = false,
+                        appSettingsManager = settings,
+                    )
+                    if (showCloseConfirm) AdaptiveTaskPromptDialog(
+                        visible = true,
+                        title = stringResource(R.string.dialog_close_app_title),
+                        message = AnnotatedString(stringResource(R.string.dialog_close_app_message)),
+                        onDismissRequest = { showCloseConfirm = false },
+                        onConfirm = { showCloseConfirm = false; viewModel.onCloseGame() },
+                        confirmText = stringResource(R.string.dialog_close_app_confirm),
+                        dismissText = stringResource(R.string.common_cancel),
+                        icon = Icons.Filled.Warning,
+                        iconTint = MaterialTheme.colorScheme.error,
+                        confirmColor = MaterialTheme.colorScheme.error,
+                    )
                 }
             }
         }

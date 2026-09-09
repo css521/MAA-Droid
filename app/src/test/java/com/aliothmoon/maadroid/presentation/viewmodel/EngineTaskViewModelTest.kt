@@ -21,6 +21,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.After
@@ -51,6 +52,7 @@ class EngineTaskViewModelTest {
         coEvery { finishTask() } returns true
         every { events() } returns events
         every { previewReady } returns deviceReady
+        every { gamePackageName } returns "com.ProjectMoon.LimbusCompany"
         every { appendTask(any(), any()) } returns 1
     }
 
@@ -58,7 +60,8 @@ class EngineTaskViewModelTest {
         id: String = "limbus",
         canStart: () -> Boolean = { true },
         factory: (String) -> EngineSession = { session },
-    ) = EngineTaskViewModel(id, store, factory, executionState, canStart, scope, dispatcher)
+        quickActions: EngineTaskQuickActions? = null,
+    ) = EngineTaskViewModel(id, store, factory, executionState, canStart, scope, dispatcher, quickActions)
 
     @After
     fun tearDown() {
@@ -274,6 +277,215 @@ class EngineTaskViewModelTest {
         }
     }
 
+    private fun quickActions(closeOnEnd: Boolean = false) = mockk<EngineTaskQuickActions> {
+        every { mutedPackage } returns MutableStateFlow("")
+        every { closeOnTaskEnd } returns closeOnEnd
+        coEvery { onGameReady(any()) } returns true
+        coEvery { toggleGameSound(any()) } returns true
+        coEvery { onGameClosed(any()) } returns true
+        every { turnScreenOff() } returns Unit
+    }
+
+    @Test
+    fun failedReplacementPreparationRestoresPreviousPreviewAndItsSubscription() {
+        val manual = mockk<EngineDeviceSession.ManualInput>(relaxed = true)
+        every { session.openManualInput() } returns manual
+        var next = session
+        val model = model(factory = { next })
+        val surface = mockk<Surface>()
+        model.onPreviewSurfaceAvailable(surface)
+        model.start()
+        dispatcher.runCurrent()
+        deviceReady.value = true
+        dispatcher.runCurrent()
+        model.stop()
+        dispatcher.runCurrent()
+        val failed = mockk<EngineSession>(relaxed = true) {
+            every { previewReady } returns MutableStateFlow(false)
+            every { events() } returns MutableSharedFlow()
+            coEvery { prepare() } returns "resource preparation failed"
+        }
+        next = failed
+        model.start()
+        dispatcher.runCurrent()
+        assertFalse(model.running.value)
+        assertTrue(model.previewReady.value)
+        assertTrue(model.status.value.toString().contains("resource preparation failed"))
+        coVerify(exactly = 0) { session.close() }
+        coVerify(exactly = 1) { failed.close() }
+        verify(atLeast = 2) { session.setPreviewSurface(surface) }
+        model.openPreviewInput()!!.touchDown(3, 4, 8)
+        dispatcher.runCurrent()
+        verify { manual.touchDown(3, 4, 8) }
+        deviceReady.value = false
+        dispatcher.runCurrent()
+        assertFalse(model.previewReady.value)
+    }
+
+    @Test
+    fun cancellingReplacementBeforeTransferKeepsTheOldPlayablePreview() {
+        var next = session
+        val model = model(factory = { next })
+        model.start()
+        dispatcher.runCurrent()
+        deviceReady.value = true
+        dispatcher.runCurrent()
+        model.stop()
+        dispatcher.runCurrent()
+        val pending = mockk<EngineSession>(relaxed = true) {
+            every { previewReady } returns MutableStateFlow(false)
+            every { events() } returns MutableSharedFlow()
+            coEvery { prepare() } coAnswers { CompletableDeferred<Unit>().await(); null }
+        }
+        next = pending
+        model.start()
+        dispatcher.runCurrent()
+        model.stop()
+        dispatcher.runCurrent()
+        assertFalse(model.running.value)
+        assertTrue(model.previewReady.value)
+        coVerify(exactly = 0) { session.close() }
+        coVerify(exactly = 0) { pending.start() }
+    }
+
+    @Test
+    fun failedPrepareAfterTransferNeverRestoresTheConsumedPreview() {
+        var next = session
+        val actions = quickActions()
+        val model = model(factory = { next }, quickActions = actions)
+        model.start()
+        dispatcher.runCurrent()
+        deviceReady.value = true
+        dispatcher.runCurrent()
+        model.stop()
+        dispatcher.runCurrent()
+        next = mockk<EngineSession>(relaxed = true) {
+            every { previewReady } returns MutableStateFlow(false)
+            every { events() } returns MutableSharedFlow()
+            every { gamePackageName } returns null
+            coEvery { prepare() } coAnswers { deviceReady.value = false; "connect failed after transfer" }
+        }
+        model.start()
+        dispatcher.runCurrent()
+        assertFalse(model.previewReady.value)
+        assertFalse(model.running.value)
+        coVerify(exactly = 0) { session.close() }
+        coVerify(exactly = 1) { actions.onGameClosed("com.ProjectMoon.LimbusCompany") }
+    }
+
+    @Test
+    fun quickActionsUseTheActualPackageAndWorkOnRetainedPreview() {
+        val actions = quickActions(closeOnEnd = true)
+        val model = model(quickActions = actions)
+        model.onToggleGameSound() // No game before preparation.
+        dispatcher.runCurrent()
+        coVerify(exactly = 0) { actions.toggleGameSound(any()) }
+        model.start()
+        dispatcher.runCurrent()
+        deviceReady.value = true
+        dispatcher.runCurrent()
+        model.stop()
+        dispatcher.runCurrent()
+        coVerify(exactly = 0) { session.closeGame() } // Automatic-close setting is not user stop.
+        model.onToggleGameSound()
+        model.onScreenOff()
+        dispatcher.runCurrent()
+        coVerify { actions.onGameReady("com.ProjectMoon.LimbusCompany") }
+        coVerify { actions.toggleGameSound("com.ProjectMoon.LimbusCompany") }
+        verify { actions.turnScreenOff() }
+        model.onCloseGame()
+        dispatcher.runCurrent()
+        coVerify(exactly = 1) { session.closeGame() }
+        coVerify { actions.onGameClosed("com.ProjectMoon.LimbusCompany") }
+        assertFalse(model.previewReady.value)
+        assertFalse(model.stopping.value)
+    }
+
+    @Test
+    fun closeGameFailureKeepsPreviewAndCanBeRetriedWithoutCrashHelp() {
+        val model = model(quickActions = quickActions())
+        model.start()
+        dispatcher.runCurrent()
+        deviceReady.value = true
+        dispatcher.runCurrent()
+        coEvery { session.closeGame() } throws IllegalStateException("close rejected")
+        model.onCloseGame()
+        dispatcher.runCurrent()
+        assertTrue(model.previewReady.value)
+        assertFalse(model.stopping.value)
+        assertNull(model.diagnosticFailure.value)
+        assertTrue(model.status.value.toString().contains("close rejected"))
+        coVerify(exactly = 0) { session.close() }
+        coEvery { session.closeGame() } returns Unit
+        model.onCloseGame()
+        dispatcher.runCurrent()
+        assertFalse(model.running.value)
+        assertFalse(model.previewReady.value)
+    }
+
+    @Test
+    fun automaticCompletionUsesCloseGameOnlyWhenItsSettingIsEnabled() {
+        val actions = quickActions()
+        val model = model(quickActions = actions)
+        model.start()
+        dispatcher.runCurrent()
+        deviceReady.value = true
+        dispatcher.runCurrent()
+        every { actions.closeOnTaskEnd } returns true // A setting changed during this run.
+        events.tryEmit(EngineEvent.AllTasksFinished(true))
+        dispatcher.runCurrent()
+        coVerify(exactly = 1) { session.closeGame() }
+        assertFalse(model.running.value)
+        assertFalse(model.previewReady.value)
+        assertNull(executionState.activeEngineId.value)
+    }
+
+    @Test
+    fun failedAutomaticCloseFallsBackToPlayableStoppedPreview() {
+        val model = model(quickActions = quickActions(closeOnEnd = true))
+        model.start()
+        dispatcher.runCurrent()
+        deviceReady.value = true
+        dispatcher.runCurrent()
+        coEvery { session.closeGame() } throws IllegalStateException("close failed")
+        events.tryEmit(EngineEvent.AllTasksFinished(true))
+        dispatcher.runCurrent()
+        assertTrue(model.previewReady.value)
+        assertFalse(model.running.value)
+        assertNull(model.diagnosticFailure.value)
+        coVerify(exactly = 1) { session.finishTask() }
+        coVerify(exactly = 0) { session.close() }
+    }
+
+    @Test
+    fun fpsReadsTheRetainedSessionAndDoesNotInventAnUnavailableSample() {
+        val model = model()
+        var sample: Float? = -1f
+        fun read() {
+            scope.launch { sample = model.readGameFps() }
+            dispatcher.runCurrent()
+        }
+        read()
+        assertNull(sample)
+        verify(exactly = 0) { session.readGameFps() }
+        model.start()
+        dispatcher.runCurrent()
+        deviceReady.value = true
+        dispatcher.runCurrent()
+        model.stop()
+        dispatcher.runCurrent()
+        every { session.readGameFps() } returns 59.5f
+        read()
+        assertEquals(59.5f, sample)
+        every { session.readGameFps() } returns -1f
+        read()
+        assertNull(sample)
+        every { session.readGameFps() } throws kotlinx.coroutines.CancellationException("cancelled")
+        val job = scope.launch { model.readGameFps() }
+        dispatcher.runCurrent()
+        assertTrue(job.isCancelled)
+    }
+
     @Test
     fun warningsAndSuccessfulCompletionDoNotShowFailureHelpButFailuresDo() {
         val model = model()
@@ -452,6 +664,8 @@ class EngineTaskViewModelTest {
         factorySession = nextSession
         model.start()
         dispatcher.runCurrent()
+        // The new session's prepare owns transfer; the VM must not discard the old game.
+        coVerify(exactly = 0) { session.close() }
         val nextInput = model.openPreviewInput()!!
         nextInput.touchDown(100, 200, 8)
         oldInput.touchMove(1, 2, 8)

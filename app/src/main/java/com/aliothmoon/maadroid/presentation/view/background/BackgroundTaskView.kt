@@ -11,14 +11,10 @@ import android.view.SurfaceView
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -31,33 +27,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
-import androidx.compose.material.icons.automirrored.filled.VolumeOff
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.NotificationsPaused
-import androidx.compose.material.icons.filled.PowerSettingsNew
-import androidx.compose.material.icons.filled.Screenshot
-import androidx.compose.material.icons.filled.StayCurrentPortrait
-import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -78,7 +56,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.changedToDownIgnoreConsumed
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
@@ -88,8 +65,6 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -110,8 +85,11 @@ import com.aliothmoon.maadroid.manager.PermissionManager
 import com.aliothmoon.maadroid.overlay.screensaver.ScreenSaverOverlayManager
 import com.aliothmoon.maadroid.ui.LocalInputFocusManager
 import com.aliothmoon.maadroid.ui.components.AdaptiveTaskPromptDialog
+import com.aliothmoon.maadroid.ui.components.TaskPreviewFps
 import com.aliothmoon.maadroid.ui.components.TaskPrimaryButton
 import com.aliothmoon.maadroid.ui.components.TaskSecondaryButton
+import com.aliothmoon.maadroid.presentation.components.TaskQuickActionsOverlay
+import com.aliothmoon.maadroid.presentation.components.TaskQuickActionsButton
 import com.aliothmoon.maadroid.presentation.components.LogExportController
 import com.aliothmoon.maadroid.presentation.components.MaaWindowInsets
 import com.aliothmoon.maadroid.presentation.components.ShizukuReadinessGate
@@ -146,7 +124,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import timber.log.Timber
-import kotlin.math.roundToInt
 
 @Composable
 fun BackgroundTaskView(
@@ -344,21 +321,7 @@ fun BackgroundTaskView(
                         modifier = Modifier.fillMaxSize()
                     )
                     val gameFps by viewModel.gameFps.collectAsStateWithLifecycle()
-                    gameFps?.let { fps ->
-                        Text(
-                            text = "${fps.roundToInt()} FPS",
-                            color = Color.White.copy(alpha = 0.85f),
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .padding(6.dp)
-                                .background(
-                                    Color.Black.copy(alpha = 0.35f),
-                                    RoundedCornerShape(4.dp)
-                                )
-                                .padding(horizontal = 5.dp, vertical = 2.dp)
-                        )
-                    }
+                    TaskPreviewFps(gameFps)
                 }
             }
         }
@@ -766,36 +729,10 @@ fun BackgroundTaskView(
                                     }
 
                                     // 次级操作不参与等分，按内容取宽，剩下的都留给主操作
-                                    TaskSecondaryButton(
+                                    TaskQuickActionsButton(
+                                        expanded = showMoreActions,
                                         onClick = { showMoreActions = !showMoreActions },
-                                        contentPadding = PaddingValues(horizontal = 14.dp),
-                                        colors = ButtonDefaults.outlinedButtonColors(
-                                            contentColor = if (showMoreActions) {
-                                                MaterialTheme.colorScheme.primary
-                                            } else {
-                                                MaterialTheme.colorScheme.onSurface
-                                            }
-                                        ),
-                                        border = BorderStroke(
-                                            1.dp,
-                                            if (showMoreActions) {
-                                                MaterialTheme.colorScheme.primary
-                                            } else {
-                                                MaterialTheme.colorScheme.outline
-                                            }
-                                        )
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.MoreVert,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            text = stringResource(R.string.task_btn_quick_options),
-                                            maxLines = 1,
-                                        )
-                                    }
+                                    )
                                 }
                             }
                         }
@@ -822,13 +759,14 @@ fun BackgroundTaskView(
 
         if (showMoreActions) {
             val isGameMuted by viewModel.isGameMuted.collectAsStateWithLifecycle()
-            BackgroundMoreActionsOverlay(
+            TaskQuickActionsOverlay(
                 onDismissRequest = { showMoreActions = false },
                 isGameMuted = isGameMuted,
                 onToggleGameSound = viewModel::onToggleGameSound,
                 onScreenOff = viewModel::onScreenOff,
                 onShowScreenSaver = { coroutineScope.launch { screenSaverManager.show() } },
                 onCaptureScreenshot = viewModel::onCaptureDebugScreenshot,
+                onExportLogs = { showMoreActions = false; showLogExportSheet = true },
                 onCloseApp = {
                     if (maaState == MaaExecutionState.RUNNING) {
                         showCloseConfirm = true
@@ -1027,293 +965,4 @@ private fun viewToVirtualDisplay(
         IntOffset(vx.coerceIn(0, display.width - 1), vy.coerceIn(0, display.height - 1)),
         inside,
     )
-}
-
-
-@Composable
-private fun BackgroundMoreActionsOverlay(
-    onDismissRequest: () -> Unit,
-    isGameMuted: Boolean,
-    onToggleGameSound: () -> Unit,
-    onScreenOff: () -> Unit,
-    onShowScreenSaver: () -> Unit,
-    onCaptureScreenshot: () -> Unit,
-    onCloseApp: () -> Unit,
-    appSettingsManager: AppSettingsManager = koinInject(),
-) {
-    val coroutineScope = rememberCoroutineScope()
-    val muteOnGameLaunch by appSettingsManager.muteOnGameLaunch.collectAsStateWithLifecycle()
-    val closeAppOnTaskEnd by appSettingsManager.closeAppOnTaskEnd.collectAsStateWithLifecycle()
-    val useHardwareScreenOff by appSettingsManager.useHardwareScreenOff.collectAsStateWithLifecycle()
-    val showTouchPreview by appSettingsManager.showTouchPreview.collectAsStateWithLifecycle()
-    val debugMode by appSettingsManager.debugMode.collectAsStateWithLifecycle()
-    var showHardwareScreenOffConfirm by remember { mutableStateOf(false) }
-    // 非空表示静音确认框待确认，确认后执行；仅静音方向弹，解除不弹
-    var pendingMuteAction by remember { mutableStateOf<(() -> Unit)?>(null) }
-
-    val overlayInteractionSource = remember { MutableInteractionSource() }
-    val cardInteractionSource = remember { MutableInteractionSource() }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .clickable(
-                interactionSource = overlayInteractionSource,
-                indication = null,
-                onClick = onDismissRequest
-            )
-    ) {
-        Card(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, bottom = 64.dp)
-                .clickable(
-                    interactionSource = cardInteractionSource, indication = null, onClick = {}),
-            shape = RoundedCornerShape(4.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
-        ) {
-            Column(modifier = Modifier.padding(10.dp)) {
-                // 标题与快速操作组
-                Text(
-                    text = stringResource(R.string.bg_actions_title),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    ActionTile(
-                        icon = Icons.Filled.PowerSettingsNew,
-                        label = stringResource(R.string.bg_action_screen_off),
-                        onClick = {
-                            if (useHardwareScreenOff) onScreenOff() else onShowScreenSaver()
-                        },
-                        modifier = Modifier.weight(1f),
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    )
-                    ActionTile(
-                        icon = Icons.AutoMirrored.Filled.ExitToApp,
-                        label = stringResource(R.string.bg_action_close_game),
-                        onClick = onCloseApp,
-                        modifier = Modifier.weight(1f),
-                        containerColor = MaterialTheme.colorScheme.error,
-                        contentColor = MaterialTheme.colorScheme.error
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    ActionTile(
-                        icon = if (isGameMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
-                        label = if (isGameMuted) stringResource(R.string.bg_action_game_muted)
-                        else stringResource(R.string.bg_action_mute_game),
-                        onClick = {
-                            if (isGameMuted) onToggleGameSound() else pendingMuteAction = onToggleGameSound
-                        },
-                        modifier = Modifier.weight(1f),
-                        containerColor = if (isGameMuted) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.secondary,
-                        contentColor = if (isGameMuted) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurface
-                    )
-                }
-
-                // 调试模式：截图按钮，保存到 {rootDir}/debug/screenshots
-                if (debugMode) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        ActionTile(
-                            icon = Icons.Filled.Screenshot,
-                            label = stringResource(R.string.bg_action_screenshot),
-                            onClick = onCaptureScreenshot,
-                            modifier = Modifier.weight(1f),
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-                HorizontalDivider(
-                    color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Text(
-                    text = stringResource(R.string.bg_auto_settings_title),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                SettingSwitchRow(
-                    icon = Icons.Filled.NotificationsPaused,
-                    label = stringResource(R.string.bg_auto_mute_on_launch),
-                    checked = muteOnGameLaunch,
-                    onCheckedChange = { checked ->
-                        val apply = {
-                            coroutineScope.launch { appSettingsManager.setMuteOnGameLaunch(checked) }
-                            Unit
-                        }
-                        if (checked) pendingMuteAction = apply else apply()
-                    })
-                SettingSwitchRow(
-                    icon = Icons.Filled.Cancel,
-                    label = stringResource(R.string.bg_auto_close_on_end),
-                    checked = closeAppOnTaskEnd,
-                    onCheckedChange = {
-                        coroutineScope.launch { appSettingsManager.setCloseAppOnTaskEnd(it) }
-                    })
-                SettingSwitchRow(
-                    icon = Icons.Filled.StayCurrentPortrait,
-                    label = stringResource(R.string.bg_auto_hardware_screen_off),
-                    checked = useHardwareScreenOff,
-                    onCheckedChange = { checked ->
-                        if (checked) {
-                            showHardwareScreenOffConfirm = true
-                        } else {
-                            coroutineScope.launch {
-                                appSettingsManager.setUseHardwareScreenOff(
-                                    false
-                                )
-                            }
-                        }
-                    })
-                SettingSwitchRow(
-                    icon = Icons.Filled.TouchApp,
-                    label = stringResource(R.string.bg_auto_show_touch_preview),
-                    checked = showTouchPreview,
-                    onCheckedChange = {
-                        coroutineScope.launch { appSettingsManager.setShowTouchPreview(it) }
-                    })
-            }
-        }
-    }
-
-    pendingMuteAction?.let { action ->
-        AdaptiveTaskPromptDialog(
-            visible = true,
-            title = stringResource(R.string.dialog_mute_game_title),
-            message = AnnotatedString(stringResource(R.string.dialog_mute_game_message)),
-            onDismissRequest = { pendingMuteAction = null },
-            onConfirm = {
-                pendingMuteAction = null
-                action()
-            },
-            confirmText = stringResource(R.string.dialog_mute_game_confirm),
-            dismissText = stringResource(R.string.common_cancel),
-            icon = Icons.AutoMirrored.Filled.VolumeOff,
-            iconTint = MaterialTheme.colorScheme.primary,
-            confirmColor = MaterialTheme.colorScheme.primary,
-        )
-    }
-
-    if (showHardwareScreenOffConfirm) {
-        AdaptiveTaskPromptDialog(
-            visible = true,
-            title = stringResource(R.string.dialog_hardware_screen_off_title),
-            message = AnnotatedString(stringResource(R.string.dialog_hardware_screen_off_message)),
-            onDismissRequest = { showHardwareScreenOffConfirm = false },
-            onConfirm = {
-                showHardwareScreenOffConfirm = false
-                coroutineScope.launch { appSettingsManager.setUseHardwareScreenOff(true) }
-            },
-            confirmText = stringResource(R.string.common_confirm),
-            dismissText = stringResource(R.string.common_cancel),
-            icon = Icons.Filled.PowerSettingsNew,
-            iconTint = MaterialTheme.colorScheme.primary,
-            confirmColor = MaterialTheme.colorScheme.primary,
-        )
-    }
-}
-
-@Composable
-private fun ActionTile(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    containerColor: Color,
-    contentColor: Color
-) {
-    Surface(
-        onClick = onClick,
-        modifier = modifier.height(36.dp),
-        shape = RoundedCornerShape(4.dp),
-        color = containerColor.copy(alpha = 0.08f),
-        contentColor = contentColor,
-        border = BorderStroke(0.5.dp, containerColor.copy(alpha = 0.2f))
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp),
-                tint = containerColor.copy(alpha = 0.8f)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Medium
-            )
-        }
-    }
-}
-
-@Composable
-private fun SettingSwitchRow(
-    icon: ImageVector, label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(32.dp)
-            .clickable { onCheckedChange(!checked) },
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            modifier = Modifier.size(16.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-        )
-        Spacer(modifier = Modifier.width(10.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f)
-        )
-        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
-            Checkbox(
-                checked = checked,
-                onCheckedChange = onCheckedChange,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-    }
 }

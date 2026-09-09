@@ -203,4 +203,36 @@ class RemoteDeviceHandleTest {
             executor.shutdownNow()
         }
     }
+
+    @Test
+    fun reuseRequiresSameRemoteBinderAndExactDisplaySpec() {
+        val binder = mockk<IBinder>()
+        val reconnected = mockk<RemoteService>()
+        every { service.asBinder() } returns binder
+        every { reconnected.asBinder() } returns mockk<IBinder>()
+        every { session.matchesDisplaySpec(1280, 720, 320) } returns true
+        every { session.close() } returns Unit
+        val device = RemoteDeviceHandle(service, 1280, 720, session, dpi = 320)
+        val spec = DisplaySpec(1280, 720, 320)
+        assertTrue(device.isActiveOn(service, spec))
+        org.junit.Assert.assertFalse(device.isActiveOn(reconnected, spec))
+        org.junit.Assert.assertFalse(device.isActiveOn(service, spec.copy(dpi = 160)))
+        every { session.matchesDisplaySpec(1280, 720, 320) } returns false
+        org.junit.Assert.assertFalse(device.isActiveOn(service, spec))
+        device.close()
+        org.junit.Assert.assertFalse(device.isActiveOn(service, spec))
+    }
+
+    @Test
+    fun fpsUsesLeaseInsteadOfGlobalServiceAndFiltersUnavailableSamples() {
+        val device = RemoteDeviceHandle(service, 1280, 720, session)
+        every { session.gameFps } returnsMany listOf(58.5f, -1f, Float.NaN, Float.POSITIVE_INFINITY)
+        every { session.close() } returns Unit
+        assertEquals(58.5f, device.readGameFps())
+        repeat(3) { assertNull(device.readGameFps()) }
+        device.close()
+        assertNull(device.readGameFps())
+        verify(exactly = 4) { session.gameFps }
+        verify { service wasNot Called }
+    }
 }

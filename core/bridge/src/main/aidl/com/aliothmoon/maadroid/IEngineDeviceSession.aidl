@@ -22,4 +22,6 @@ interface IEngineDeviceSession {
     void close() = 14;
     // Attaches/detaches the UI preview only; capture and automation keep running.
     void setPreviewSurface(in Surface surface) = 15;
+    // FPS of the game owned by this lease; a closed lease cannot read a later game's FPS.
+    float getGameFps() = 16;
 }

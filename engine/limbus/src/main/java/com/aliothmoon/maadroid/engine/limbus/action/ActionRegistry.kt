@@ -54,6 +54,9 @@ sealed interface ActionOutcome {
     /** 正常结束，按节点的 next/interrupt 继续路由 */
     data object Continue : ActionOutcome
 
+    /** 完成本分支，跳过当前节点的 next/interrupt，保留调用方的待执行路由。 */
+    data object Return : ActionOutcome
+
     /** 重跑当前节点的动作（上游用于「技能全未选中，点一下重开 p」这类重试） */
     data object RetrySelf : ActionOutcome
 

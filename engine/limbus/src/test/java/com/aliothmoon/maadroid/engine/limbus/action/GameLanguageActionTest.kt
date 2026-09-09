@@ -26,11 +26,17 @@ class GameLanguageActionTest {
         )
     }
 
-    @Test fun transitionFollowedByCorrectLanguageContinuesWithoutError() = runTest {
+    @Test fun transitionFollowedByCorrectLanguageReturnsFromErrorBranch() = runTest {
         val ctx = context(GameLanguageObservation.Uncertain, GameLanguageObservation.Confirmed)
-        assertEquals(ActionOutcome.Continue, ActionRegistry["report_error"]!!.execute(ctx))
+        assertEquals(ActionOutcome.Return, ActionRegistry["report_error"]!!.execute(ctx))
         assertEquals(listOf(.5), ctx.slept)
         assertFalse(ctx.logs.any { it.contains("Wrong language") })
+    }
+
+    @Test fun confirmationOnLastAttemptStillReturnsToCaller() = runTest {
+        val ctx = context(GameLanguageObservation.Uncertain, GameLanguageObservation.Uncertain, GameLanguageObservation.Confirmed)
+        assertEquals(ActionOutcome.Return, ActionRegistry["report_error"]!!.execute(ctx))
+        assertEquals(listOf(.5, .5), ctx.slept)
     }
 
     @Test fun explicitMismatchIdentifiesBothLanguagesAndCorrectSettingsLocation() = runTest {

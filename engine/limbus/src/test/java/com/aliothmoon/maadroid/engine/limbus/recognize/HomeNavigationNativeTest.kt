@@ -2,6 +2,7 @@ package com.aliothmoon.maadroid.engine.limbus.recognize
 
 import com.aliothmoon.maadroid.engine.Frame
 import com.aliothmoon.maadroid.engine.FrameSource
+import com.aliothmoon.maadroid.engine.InputSink
 import com.aliothmoon.maadroid.engine.limbus.action.LimbusActions
 import com.aliothmoon.maadroid.engine.limbus.action.FakeInput
 import com.aliothmoon.maadroid.engine.limbus.action.TestActionContext
@@ -20,11 +21,13 @@ import org.opencv.imgcodecs.Imgcodecs
 /** Replay a supplied, cropped 1280x720 phone screenshot with real upstream PNGs and OCR models. */
 object HomeNavigationNativeTest {
     @JvmStatic fun main(args: Array<String>) = runBlocking {
-        require(args.size == 3) { "usage: <OpenCV JNI library> <LALC resource root> <1280x720 home screenshot>" }
+        require(args.size in 3..4) { "usage: <OpenCV JNI library> <LALC resource root> <1280x720 home screenshot> [1280x720 Drive screenshot]" }
         System.load(File(args[0]).absolutePath)
         val root = File(args[1])
         val screen = Imgcodecs.imread(args[2])
         require(screen.cols() == 1280 && screen.rows() == 720)
+        val driveScreen = args.getOrNull(3)?.let { Imgcodecs.imread(it) }
+        require(driveScreen == null || (driveScreen.cols() == 1280 && driveScreen.rows() == 720))
         LimbusActions.install()
         val source = File(root, "config/task").listFiles()!!
             .filter { it.extension == "json" }.associate { it.name to it.readText() }
@@ -79,15 +82,72 @@ object HomeNavigationNativeTest {
                     if (language == "en") check(failure == null) { "English navigation still fails: $failure" }
                     else check(failure?.contains("游戏画面为英文") == true) { "Wrong-language diagnosis was lost: $failure" }
                     println("PASS $language: desktop misses; phone navigation locates Drive=$drive Window=$window; recovery bypassed; wrongLanguage=$wrongLanguage")
+                    if (language == "en" && driveScreen != null) {
+                        check(!gate.recognize(pipeline.require("exp_enter")).hit) { "Home frame falsely recognized as Drive" }
+                        current = driveScreen
+                        val expEnter = gate.recognize(pipeline.require("exp_enter"))
+                        check(expEnter.hit) { "Latest Drive screenshot does not recognize exp_enter" }
+                        check(expEnter.matches.any { it.x in 1080..1200 && it.y in 100..190 })
+                        println("PASS latest Drive exp_enter with unchanged LALC inferno template: ${expEnter.matches}")
+
+                        for (languageTransition in listOf(false, true)) {
+                            current = if (languageTransition) screen else driveScreen
+                            val recorded = FakeInput()
+                            lateinit var route: PipelineRunner
+                            val routeInput = object : InputSink by recorded {
+                                override fun touchUp(x: Int, y: Int, contact: Int) {
+                                    recorded.touchUp(x, y, contact)
+                                    // No post-click game frame was supplied; stop at the actual task input.
+                                    if (x == 440 && y == 160) route.stop()
+                                }
+                            }
+                            val trace = mutableListOf<String>()
+                            var recognitionCount = 0
+                            route = PipelineRunner(pipeline,
+                                contextFactory = { name, node, hits ->
+                                    TestActionContext(node = node, nodeName = name, input = routeInput,
+                                        recognize = recognizer, recognizeResult = hits)
+                                },
+                                recognizeGate = { node ->
+                                    check(++recognitionCount <= 20) { "Navigation loop: $trace" }
+                                    // Replay the transient miss that dispatched report_error in build 749,
+                                    // then a readable home frame for its independent language observation.
+                                    if (languageTransition && node === pipeline.require("game_language_confirm")) {
+                                        current = blank
+                                        gate.recognize(node).also { current = screen }
+                                    } else {
+                                        if (node === pipeline.require("exp_enter")) current = driveScreen
+                                        gate.recognize(node)
+                                    }
+                                }, onLog = trace::add,
+                            ).also { it.delayer = {} }
+                            check(route.run("exp_entry") == "任务已停止")
+                            val expectedClicks = if (languageTransition) listOf(drive.x to drive.y, 440 to 160)
+                                else listOf(440 to 160)
+                            check(recorded.clicks() == expectedClicks) { "Wrong task route input: ${recorded.clicks()}" }
+                            check(trace.none { "节点 error_handler 执行动作" in it })
+                            if (languageTransition) {
+                                check(trace.any { "节点 game_language_confirm 执行动作 report_error" in it })
+                                check(trace.any { "节点 game_language_confirm 完成子分支" in it })
+                            }
+                            println("PASS real exp_entry -> exp_enter clicks=${recorded.clicks()}, languageTransition=$languageTransition; stopped before stage selection")
+                        }
+                    } else if (driveScreen != null) {
+                        current = driveScreen
+                        check(!gate.recognize(pipeline.require("exp_enter")).hit) { "Chinese resources accepted the English Inferno label" }
+                        println("PASS Drive recognition keeps the selected resource language")
+                    }
                     current = blank
                     check(recognizer.templateMatch("main_drive_no_text").isEmpty())
                     check(recognizer.templateMatch("main_window_no_text").isEmpty())
                     check(recognizer.templateMatch("main_drive_with_text").isEmpty())
+                    check(recognizer.templateMatch("inferno").isEmpty())
                     check(recognizer.observeGameLanguage() == GameLanguageObservation.Uncertain)
                     println("PASS blank/loading frame has no cached navigation hit")
                 } finally { recognizer.release() }
             }
         } finally {
+            driveScreen?.release()
             blank.release()
             screen.release()
         }

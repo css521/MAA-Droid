@@ -6,15 +6,13 @@ import com.aliothmoon.maadroid.data.resource.StageApCostHelper
 import com.aliothmoon.maadroid.domain.models.DropTarget
 import com.aliothmoon.maadroid.maa.callback.SubTaskHandler
 import com.aliothmoon.maadroid.maa.task.TaskSlot
-import com.aliothmoon.maadroid.manager.RemoteServiceManager
 import timber.log.Timber
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.ceil
-import com.aliothmoon.maadroid.engine.arknights.core.maaCoreService
 
 /**
  * 目标库存运行时重算：stage(slot) → bind(taskId) → onTaskStarted SetTaskParams。
- * 直接走 [RemoteServiceManager] 改参，避免 Composition 构造环；回调线程同步执行。
+ * 改参函数由本轮引擎的回调传入，在回调线程同步执行，不查找全局远端实例。
  */
 class FightDropsRefresher(
     private val depotRepository: DepotRepository,
@@ -91,7 +89,7 @@ class FightDropsRefresher(
     private data class SanityShortfall(val estimatedSanity: Int, val apCost: Int)
 
     /** MaaCore 回调线程：重算缺口并 SetTaskParams；runlog 由 TaskChainHandler 写。 */
-    fun onTaskStarted(taskId: Int): RefreshOutcome {
+    fun onTaskStarted(taskId: Int, setTaskParams: (Int, String) -> Boolean): RefreshOutcome {
         val slot = registry[taskId] ?: return RefreshOutcome.Skipped
         val t = targets[slot] ?: return RefreshOutcome.Skipped
         if (t.dropId.isBlank() || t.dropCount <= 0) return RefreshOutcome.Skipped
@@ -102,15 +100,9 @@ class FightDropsRefresher(
         val shortfall = if (need > 0) estimateSkipForSanity(t) else null
         val paramsJson = t.toFightParamsJson(need, forceSkip = shortfall != null)
 
-        val maa = RemoteServiceManager.getInstanceOrNull()?.maaCoreService
-        val ok = if (maa == null) {
-            Timber.w("SetTaskParams 时 MaaCore 服务不可用，taskId=%d", taskId)
-            false
-        } else {
-            runCatching { maa.SetTaskParams(taskId, paramsJson) }
-                .onFailure { Timber.e(it, "SetTaskParams 失败 taskId=%d", taskId) }
-                .getOrDefault(false)
-        }
+        val ok = runCatching { setTaskParams(taskId, paramsJson) }
+            .onFailure { Timber.e(it, "SetTaskParams 失败 taskId=%d", taskId) }
+            .getOrDefault(false)
         if (!ok) {
             Timber.w("SetTaskParams 返回 false，taskId=%d，任务将按原参数执行", taskId)
         }

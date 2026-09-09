@@ -44,11 +44,11 @@ class TaskChainHandler(
     /**
      * TaskChainStart (10001): 任务链开始
      */
-    fun onTaskChainStart(details: JSONObject) {
+    fun onTaskChainStart(details: JSONObject, setTaskParams: (Int, String) -> Boolean) {
         val taskId = details.getIntValue("taskid", 0)
         statusTracker.updateStatus(taskId, TaskRunStatus.IN_PROGRESS)
 
-        refreshDropsIfNeeded(taskId)
+        refreshDropsIfNeeded(taskId, setTaskParams)
 
         val taskName = str(details.getString("taskchain") ?: "Unknown")
         sessionLogger.append("${str("StartTask")}$taskName", LogLevel.TRACE)
@@ -59,8 +59,8 @@ class TaskChainHandler(
         dropsRefresher.clear()
     }
 
-    private fun refreshDropsIfNeeded(taskId: Int) {
-        val outcome = dropsRefresher.onTaskStarted(taskId)
+    private fun refreshDropsIfNeeded(taskId: Int, setTaskParams: (Int, String) -> Boolean) {
+        val outcome = dropsRefresher.onTaskStarted(taskId, setTaskParams)
         val (logLabel, applied) = when (outcome) {
             FightDropsRefresher.RefreshOutcome.Skipped -> return
             is FightDropsRefresher.RefreshOutcome.Sufficient -> {

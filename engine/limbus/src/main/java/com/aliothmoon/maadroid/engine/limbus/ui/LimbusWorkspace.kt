@@ -1,6 +1,8 @@
 package com.aliothmoon.maadroid.engine.limbus.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -20,6 +22,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.aliothmoon.maadroid.engine.EngineWorkspace
 import com.aliothmoon.maadroid.ui.components.MaaSurfaceCard
+import com.aliothmoon.maadroid.ui.components.TaskListDetailScaffold
+import com.aliothmoon.maadroid.ui.components.TaskSelectionRow
 import com.aliothmoon.maadroid.ui.components.TaskPanelTabs
 import com.aliothmoon.maadroid.ui.components.TaskLogPanel
 import com.aliothmoon.maadroid.ui.components.TaskLogLine
@@ -91,62 +95,82 @@ internal val styleLabels = LimbusWorkspaceConfig.STYLES.zip(listOf("流血", "�
 
 @Composable
 private fun TasksPage(config: LimbusWorkspaceConfig, change: (LimbusWorkspaceConfig) -> Unit, editable: Boolean, onTeams: () -> Unit) {
-    var expanded by rememberSaveable { mutableStateOf("EXP") }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item {
-            Section("游戏语言") {
-                Choices(listOf("en" to "英文", "zh" to "简体中文"), config.language, editable) { change(config.copy(language = it)) }
-                Hint("必须与游戏内显示语言一致；界面语言不影响识别。")
-            }
-        }
-        items(taskLabels.entries.toList(), key = { it.key }) { (key, title) ->
-            val task = config.task(key)
-            val update: (LimbusTaskConfig) -> Unit = { change(config.withTask(key, it)) }
-            Section {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Switch(task.enabled, { update(task.copy(enabled = it)) }, enabled = editable)
-                    Column(Modifier.weight(1f).padding(start = 10.dp)) {
-                        Text(title, fontWeight = FontWeight.SemiBold)
-                        Hint(when (key) {
-                            "EXP", "Thread", "Mirror" -> "${task.count} 次 · ${if (task.teams.isEmpty()) "未选择队伍" else task.teams.joinToString(" → ") { config.team(it - 1).teamName }}"
-                            "Daily Lunacy Purchase" -> "每日目标 ${task.count} 次"
-                            "E.G.O" -> "战斗识别到危险状态时启用"
-                            "At Last" -> if (task.string("action", "nothing") == "close_game") "结束游戏" else "保持游戏打开"
-                            else -> "自动领取"
-                        })
-                    }
-                    if (key !in listOf("Mail", "Reward", "E.G.O")) TextButton(onClick = { expanded = if (expanded == key) "" else key }) { Text(if (expanded == key) "收起" else "配置") }
+    var selected by rememberSaveable { mutableStateOf("EXP") }
+    TaskListDetailScaffold(
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        wrapDetailInCard = true,
+        taskList = { listModifier ->
+            Column(
+                listModifier.widthIn(max = 132.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                TaskSelectionRow("游戏语言", selected == "language", { selected = "language" })
+                taskLabels.forEach { (taskKey, title) ->
+                    val task = config.task(taskKey)
+                    TaskSelectionRow(
+                        label = when (taskKey) {
+                            "Daily Lunacy Purchase" -> "兑换脑啡肽"
+                            "E.G.O" -> "使用 E.G.O"
+                            else -> title
+                        },
+                        selected = selected == taskKey,
+                        onSelected = { selected = taskKey },
+                        checked = task.enabled,
+                        onCheckedChange = { change(config.withTask(taskKey, task.copy(enabled = it))) },
+                        editable = editable,
+                    )
                 }
-                if (expanded == key) {
-                    HorizontalDivider(Modifier.padding(vertical = 6.dp))
-                    when (key) {
-                        "EXP", "Thread", "Mirror" -> {
-                            NumberField("执行次数", task.count, 1..999, editable) { update(task.copy(count = it)) }
-                            if (key != "Mirror") {
-                                Choices(listOf("Enter" to "进入战斗", "Skip Battle" to "跳过战斗"), task.string("luxcavationMode", "Enter"), editable) { update(task.with("luxcavationMode", JsonPrimitive(it))) }
-                                val stageKey = if (key == "EXP") "expStage" else "threadStage"
-                                InputField("关卡", task.string(stageKey, if (key == "EXP") "09" else "60"), editable) { update(task.with(stageKey, JsonPrimitive(it))) }
-                                Hint("填写游戏内关卡编号；经验本保留前导零，如 09。")
-                            } else MirrorSettings(task, update, editable)
-                            Text("使用队伍（按选择顺序轮换）", style = MaterialTheme.typography.titleSmall)
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                items((1..20).toList()) { slot ->
-                                    val order = task.teams.indexOf(slot)
-                                    FilterChip(selected = order >= 0, onClick = { update(task.copy(teams = if (order >= 0) task.teams - slot else task.teams + slot)) }, enabled = editable,
-                                        label = { Text("${if (order >= 0) "${order + 1}. " else ""}${config.team(slot - 1).teamName}") })
-                                }
-                            }
-                            TextButton(onClick = onTeams) { Text("编辑队伍与出战顺序 →") }
-                        }
-                        "Daily Lunacy Purchase" -> {
-                            NumberField("每日兑换目标次数", task.count, 0..10, editable) { update(task.copy(count = it)) }
-                            Hint("会消耗游戏内狂气；已兑换次数计入每日目标。默认关闭。")
-                        }
-                        "At Last" -> Choices(listOf("nothing" to "保持游戏打开", "close_game" to "结束游戏"), task.string("action", "nothing"), editable) { update(task.with("action", JsonPrimitive(it))) }
-                    }
+            }
+        },
+    ) {
+        key(selected) {
+            Column(
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp).padding(bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (selected == "language") {
+                    Text("游戏语言", style = MaterialTheme.typography.titleSmall)
+                    Choices(listOf("en" to "英文", "zh" to "简体中文"), config.language, editable) { change(config.copy(language = it)) }
+                    Hint("必须与游戏内显示语言一致；界面语言不影响识别。")
+                } else {
+                    TaskSettings(selected, config, change, editable, onTeams)
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ColumnScope.TaskSettings(taskKey: String, config: LimbusWorkspaceConfig, change: (LimbusWorkspaceConfig) -> Unit, editable: Boolean, onTeams: () -> Unit) {
+    val task = config.task(taskKey)
+    val update: (LimbusTaskConfig) -> Unit = { change(config.withTask(taskKey, it)) }
+    Text(taskLabels.getValue(taskKey), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+    when (taskKey) {
+        "EXP", "Thread", "Mirror" -> {
+            NumberField("执行次数", task.count, 1..999, editable) { update(task.copy(count = it)) }
+            if (taskKey != "Mirror") {
+                Choices(listOf("Enter" to "进入战斗", "Skip Battle" to "跳过战斗"), task.string("luxcavationMode", "Enter"), editable) { update(task.with("luxcavationMode", JsonPrimitive(it))) }
+                val stageKey = if (taskKey == "EXP") "expStage" else "threadStage"
+                InputField("关卡", task.string(stageKey, if (taskKey == "EXP") "09" else "60"), editable) { update(task.with(stageKey, JsonPrimitive(it))) }
+                Hint("填写游戏内关卡编号；经验本保留前导零，如 09。")
+            } else MirrorSettings(task, update, editable)
+            Text("使用队伍（按选择顺序轮换）", style = MaterialTheme.typography.titleSmall)
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                items((1..20).toList()) { slot ->
+                    val order = task.teams.indexOf(slot)
+                    FilterChip(selected = order >= 0, onClick = { update(task.copy(teams = if (order >= 0) task.teams - slot else task.teams + slot)) }, enabled = editable,
+                        label = { Text("${if (order >= 0) "${order + 1}. " else ""}${config.team(slot - 1).teamName}") })
+                }
+            }
+            TextButton(onClick = onTeams) { Text("编辑队伍与出战顺序 →") }
+        }
+        "Daily Lunacy Purchase" -> {
+            NumberField("每日兑换目标次数", task.count, 0..10, editable) { update(task.copy(count = it)) }
+            Hint("会消耗游戏内狂气；已兑换次数计入每日目标。默认关闭。")
+        }
+        "At Last" -> Choices(listOf("nothing" to "保持游戏打开", "close_game" to "结束游戏"), task.string("action", "nothing"), editable) { update(task.with("action", JsonPrimitive(it))) }
+        "E.G.O" -> Hint("战斗识别到危险状态时启用 E.G.O。")
+        "Mail", "Reward" -> Hint("启用后自动领取，无需额外配置。")
     }
 }
 

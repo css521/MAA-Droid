@@ -307,19 +307,80 @@ class ArknightsEngineTest {
         engine.release()
     }
 
-    @Test fun unsupportedDeviceAndInvalidDisplayDoNotCreateNativeClients() = runTest {
+    @Test fun unsupportedDeviceDoesNotCreateNativeClients() = runTest {
         val remote = FakeDevice()
         val local = object : DeviceHandle {
             override val frames: FrameSource get() = remote.frames
             override val input: InputSink get() = remote.input
             override val control: DeviceControl get() = remote.control
         }
-        for (device in listOf(local, FakeDevice(displayId = -1))) {
-            val engine = newEngine(FakeCore(), factory = { error("Device must be validated first") })
-            assertTrue(engine.prepare(File("resources")).isSuccess)
-            assertTrue(engine.connect(device).isFailure)
-            engine.release()
+        val engine = newEngine(FakeCore(), factory = { error("Device capability must be validated first") })
+        assertTrue(engine.prepare(File("resources")).isSuccess)
+        assertTrue(engine.connect(local).isFailure)
+        engine.release()
+    }
+
+    @Test fun invalidDisplayIsRejectedAfterInitializationAndRequiresConfirmedStop() = runTest {
+        val core = FakeCore()
+        val engine = newEngine(core)
+        val device = object : RemoteEngineDevice by FakeDevice(displayId = -1) {
+            override val displaySpec: DisplaySpec
+                get() {
+                    assertEquals(1, core.creates)
+                    assertEquals(listOf(MaaInstanceOptions.TOUCH_MODE to MaaInstanceOptions.ANDROID), core.options)
+                    assertEquals(1, core.stops)
+                    return DisplaySpec(1920, 1080, 240)
+                }
         }
+        assertTrue(engine.prepare(File("resources")).isSuccess)
+        assertTrue(engine.connect(device).exceptionOrNull() is IllegalArgumentException)
+        assertEquals(1, core.creates)
+        assertEquals(1, core.stops)
+        assertTrue(core.configs.isEmpty())
+        assertOwnershipRetained(engine)
+        core.stopAccepted = false
+        assertFalse(engine.stop())
+        assertOwnershipRetained(engine)
+        core.stopAccepted = true
+        assertTrue(engine.stop())
+        engine.release()
+    }
+
+    @Test fun busyNativeNeverReadsDisplayMetadataOrChangesTheExistingQueue() = runTest {
+        val core = FakeCore().apply {
+            instance = true
+            running = true
+            queue += 41
+        }
+        var metadataReads = 0
+        val device = object : RemoteEngineDevice by FakeDevice() {
+            override val displaySpec: DisplaySpec
+                get() {
+                    metadataReads++
+                    error("BUSY must not prepare the display")
+                }
+            override val displayId: Int
+                get() {
+                    metadataReads++
+                    error("BUSY must not inspect the display")
+                }
+        }
+        val engine = newEngine(core)
+        assertTrue(engine.prepare(File("resources")).isSuccess)
+        val failure = engine.connect(device).exceptionOrNull()
+        assertTrue(failure is MaaInitializationException)
+        assertEquals(MaaCoreSession.Initialization.BUSY, (failure as MaaInitializationException).phase)
+        assertEquals(0, metadataReads)
+        assertEquals(0, core.creates)
+        assertEquals(0, core.stops)
+        assertEquals(listOf(41), core.queue)
+        assertTrue(core.running)
+        assertTrue(core.configs.isEmpty())
+        // The original owner finishes before explicit cleanup of this candidate.
+        core.running = false
+        assertTrue(engine.stop())
+        engine.release()
+        assertEquals(0, metadataReads)
     }
 
     @Test fun initializationFailuresKeepTheirPhaseAndRequireStopBeforeRelease() = runTest {

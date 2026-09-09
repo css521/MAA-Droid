@@ -127,6 +127,41 @@ class GameMuteCoordinatorTest {
         return Fixture(persisted, audio, coordinator, scope)
     }
 
+    @Test
+    fun enginePackageUsesTheSamePersistentMuteAndRestoreFlow() = runBlocking {
+        val fixture = fixture(initialMarker = "")
+        val pkg = "com.ProjectMoon.LimbusCompany"
+        assertTrue(fixture.coordinator.togglePackage(pkg))
+        assertEquals(pkg, fixture.persisted.value)
+        assertEquals(pkg, fixture.coordinator.mutedPackage.value)
+        assertTrue(fixture.coordinator.togglePackage(pkg))
+        assertEquals("", fixture.persisted.value)
+        assertEquals(listOf(AudioRequest(pkg, true), AudioRequest(pkg, false)), fixture.audio.requests)
+        fixture.close()
+    }
+
+    @Test
+    fun switchingGamesRestoresOldPackageBeforeMutingNewOne() = runBlocking {
+        val fixture = fixture(initialMarker = GAME_PACKAGE)
+        val pkg = "com.ProjectMoon.LimbusCompany"
+        assertTrue(fixture.coordinator.mutePackage(pkg))
+        assertEquals(listOf(AudioRequest(GAME_PACKAGE, false), AudioRequest(pkg, true)), fixture.audio.requests)
+        assertTrue(fixture.coordinator.unmutePackage(GAME_PACKAGE))
+        assertEquals(pkg, fixture.persisted.value)
+        assertEquals(2, fixture.audio.requests.size)
+        fixture.close()
+    }
+
+    @Test
+    fun failedOldPackageRestoreKeepsMarkerAndDoesNotMuteNextGame() = runBlocking {
+        val fixture = fixture(initialMarker = GAME_PACKAGE)
+        fixture.audio.result = false
+        assertFalse(fixture.coordinator.mutePackage("com.ProjectMoon.LimbusCompany"))
+        assertEquals(GAME_PACKAGE, fixture.persisted.value)
+        assertEquals(listOf(AudioRequest(GAME_PACKAGE, false)), fixture.audio.requests)
+        fixture.close()
+    }
+
     private data class Fixture(
         val persisted: MutableStateFlow<String>,
         val audio: FakeGameAudioAdapter,

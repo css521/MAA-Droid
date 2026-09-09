@@ -185,7 +185,9 @@ private object ReportErrorAction : ActionBackend {
                 when (val observation = ctx.recognize.observeGameLanguage()) {
                     GameLanguageObservation.Confirmed -> {
                         ctx.log("已确认游戏导航语言，继续任务")
-                        return ActionOutcome.Continue
+                        // This inverse error branch has no next but inherits error_handler.
+                        // Continuing its route would loop there instead of resuming the caller.
+                        return ActionOutcome.Return
                     }
                     is GameLanguageObservation.Mismatch -> {
                         val selected = languageName(observation.configured)

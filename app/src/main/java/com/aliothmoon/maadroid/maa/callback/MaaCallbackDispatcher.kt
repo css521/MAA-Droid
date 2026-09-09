@@ -23,7 +23,7 @@ class MaaCallbackDispatcher(
     private val gameDataReporter: GameDataReporter,
 ) {
 
-    fun onEvent(msg: Int, json: String?) {
+    fun onEvent(msg: Int, json: String?, setTaskParams: (Int, String) -> Boolean = { _, _ -> false }) {
         val message = AsstMsg.fromValue(msg)
         if (message == null) {
             Timber.w("收到未知消息类型: msg=$msg, json=$json")
@@ -47,7 +47,7 @@ class MaaCallbackDispatcher(
             AsstMsg.InternalError -> handleInternalError(details)
             AsstMsg.InitFailed -> handleInitFailed(details)
             AsstMsg.ConnectionInfo -> handleConnectionInfo(details)
-            AsstMsg.TaskChainStart -> handleTaskChainStart(details)
+            AsstMsg.TaskChainStart -> handleTaskChainStart(details, setTaskParams)
             AsstMsg.AllTasksCompleted -> handleAllTasksCompleted()
             AsstMsg.TaskChainError -> handleTaskChainError(details)
             AsstMsg.TaskChainCompleted -> handleTaskChainCompleted(details)
@@ -84,8 +84,8 @@ class MaaCallbackDispatcher(
         details?.let { connectionInfoHandler.onConnectionInfo(it) }
     }
 
-    private fun handleTaskChainStart(details: JSONObject?) {
-        details?.let { taskChainHandler.onTaskChainStart(it) }
+    private fun handleTaskChainStart(details: JSONObject?, setTaskParams: (Int, String) -> Boolean) {
+        details?.let { taskChainHandler.onTaskChainStart(it, setTaskParams) }
     }
 
     private fun handleAllTasksCompleted() {

@@ -39,6 +39,9 @@ class EngineSession(
     private val _previewReady = MutableStateFlow(false)
     val previewReady = _previewReady.asStateFlow()
     val isRunning: Boolean get() = ownedEngine?.isRunning == true
+    val gamePackageName: String? get() = synchronized(previewLock) { deviceSession?.packageName }
+
+    fun readGameFps(): Float? = synchronized(previewLock) { deviceSession?.readGameFps() }
 
     fun openManualInput(): EngineDeviceSession.ManualInput? = synchronized(previewLock) {
         if (acceptsManualInput && _previewReady.value) deviceSession?.openManualInput() else null
@@ -70,8 +73,14 @@ class EngineSession(
             val profile = EngineRegistry.provider(engineId)?.profile ?: error("引擎 $engineId 未注册")
             executionLease = EngineExecutionCoordinator.shared.tryStart(engineId)
                 ?: error("其它任务正在运行或准备资源，请先停止该任务")
-            // Synchronous handoff, before resource preparation can restart the remote process.
-            closeRetainedPreview()
+            // Preserve a compatible local engine's display through resource/model preparation.
+            // Privileged delivery may restart the remote service and cannot retain its old lease.
+            previewHandoffMutex.withLock {
+                retainedPreview.get()?.let { previous ->
+                    if (previous.engineId != engineId || previous.runMode != runMode ||
+                        profile.resourcePacks.any { it.requiresPrivilegedDelivery }) previous.close()
+                }
+            }
             trace("prepare.begin", "mode=$runMode")
             for (pack in profile.resourcePacks.sortedBy { it.packId }) {
                 trace("resources.ensure", pack.packId)
@@ -93,7 +102,7 @@ class EngineSession(
             trace("remote.acquire")
             serviceProvider { service ->
                 trace("device.open")
-                val device = EngineDeviceSession.open(profile, service, runMode)
+                val device = acquireDevice(profile, service)
                 synchronized(previewLock) {
                     deviceSession = device
                     try { device.setPreviewSurface(previewSurface) }
@@ -150,7 +159,54 @@ class EngineSession(
         check(endSession(keepPreview = false)) { "引擎尚未停止，保留设备会话以便重试停止" }
     }
 
-    private suspend fun endSession(keepPreview: Boolean): Boolean = withContext(NonCancellable + Dispatchers.IO) {
+    /** Explicit quick action. Stop the exact lease's game only after automation is quiescent. */
+    suspend fun closeGame() {
+        check(endSession(keepPreview = false, stopGame = true)) { "引擎尚未停止，不能关闭游戏" }
+    }
+
+    private suspend fun acquireDevice(profile: GameProfile, service: RemoteService): EngineDeviceSession =
+        previewHandoffMutex.withLock {
+            val previous = retainedPreview.get()
+            val reused = if (previous != null && previous.engineId == engineId && previous.runMode == runMode) {
+                previous.closeMutex.withLock {
+                    synchronized(previous.previewLock) {
+                        val candidate = previous.deviceSession
+                        val compatible = try {
+                            candidate?.canReuse(profile, service, runMode) == true
+                        } catch (failure: Throwable) {
+                            if (!failure.isRecoverableEngineFailure()) throw failure
+                            AppDiagnostics.failure(engineId, "device.reuse.check", failure)
+                            false
+                        }
+                        if (!compatible) return@synchronized null
+                        checkNotNull(candidate)
+                        // Revoke the old view before transfer. A delayed disposal from that view
+                        // must not detach the new preview or release its touches/display.
+                        candidate.releaseManualInput()
+                        candidate.setPreviewSurface(null)
+                        previous.acceptsManualInput = false
+                        previous.deviceSession = null
+                        previous.previewSurface = null
+                        previous._previewReady.value = false
+                        retainedPreview.compareAndSet(previous, null)
+                        synchronized(previewLock) { deviceSession = candidate }
+                        candidate
+                    }
+                }
+            } else null
+            if (reused != null) {
+                trace("device.reused", "display=${reused.displayId} package=${reused.packageName}")
+                reused.resumeGame(service)
+                reused
+            } else {
+                previous?.close()
+                EngineDeviceSession.open(profile, service, runMode).also {
+                    synchronized(previewLock) { deviceSession = it }
+                }
+            }
+        }
+
+    private suspend fun endSession(keepPreview: Boolean, stopGame: Boolean = false): Boolean = withContext(NonCancellable + Dispatchers.IO) {
         closeMutex.withLock {
             // Serialize creation with closure: even events() racing close cannot leak a new engine.
             val activeEngine = synchronized(engineLock) {
@@ -174,6 +230,7 @@ class EngineSession(
                 true
             }
             if (!stopped) return@withLock false
+            if (stopGame) synchronized(previewLock) { deviceSession?.stopGame() }
             var cleanupError: Throwable? = null
             fun cleanup(action: () -> Unit) {
                 try { action() } catch (failure: Throwable) {

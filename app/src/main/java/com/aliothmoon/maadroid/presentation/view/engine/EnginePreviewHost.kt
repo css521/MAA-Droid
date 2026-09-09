@@ -21,6 +21,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -44,6 +45,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.constant.DefaultDisplayConfig
@@ -55,6 +57,9 @@ import com.aliothmoon.maadroid.presentation.pip.PipRequest
 import com.aliothmoon.maadroid.presentation.view.background.VirtualDisplayPreview
 import com.aliothmoon.maadroid.presentation.view.background.VirtualDisplayPreviewStatus
 import com.aliothmoon.maadroid.presentation.viewmodel.EngineTaskViewModel
+import com.aliothmoon.maadroid.ui.components.TaskPreviewFps
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 /** Shares the host's fullscreen/PiP conventions, while all device IO stays on the engine lease. */
 @Composable
@@ -81,17 +86,33 @@ internal fun EnginePreviewHost(
     var surfaceAvailable by remember { mutableStateOf(false) }
     var bounds by remember { mutableStateOf<Rect?>(null) }
     val active by rememberUpdatedState(isActivePage)
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val fps by produceState<Float?>(null, viewModel, previewReady, isActivePage, lifecycle) {
+        value = null
+        if (previewReady && isActivePage) lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            try {
+                while (isActive) {
+                    value = viewModel.readGameFps()
+                    delay(1_000)
+                }
+            } finally { value = null }
+        }
+    }
+    val currentFps by rememberUpdatedState(fps)
     val previewContent = remember(viewModel, display) {
         movableContentOf {
-            EngineDisplayPreview(
-                displayWidth = display.width,
-                displayHeight = display.height,
-                isActivePage = active,
-                onSurfaceAvailable = viewModel::onPreviewSurfaceAvailable,
-                onSurfaceDestroyed = viewModel::onPreviewSurfaceDestroyed,
-                onSurfaceStateChanged = { surfaceAvailable = it },
-                modifier = Modifier.fillMaxSize(),
-            )
+            Box(Modifier.fillMaxSize()) {
+                EngineDisplayPreview(
+                    displayWidth = display.width,
+                    displayHeight = display.height,
+                    isActivePage = active,
+                    onSurfaceAvailable = viewModel::onPreviewSurfaceAvailable,
+                    onSurfaceDestroyed = viewModel::onPreviewSurfaceDestroyed,
+                    onSurfaceStateChanged = { surfaceAvailable = it },
+                    modifier = Modifier.fillMaxSize(),
+                )
+                TaskPreviewFps(currentFps)
+            }
         }
     }
     val showFullscreen = fullscreen && isActivePage && !inPip && previewReady && !stopping
@@ -149,9 +170,9 @@ internal fun EnginePreviewHost(
                                 bounds = Rect(rect.left.toInt(), rect.top.toInt(), rect.right.toInt(), rect.bottom.toInt())
                                     .takeUnless { next -> next.isEmpty }
                             },
-                        isRunning = previewReady || running,
+                        isRunning = running,
                         isSurfaceAvailable = previewReady && surfaceAvailable,
-                        status = if (previewReady) VirtualDisplayPreviewStatus.RUNNING else VirtualDisplayPreviewStatus.IDLE,
+                        status = if (running && previewReady) VirtualDisplayPreviewStatus.RUNNING else VirtualDisplayPreviewStatus.IDLE,
                         onClick = { if (previewReady && !stopping && isActivePage) fullscreen = true },
                         content = previewContent,
                     )
