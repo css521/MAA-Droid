@@ -100,6 +100,16 @@ class ResourcePackTemplateIndexTest {
         assertNull(idx.fileOf("anything"))
         assertTrue(warnings.isNotEmpty())
     }
+
+    @Test fun `标题页提供两种语言的锚点但不改变游戏模板与标签`() {
+        png("img/zh/ui/clear_all_caches.png", "zh")
+        png("img/en/ui/clear_all_caches.png", "en")
+        val idx = ResourcePackTemplateIndex.load(tmp.root, "zh")
+        assertEquals("zh", idx.fileOf("clear_all_caches")!!.readText())
+        assertEquals(listOf("en", "zh"), idx.titleAnchors.map { it.readText() })
+        assertEquals(listOf("clear_all_caches"), idx.namesByTag("ui"))
+        assertEquals(1, idx.size)
+    }
 }
 
 /**

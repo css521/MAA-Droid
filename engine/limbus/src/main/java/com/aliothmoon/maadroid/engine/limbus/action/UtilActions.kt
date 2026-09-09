@@ -103,6 +103,24 @@ private object BackToInitPageAction : ActionBackend {
     override suspend fun execute(ctx: ActionContext): ActionOutcome {
         ctx.log("尝试返回主页")
 
+        ctx.ensureActive()
+        ctx.recognize.titleScreenStart()?.let { start ->
+            val attempt = ctx.incrementCounter("android_title_login")
+            if (attempt > 5) {
+                return ActionOutcome.Finish(false, "点击开始后仍停留在标题页，请放大游戏画面检查登录状态后重试")
+            }
+            ctx.log("检测到游戏标题页，点击开始登录（第 $attempt 次）")
+            ctx.input.touchDown(start.x, start.y)
+            try {
+                ctx.delay(0.12)
+            } finally {
+                ctx.input.touchUp(start.x, start.y)
+            }
+            ctx.incrementCounter("android_home_recovery_epoch")
+            ctx.delay(3.0)
+            return ActionOutcome.Continue
+        }
+
         if (ctx.recognize.templateMatch("rewards_acquired_confirm").isNotEmpty()) {
             ctx.log("检测到领取奖励的确认")
             val pos = ctx.recognize.templateMatch("rewards_acquired_confirm")
@@ -142,13 +160,27 @@ private object BackToInitPageAction : ActionBackend {
             }
             return ActionOutcome.Goto("mirror_defeat")
         } else {
+            val epoch = ctx.counterOf("android_home_recovery_epoch")
+            val attempt = ctx.incrementCounter("android_unknown_home_$epoch")
+            if (attempt > 20) {
+                return ActionOutcome.Finish(false, "持续无法识别登录或主页，请检查游戏语言设置，放大画面处理弹窗后重试，并导出日志")
+            }
+            // 冷启动、网络连接与转场没有可识别按钮时，先留出加载时间。
+            if (attempt <= 3 || ctx.recognize.templateMatch("connecting").isNotEmpty()) {
+                ctx.log("等待游戏加载或登录（$attempt/20）")
+                ctx.delay(3.0)
+                return ActionOutcome.Continue
+            }
             ctx.log("未检测到特殊情况，按 esc 尝试")
             keyPress(ctx.input, "esc")
             ctx.delay(1.2)
             if (ctx.recognize.templateMatch("quit_game").isNotEmpty()) {
                 keyPress(ctx.input, "esc")
             }
+            ctx.delay(1.0)
+            return ActionOutcome.Continue
         }
+        ctx.incrementCounter("android_home_recovery_epoch")
         ctx.delay(1.0)
         return ActionOutcome.Continue
     }

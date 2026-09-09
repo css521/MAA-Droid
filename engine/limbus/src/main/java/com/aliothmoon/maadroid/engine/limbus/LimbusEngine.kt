@@ -162,6 +162,7 @@ class LimbusEngine(
                 classifier = classifier,
                 ocr = ocr,
                 onLog = { warn(it) },
+                titleAnchorFiles = index.titleAnchors,
             )
         } catch (failure: Throwable) {
             runCatching { classifier.release() }.exceptionOrNull()?.let(failure::addSuppressed)

@@ -30,9 +30,34 @@ class LimbusRecognizer(
     private val classifier: OnnxClassifier? = null,
     private val ocr: com.aliothmoon.maadroid.engine.limbus.recognize.ocr.PpOcrEngine? = null,
     private val onLog: (String) -> Unit = {},
+    private val titleAnchorFiles: List<File> = emptyList(),
 ) : Recognizer {
 
     private val templateCache = HashMap<Pair<String, Boolean>, Mat?>()
+
+    override suspend fun titleScreenStart(): Match? {
+        if (titleAnchorFiles.isNotEmpty()) {
+            val frame = frames.grab() ?: return null
+            val screen = frame.toMat()
+            try {
+                for (file in titleAnchorFiles) {
+                    currentCoroutineContext().ensureActive()
+                    val anchor = Imgcodecs.imread(file.absolutePath, Imgcodecs.IMREAD_COLOR)
+                    try {
+                        if (!anchor.empty()) {
+                            TitleScreenDetector.fromAnchor(TemplateMatcher.match(screen, anchor, 0.85))
+                                ?.let { return it }
+                        }
+                    } finally {
+                        anchor.release()
+                    }
+                }
+            } finally {
+                screen.release()
+            }
+        }
+        return super<Recognizer>.titleScreenStart()
+    }
 
     override suspend fun templateMatch(
         template: String,

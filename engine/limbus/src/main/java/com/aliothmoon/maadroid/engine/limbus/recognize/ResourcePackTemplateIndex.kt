@@ -18,6 +18,8 @@ import java.io.File
 class ResourcePackTemplateIndex private constructor(
     private val files: Map<String, File>,
     private val tags: Map<String, List<String>>,
+    /** 标题页按钮独立于游戏内容语言；其余模板仍严格使用所选语言。 */
+    val titleAnchors: List<File>,
 ) : TemplateIndex {
 
     override fun namesByTag(tag: String): List<String> = tags[tag] ?: emptyList()
@@ -66,7 +68,11 @@ class ResourcePackTemplateIndex private constructor(
                 }
             }
 
-            return ResourcePackTemplateIndex(files, tags.mapValues { it.value.toList() })
+            val titleAnchors = listOf("en", "zh").flatMap { lang ->
+                File(imgRoot, lang).walkTopDown()
+                    .filter { it.isFile && it.name == "clear_all_caches.png" }.toList()
+            }
+            return ResourcePackTemplateIndex(files, tags.mapValues { it.value.toList() }, titleAnchors)
         }
 
         private fun scan(

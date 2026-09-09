@@ -31,6 +31,11 @@ data class Crop(val x: Int, val y: Int, val width: Int, val height: Int)
  */
 interface Recognizer {
 
+    /** 只返回确认过的标题页开始位置，不返回清理缓存按钮的位置。 */
+    suspend fun titleScreenStart(): Match? =
+        TitleScreenDetector.fromAnchor(templateMatch("clear_all_caches"))
+            ?: TitleScreenDetector.fromText(detectText(TitleScreenDetector.textRegion, 0.7))
+
     /** 战斗专用：同一帧内定位、裁剪并分类，标签与中心坐标不可分开取帧。 */
     suspend fun battleSkillIcons(): List<BattleSkillIcon> = emptyList()
 

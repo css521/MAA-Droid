@@ -223,6 +223,21 @@ class PipelineRunnerTest {
         )
     }
 
+    @Test fun actionDelaysSurroundInputBeforeTheNextRecognition() = runTest {
+        val reg = PipelineRegistry.load(mapOf("flow.json" to """{
+            "empty":{"action":"empty","interrupt":[]},
+            "error_handler":{"action":"empty","interrupt":[]},
+            "main":{"action":"empty","params":{"pre_delay":0.2,"post_delay":3},"next":["end"],"interrupt":[],"rate_limit":0},
+            "end":{"action":"empty","params":{"pre_delay":0,"post_delay":0},"interrupt":[],"rate_limit":0}
+        }"""))
+        val r = PipelineRunner(reg, { name, node, matches -> fakeContext(node, name, matches) }, {
+            trace += "recognize"
+            RecognizeOutcome.DIRECT_HIT
+        }).also { it.delayer = { seconds -> trace += "wait:$seconds" } }
+        assertNull(r.run("main"))
+        assertEquals(listOf("wait:0.2", "EMPTY", "wait:3.0", "recognize", "EMPTY"), trace)
+    }
+
     @Test
     fun runawayLoopIsBoundedInsteadOfHangingForever() = runTest {
         val reg = PipelineRegistry.load(

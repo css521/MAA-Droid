@@ -113,7 +113,14 @@ class PipelineRunner(
         }
         val ctx = contextFactory(step.name, step.node, lastRecognition[step.name].orEmpty())
         onLog("节点 ${step.name} 执行动作 $actionName")
-        when (val outcome = backend.execute(ctx)) {
+        // 上游仅对原生 handler 包裹 pre/post_delay，子链路由本身不额外等待。
+        // touch_to_start 的 post_delay=3 尤其重要：不能点击后立即再发返回键。
+        actionDelay(step.node, "pre_delay")
+        currentCoroutineContext().ensureActive()
+        if (!running) return
+        val outcome = backend.execute(ctx)
+        if (outcome !is ActionOutcome.Finish) actionDelay(step.node, "post_delay")
+        when (outcome) {
             ActionOutcome.Continue -> Unit
             ActionOutcome.RetrySelf -> {
                 // 上游用于「技能全未选中，点一下重开 p」这类重试
@@ -202,6 +209,12 @@ class PipelineRunner(
         val elapsedSec = (System.nanoTime() - startedNanos) / 1_000_000_000.0
         val remain = node.rateLimit - elapsedSec
         if (remain > 0) delayer(remain)
+    }
+
+    private suspend fun actionDelay(node: PipelineNode, key: String) {
+        val seconds = node.num(key) ?: 0.1
+        require(seconds.isFinite() && seconds >= 0) { "$key 必须是非负有限秒数" }
+        if (seconds > 0) delayer(seconds)
     }
 
     /** 可替换的睡眠，便于单测里瞬间跑完 */
