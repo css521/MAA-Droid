@@ -10,11 +10,12 @@ class ConfiguredAppVersionCheckerTest {
     @Test fun disabledConfigReturnsReasonWithoutCallingEitherChecker() = runBlocking {
         val github = RecordingChecker()
         val mirror = RecordingChecker()
-        val result = ConfiguredAppVersionChecker(github, mirror, AppUpdateSourceConfig())
+        val sources = AppUpdateSourceConfig()
+        val result = ConfiguredAppVersionChecker(github, mirror, sources)
             .check("1.0.0", UpdateChannel.STABLE)
         assertTrue(result is UpdateCheckResult.Error)
         val text = (result as UpdateCheckResult.Error).error.text as UiText.Dynamic
-        assertTrue(text.value.contains("maa.appUpdate.githubOwner"))
+        assertEquals(sources.disabledReason, text.value)
         assertTrue(github.calls.isEmpty())
         assertTrue(mirror.calls.isEmpty())
     }

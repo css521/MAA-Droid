@@ -21,7 +21,8 @@ class UpdateServiceAppSourceTest {
 
     @Test fun disabledApkDoesNotReachNetworkCacheOrInstallerAndResourcesStillCheck() = runBlocking {
         mockkObject(AppApi)
-        every { AppApi.APP_UPDATE_SOURCE } returns AppUpdateSourceConfig("", "", "OldApk")
+        val sources = AppUpdateSourceConfig("", "", "OldApk")
+        every { AppApi.APP_UPDATE_SOURCE } returns sources
         val context = mockk<Context>()
         val http = mockk<HttpClientHelper>()
         val api = mockk<MirrorChyanApiClient>()
@@ -35,9 +36,9 @@ class UpdateServiceAppSourceTest {
         for (source in UpdateSource.entries) {
             val result = service.downloadApp(source, "2.0.0")
             assertTrue(result.isFailure)
-            assertTrue(result.exceptionOrNull()!!.message!!.contains("APK"))
+            assertEquals(sources.disabledReason, result.exceptionOrNull()!!.message)
             val failed = service.appProcessState.value as UpdateProcessState.Failed
-            assertTrue((failed.error.text as UiText.Dynamic).value.contains("maa.appUpdate.githubOwner"))
+            assertEquals(sources.disabledReason, (failed.error.text as UiText.Dynamic).value)
         }
         assertEquals(UpdateCheckResult.UpToDate("resource-version"), service.checkResourceUpdate("resource-version"))
         coVerify(exactly = 1) { resourceChecker.check("resource-version") }
@@ -46,14 +47,15 @@ class UpdateServiceAppSourceTest {
 
     @Test fun missingMirrorRidCannotDownloadEvenWhenGithubIsConfigured() = runBlocking {
         mockkObject(AppApi)
-        every { AppApi.APP_UPDATE_SOURCE } returns AppUpdateSourceConfig("example-org", "independent-app")
+        val sources = AppUpdateSourceConfig("example-org", "independent-app")
+        every { AppApi.APP_UPDATE_SOURCE } returns sources
         val http = mockk<HttpClientHelper>()
         val api = mockk<MirrorChyanApiClient>()
         val apk = mockk<AppDownloader>()
         val service = UpdateService(mockk(), api, mockk(), http, mockk(), mockk(), apk, mockk(), mockk(), mockk(), mockk())
         assertTrue(service.downloadApp(UpdateSource.MIRROR_CHYAN, "2.0.0").isFailure)
         val failed = service.appProcessState.value as UpdateProcessState.Failed
-        assertTrue((failed.error.text as UiText.Dynamic).value.contains("mirrorChyanRid"))
+        assertEquals(sources.mirrorChyanUnavailableReason, (failed.error.text as UiText.Dynamic).value)
         verify { listOf(http, api, apk) wasNot Called }
     }
 }
