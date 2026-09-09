@@ -563,6 +563,7 @@ class MaaCompositionService(
         executionLease.set(reservation)
         var result: StartResult? = null
         try {
+            com.aliothmoon.maadroid.engine.EngineSession.closeRetainedPreview()
             executeStartLocked(
                 tasks, clientType, startMessage, successMessage, preflightLogs, onSessionStarted,
             ).also { result = it }

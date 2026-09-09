@@ -200,6 +200,123 @@ class EngineSessionLifecycleTest {
         verify(exactly = 0) { EngineRegistry.createEngine(ENGINE_ID) }
     }
 
+    @Test fun stopFalseRetainsEngineDeviceResourcesAndAdmissionEvenWhenNotRunning() = runBlocking {
+        val session = session()
+        assertNull(session.prepare())
+        val engine = engines.single()
+        assertFalse(engine.isRunning)
+        coEvery { engine.stop() } returns false
+
+        assertTrue(runCatching { session.close() }.exceptionOrNull() is IllegalStateException)
+        assertRetained(engine)
+
+        coEvery { engine.stop() } returns true
+        session.close()
+        session.close()
+        verify(exactly = 1) { engine.release(); device.close() }
+        assertNull(EngineExecutionCoordinator.shared.activeEngineId.value)
+        checkNotNull(ResourcePackLocks.tryAcquire(pack.packId)).close()
+        verify(exactly = 1) { EngineRegistry.createEngine(ENGINE_ID) }
+    }
+
+    @Test fun stopExceptionsAfterDeviceAcquisitionRetainOwnershipDespiteIdleFlag() = runBlocking {
+        val session = session()
+        assertNull(session.prepare())
+        val engine = engines.single()
+        for (failure in listOf(IllegalStateException("remote stop failed"), UnsatisfiedLinkError("native symbol"))) {
+            coEvery { engine.stop() } throws failure
+            val reported = runCatching { session.close() }.exceptionOrNull()
+            assertTrue(reported === failure || reported?.cause === failure)
+            assertRetained(engine)
+        }
+        coEvery { engine.stop() } returns true
+        session.close()
+        verify(exactly = 1) { engine.release(); device.close() }
+    }
+
+    @Test fun nativeLoadFailureBeforeDeviceAcquisitionCanReleaseAnIdleEngine() = runBlocking {
+        val session = session()
+        session.events()
+        val engine = engines.single()
+        coEvery { engine.prepare(any()) } returns Result.failure(UnsatisfiedLinkError("native load failed"))
+        coEvery { engine.stop() } throws UnsatisfiedLinkError("native stop unavailable")
+
+        assertTrue(session.prepare()!!.contains("native load failed"))
+        verify(exactly = 1) { engine.release() }
+        coVerify(exactly = 0) { device.connect(any()) }
+        assertNull(EngineExecutionCoordinator.shared.activeEngineId.value)
+        checkNotNull(ResourcePackLocks.tryAcquire(pack.packId)).close()
+    }
+
+    @Test fun preparationFailureWithUnconfirmedStopRetainsOriginalErrorAndOwnership() = runBlocking {
+        val session = session()
+        session.events()
+        val engine = engines.single()
+        val failure = IllegalStateException("connect failed")
+        coEvery { device.connect(engine) } returns Result.failure(failure)
+        coEvery { engine.stop() } returns false
+
+        assertTrue(session.prepare()!!.contains("connect failed"))
+        assertTrue(failure.suppressed.any { it.message.orEmpty().contains("尚未停止") })
+        assertRetained(engine)
+        coEvery { engine.stop() } returns true
+        session.close()
+        verify(exactly = 1) { engine.release(); device.close() }
+    }
+
+    private fun assertRetained(engine: AutomationEngine) {
+        verify(exactly = 0) { engine.release(); device.close() }
+        assertEquals(ENGINE_ID, EngineExecutionCoordinator.shared.activeEngineId.value)
+        val unexpectedLease = ResourcePackLocks.tryAcquire(pack.packId)
+        try { assertNull(unexpectedLease) } finally { unexpectedLease?.close() }
+    }
+
+    @Test fun finishedTaskReleasesEngineAndResourcesButKeepsPlayableDisplayUntilExplicitClose() = runBlocking {
+        val session = session()
+        assertNull(session.prepare())
+        val manual = mockk<EngineDeviceSession.ManualInput>()
+        every { device.openManualInput() } returns manual
+        assertTrue(session.finishTask())
+        assertTrue(session.previewReady.value)
+        assertSame(manual, session.openManualInput())
+        verify(exactly = 1) { engines.single().release() }
+        verify(exactly = 0) { device.close(); device.releaseManualInput() }
+        assertNull(EngineExecutionCoordinator.shared.activeEngineId.value)
+        checkNotNull(ResourcePackLocks.tryAcquire(pack.packId)).close()
+        session.close()
+        assertFalse(session.previewReady.value)
+        assertNull(session.openManualInput())
+        verify(exactly = 1) { device.close(); device.releaseManualInput() }
+    }
+
+    @Test fun anotherGameCanReclaimIdlePreviewWithoutAnOldCloseReleasingItsAdmission() = runBlocking {
+        val old = session()
+        assertNull(old.prepare())
+        assertTrue(old.finishTask())
+        val next = checkNotNull(EngineExecutionCoordinator.shared.tryStart("arknights"))
+        try {
+            EngineSession.closeRetainedPreview()
+            assertFalse(old.previewReady.value)
+            assertNull(old.openManualInput())
+            old.close()
+            verify(exactly = 1) { device.close() }
+            assertEquals("arknights", EngineExecutionCoordinator.shared.activeEngineId.value)
+        } finally { next.close() }
+    }
+
+    @Test fun unconfirmedFinishKeepsAllTaskOwnershipAndCanBeRetried() = runBlocking {
+        val session = session()
+        assertNull(session.prepare())
+        val engine = engines.single()
+        coEvery { engine.stop() } returns false
+        assertFalse(session.finishTask())
+        assertRetained(engine)
+        coEvery { engine.stop() } returns true
+        assertTrue(session.finishTask())
+        assertTrue(session.previewReady.value)
+        assertNull(EngineExecutionCoordinator.shared.activeEngineId.value)
+    }
+
     @Test fun prepareWithoutAnEarlySubscriberStillUsesOneInstance() = runBlocking {
         val session = session()
         assertNull(session.prepare())

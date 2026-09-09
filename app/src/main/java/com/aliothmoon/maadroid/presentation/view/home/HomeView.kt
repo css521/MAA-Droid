@@ -324,7 +324,11 @@ fun HomeView(
                 }
 
                 item {
-                    UpdateCard(viewModel = updateViewModel)
+                    // Keep this as one item: onboarding's permission target remains at index 3.
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        UpdateCard(viewModel = updateViewModel)
+                        HomeEngineResources()
+                    }
                 }
 
                 item {

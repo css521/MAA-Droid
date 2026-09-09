@@ -135,6 +135,37 @@ class MaaCompositionLifecycleTest {
 
     private suspend fun start() = composition.start(listOf(MaaTaskParams(MaaTaskType.FIGHT, "{}")), "Official")
 
+    @Test fun legacyArknightsStartReclaimsIdlePreviewBeforeResourceAndNativeWork() = runBlocking {
+        val previewOwner = com.aliothmoon.maadroid.engine.EngineSession.Companion
+        mockkObject(previewOwner)
+        var handedOff = false
+        coEvery { previewOwner.closeRetainedPreview() } coAnswers {
+            assertEquals(EngineIds.ARKNIGHTS, EngineExecutionCoordinator.shared.activeEngineId.value)
+            handedOff = true
+        }
+        coEvery { resources.ensureLoaded(any()) } coAnswers {
+            assertTrue(handedOff)
+            Result.success(Unit)
+        }
+        try {
+            assertTrue(start() is MaaCompositionService.StartResult.Success)
+            coVerify(exactly = 1) { previewOwner.closeRetainedPreview() }
+            verify(exactly = 1) { anyConstructed<AidlMaaCoreClient>().start() }
+        } finally { unmockkObject(previewOwner) }
+    }
+
+    @Test fun failedIdlePreviewHandoffDoesNotStartArknightsOrLeakItsAdmission() = runBlocking {
+        val previewOwner = com.aliothmoon.maadroid.engine.EngineSession.Companion
+        mockkObject(previewOwner)
+        coEvery { previewOwner.closeRetainedPreview() } throws IllegalStateException("preview close failed")
+        try {
+            assertTrue(runCatching { start() }.isFailure)
+            assertNull(EngineExecutionCoordinator.shared.activeEngineId.value)
+            coVerify(exactly = 0) { resources.ensureLoaded(any()) }
+            verify(exactly = 0) { anyConstructed<AidlMaaCoreClient>().start() }
+        } finally { unmockkObject(previewOwner) }
+    }
+
     @Test fun failedStopKeepsDeviceReservedAndAllowsSuccessfulRetry() = runBlocking {
         assertTrue(start() is MaaCompositionService.StartResult.Success)
         assertEquals(EngineIds.ARKNIGHTS, EngineExecutionCoordinator.shared.activeEngineId.value)

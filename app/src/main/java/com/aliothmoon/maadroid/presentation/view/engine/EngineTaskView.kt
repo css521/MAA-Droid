@@ -2,25 +2,19 @@ package com.aliothmoon.maadroid.presentation.view.engine
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -49,7 +43,6 @@ import com.aliothmoon.maadroid.presentation.viewmodel.EngineTaskViewModel
 import com.aliothmoon.maadroid.presentation.components.LogExportController
 import com.aliothmoon.maadroid.presentation.state.EngineTaskExecutionState
 import com.aliothmoon.maadroid.presentation.pip.LocalIsInPip
-import com.aliothmoon.maadroid.ui.asString
 import com.aliothmoon.maadroid.remote.EngineDataRoot
 import com.aliothmoon.maadroid.engine.resource.EngineResourceService
 import com.aliothmoon.maadroid.data.preferences.AppSettingsManager
@@ -143,6 +136,7 @@ fun EngineTaskContent(
         val running by viewModel.running.collectAsStateWithLifecycle()
         val stopping by viewModel.stopping.collectAsStateWithLifecycle()
         val status by viewModel.status.collectAsStateWithLifecycle()
+        val diagnosticFailure by viewModel.diagnosticFailure.collectAsStateWithLifecycle()
         val workspaceDraft by viewModel.workspaceDraft.collectAsStateWithLifecycle()
         val logs by viewModel.logs.collectAsStateWithLifecycle()
         val previewReady by viewModel.previewReady.collectAsStateWithLifecycle()
@@ -181,8 +175,7 @@ fun EngineTaskContent(
                     Text(stringResource(R.string.engine_no_task_panels))
                 }
             } else {
-                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                    val resourceDetailsMaxHeight = maxHeight * 0.2f
+                Box(modifier = Modifier.fillMaxSize()) {
                     Column(modifier = Modifier.fillMaxSize()) {
                         // Give nested workspace lists a finite viewport after measuring the footer.
                         // Collapsing the preview returns its entire weight to the configuration area.
@@ -190,7 +183,7 @@ fun EngineTaskContent(
                             profile?.display?.let {
                                 EnginePreviewControls(
                                     expanded = previewExpanded,
-                                    isRunning = running,
+                                    isRunning = previewReady || running,
                                     onToggleExpanded = { previewExpanded = !previewExpanded },
                                     canEnterFullscreen = previewReady && !stopping && isActivePage,
                                     onEnterFullscreen = enterFullscreen,
@@ -223,36 +216,13 @@ fun EngineTaskContent(
                             )
                         }
 
-                        // Available after process restart, even when in-memory engine logs are empty.
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Text(
-                                text = status?.asString() ?: stringResource(R.string.engine_log_export_hint),
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.weight(1f).heightIn(max = 64.dp)
-                                    .verticalScroll(rememberScrollState()).padding(vertical = 4.dp),
-                            )
-                            TextButton(onClick = { showLogExport = true }) {
-                                Text(stringResource(R.string.settings_log_export_chooser_title))
-                            }
-                        }
-
-                        val downloadablePacks = profile?.resourcePacks.orEmpty()
-                            .filter { it.upstreamArchive != null }
-                        if (downloadablePacks.isNotEmpty()) {
-                            // Long download/error details scroll locally, keeping task actions visible.
-                            Column(
-                                Modifier.fillMaxWidth().heightIn(max = resourceDetailsMaxHeight)
-                                    .verticalScroll(rememberScrollState()),
-                            ) {
-                                downloadablePacks.forEach { pack ->
-                                    EngineResourceCard(pack, resourceService, running)
-                                }
-                            }
-                        }
+                        EngineTaskMessages(
+                            status = status,
+                            diagnosticFailure = diagnosticFailure,
+                            running = running,
+                            isActivePage = isActivePage,
+                            onExportLogs = { showLogExport = true },
+                        )
 
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(16.dp),

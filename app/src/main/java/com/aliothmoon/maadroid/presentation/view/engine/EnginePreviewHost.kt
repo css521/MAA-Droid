@@ -105,7 +105,7 @@ internal fun EnginePreviewHost(
 
     // As in BackgroundTaskView, do not auto-enter with forced landscape/system bars active.
     // A collapsed preview can still enter PiP: compose and attach its Surface on entry.
-    val pipEligible = pipOnHome && isActivePage && running && previewReady && !stopping &&
+    val pipEligible = pipOnHome && isActivePage && previewReady && !stopping &&
         !showFullscreen && PipController.isSupported(context)
     val resolution = remember(display) {
         DefaultDisplayConfig.Resolution(display.width, display.height, display.dpi)
@@ -149,9 +149,9 @@ internal fun EnginePreviewHost(
                                 bounds = Rect(rect.left.toInt(), rect.top.toInt(), rect.right.toInt(), rect.bottom.toInt())
                                     .takeUnless { next -> next.isEmpty }
                             },
-                        isRunning = running,
+                        isRunning = previewReady || running,
                         isSurfaceAvailable = previewReady && surfaceAvailable,
-                        status = if (running) VirtualDisplayPreviewStatus.RUNNING else VirtualDisplayPreviewStatus.IDLE,
+                        status = if (previewReady) VirtualDisplayPreviewStatus.RUNNING else VirtualDisplayPreviewStatus.IDLE,
                         onClick = { if (previewReady && !stopping && isActivePage) fullscreen = true },
                         content = previewContent,
                     )

@@ -15,8 +15,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.Closeable
 import java.io.File
+import java.util.concurrent.atomic.AtomicReference
 
-/** 下载并验证资源 → 占用资源版本 → 创建设备会话 → 运行；所有终态先停引擎再释放。 */
+/** 任务终态释放引擎和资源；已停止任务的设备可以继续用于预览和手动游戏。 */
 class EngineSession(
     private val context: Context,
     private val engineId: String,
@@ -69,6 +70,8 @@ class EngineSession(
             val profile = EngineRegistry.provider(engineId)?.profile ?: error("引擎 $engineId 未注册")
             executionLease = EngineExecutionCoordinator.shared.tryStart(engineId)
                 ?: error("其它任务正在运行或准备资源，请先停止该任务")
+            // Synchronous handoff, before resource preparation can restart the remote process.
+            closeRetainedPreview()
             trace("prepare.begin", "mode=$runMode")
             for (pack in profile.resourcePacks.sortedBy { it.packId }) {
                 trace("resources.ensure", pack.packId)
@@ -139,23 +142,38 @@ class EngineSession(
         }
     }
 
-    suspend fun close(): Unit = withContext(NonCancellable + Dispatchers.IO) {
+    /** Confirm stopped work and release task ownership, retaining the display for manual play. */
+    suspend fun finishTask(): Boolean = endSession(keepPreview = true)
+
+    /** Explicit disposal (or failed startup). An unconfirmed stop must remain retryable. */
+    suspend fun close() {
+        check(endSession(keepPreview = false)) { "引擎尚未停止，保留设备会话以便重试停止" }
+    }
+
+    private suspend fun endSession(keepPreview: Boolean): Boolean = withContext(NonCancellable + Dispatchers.IO) {
         closeMutex.withLock {
             // Serialize creation with closure: even events() racing close cannot leak a new engine.
             val activeEngine = synchronized(engineLock) {
                 closing = true
                 ownedEngine
             }
-            synchronized(previewLock) {
+            if (!keepPreview) synchronized(previewLock) {
                 acceptsManualInput = false
                 deviceSession?.releaseManualInput()
             }
-            try {
-                check(activeEngine?.stop() != false) { "引擎尚未停止，保留设备会话以便重试停止" }
+            val stopped = try {
+                activeEngine?.stop() != false
             } catch (failure: Throwable) {
-                if (!failure.isRecoverableEngineFailure() || isRunning) throw failure
+                // A missing native library before device acquisition cannot leave device work.
+                // Once connected, even isRunning=false cannot rule out a pending async call.
+                val safeToRelease = failure is LinkageError &&
+                    synchronized(previewLock) { deviceSession == null } &&
+                    runCatching { activeEngine?.isRunning == false }.getOrDefault(false)
+                if (!safeToRelease) throw failure
                 AppDiagnostics.failure(engineId, "cleanup.stop", failure)
+                true
             }
+            if (!stopped) return@withLock false
             var cleanupError: Throwable? = null
             fun cleanup(action: () -> Unit) {
                 try { action() } catch (failure: Throwable) {
@@ -169,10 +187,16 @@ class EngineSession(
                 cleanup { activeEngine?.setDiagnosticSink(null) }
                 synchronized(engineLock) { ownedEngine = null }
                 synchronized(previewLock) {
-                    _previewReady.value = false
-                    previewSurface = null
-                    cleanup { deviceSession?.close() }
-                    deviceSession = null
+                    if (keepPreview && deviceSession != null && _previewReady.value) {
+                        acceptsManualInput = true
+                        retainedPreview.set(this@EngineSession)
+                    } else {
+                        _previewReady.value = false
+                        previewSurface = null
+                        cleanup { deviceSession?.close() }
+                        deviceSession = null
+                        retainedPreview.compareAndSet(this@EngineSession, null)
+                    }
                 }
                 resourceLeases.asReversed().forEach { lease -> cleanup { lease.close() } }
             } finally {
@@ -180,9 +204,21 @@ class EngineSession(
                 executionLease?.close()
                 executionLease = null
             }
-            trace("session.closed")
+            trace(if (keepPreview) "task.finished" else "session.closed")
             cleanupError?.let { throw it }
-            Unit
+            true
+        }
+    }
+
+    companion object {
+        private val retainedPreview = AtomicReference<EngineSession?>()
+        private val previewHandoffMutex = Mutex()
+
+        /** Call after acquiring task admission and before resource/display work, including legacy hosts. */
+        suspend fun closeRetainedPreview() = withContext(NonCancellable + Dispatchers.IO) {
+            previewHandoffMutex.withLock {
+                retainedPreview.get()?.close()
+            }
         }
     }
 }

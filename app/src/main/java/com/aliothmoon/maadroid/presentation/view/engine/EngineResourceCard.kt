@@ -14,40 +14,39 @@ import com.aliothmoon.maadroid.engine.resource.EngineResourceService
 import com.aliothmoon.maadroid.engine.resource.ResourcePhase
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.presentation.components.DownloadProgressContent
-import kotlinx.coroutines.launch
 
-/** 当前游戏就地安装/更新资源，避免引导用户去不存在的资源中心。 */
+/** Home uses the same installation/update state as engine preparation. */
 @Composable
-internal fun EngineResourceCard(pack: ResourcePackSpec, service: EngineResourceService, running: Boolean) {
+internal fun EngineResourceCard(
+    pack: ResourcePackSpec,
+    service: EngineResourceService,
+    running: Boolean,
+    onAction: () -> Unit,
+) {
     val state by service.state(pack).collectAsStateWithLifecycle()
-    val scope = rememberCoroutineScope()
     val busy = state.busy
-    LaunchedEffect(pack.packId) { if (!running) service.refreshInstalled(pack) }
+    LaunchedEffect(pack.packId, running) {
+        if (!running && !service.state(pack).value.busy) service.refreshInstalled(pack)
+    }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.weight(1f)) {
                 if (state.phase != ResourcePhase.DOWNLOADING || state.download == null) Text(when (state.phase) {
-                    ResourcePhase.CHECKING -> "正在检查资源…"
-                    ResourcePhase.DOWNLOADING -> "正在连接资源服务器…"
+                    ResourcePhase.CHECKING -> stringResource(R.string.engine_resource_checking)
+                    ResourcePhase.DOWNLOADING -> stringResource(R.string.engine_resource_connecting)
                     ResourcePhase.VERIFYING -> stringResource(R.string.resource_progress_verifying)
                     ResourcePhase.EXTRACTING -> stringResource(R.string.resource_progress_extracting, state.filesInstalled, state.filesTotal)
                     ResourcePhase.INSTALLING -> stringResource(R.string.resource_progress_installing)
-                    else -> state.installedRevision?.let { "资源 ${it.tag}" } ?: "自动化资源尚未安装"
+                    else -> state.installedRevision?.let { stringResource(R.string.engine_resource_version, it.tag) }
+                        ?: stringResource(R.string.engine_resource_not_installed)
                 }, style = MaterialTheme.typography.bodySmall)
                 state.error?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error, maxLines = 3, overflow = TextOverflow.Ellipsis) }
             }
-            if (!busy) TextButton(enabled = !running, onClick = { scope.launch {
-                when {
-                    state.installedVersion == null -> service.ensureInstalled(pack)
-                    state.phase == ResourcePhase.FAILED -> service.ensureInstalled(pack)
-                    state.availableRevision != null -> service.update(pack)
-                    else -> service.checkForUpdate(pack)
-                }
-            } }) { Text(when {
-                state.installedVersion == null -> "下载资源"
-                state.phase == ResourcePhase.FAILED -> "修复 / 重试"
-                state.availableRevision != null -> "更新 ${state.availableRevision!!.tag}"
-                else -> "检查更新"
+            if (!busy) TextButton(enabled = !running, onClick = onAction) { Text(when {
+                state.installedVersion == null -> stringResource(R.string.engine_resource_download)
+                state.phase == ResourcePhase.FAILED -> stringResource(R.string.engine_resource_retry)
+                state.availableRevision != null -> stringResource(R.string.engine_resource_update, state.availableRevision!!.tag)
+                else -> stringResource(R.string.engine_resource_check_update)
             }) }
         }
         val download = state.download

@@ -103,14 +103,14 @@ class EngineDeviceSession private constructor(
         if (!closed.get()) device.setPreviewSurface(surface)
     }
 
-    /** A failed engine connection also releases this session's display and mapped frames. */
+    /** A failed connection may still own native work; release the display only after stop confirms. */
     suspend fun connect(engine: AutomationEngine): Result<Unit> {
+        if (closed.get()) return Result.failure(IllegalStateException("设备会话已关闭"))
         return try {
-            check(!closed.get()) { "设备会话已关闭" }
             engine.connect(device).getOrThrow()
             Result.success(Unit)
         } catch (failure: Throwable) {
-            releaseAfterFailure(failure)
+            releaseAfterFailure(engine, failure)
             if (failure is CancellationException) throw failure
             Result.failure(failure)
         }
@@ -118,11 +118,7 @@ class EngineDeviceSession private constructor(
 
     /** Terminal stop. A later run must open a new device session and reconnect the engine. */
     suspend fun stop(engine: AutomationEngine): Boolean = withContext(NonCancellable + Dispatchers.IO) {
-        try {
-            engine.stop()
-        } finally {
-            close()
-        }
+        engine.stop().also { stopped -> if (stopped) close() }
     }
 
     @Synchronized
@@ -132,8 +128,11 @@ class EngineDeviceSession private constructor(
         }
     }
 
-    private suspend fun releaseAfterFailure(failure: Throwable) = withContext(NonCancellable + Dispatchers.IO) {
-        runCatching { close() }.exceptionOrNull()?.let(failure::addSuppressed)
+    private suspend fun releaseAfterFailure(engine: AutomationEngine, failure: Throwable) {
+        // Catch outside stop's context too, preserving the original connect/cancellation failure.
+        try { stop(engine) } catch (cleanup: Throwable) {
+            if (cleanup !== failure) failure.addSuppressed(cleanup)
+        }
     }
 
     companion object {
@@ -154,7 +153,9 @@ class EngineDeviceSession private constructor(
         ): EngineDeviceSession = open(
             profile, service, mode, firstFrameTimeoutMs, framePollIntervalMs,
             createOwner = { Binder() },
-            createHandle = { remote, width, height, lease -> RemoteDeviceHandle(remote, width, height, lease) },
+            createHandle = { remote, width, height, lease ->
+                RemoteDeviceHandle(remote, width, height, lease, dpi = profile.display.dpi)
+            },
         )
 
         internal suspend fun open(

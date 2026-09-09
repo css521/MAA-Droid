@@ -118,6 +118,7 @@ class MaaResourceLoader(
 
         return try {
             if (restartNeeded) {
+                com.aliothmoon.maadroid.engine.EngineSession.closeRetainedPreview()
                 restartRemoteServiceForProfileSwitch(previousClientType, clientType)
             }
             // 下发 LoadResource 即视为污染，中途失败也不例外

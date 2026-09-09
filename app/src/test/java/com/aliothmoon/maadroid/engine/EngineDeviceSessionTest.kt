@@ -79,16 +79,118 @@ class EngineDeviceSessionTest {
         verify(exactly = 1) { h.handle.close() }
     }
 
-    @Test fun connectFailureAndTerminalStopCloseDevice() = runBlocking {
+    @Test fun failedConnectionStopsBeforeClosingAndPreservesTheFailure() = runBlocking {
         val h = Harness()
         val engine = mockk<AutomationEngine>()
-        coEvery { engine.connect(h.handle) } returns Result.failure(IllegalStateException("connect failed"))
-        assertTrue(h.open().connect(engine).isFailure)
+        val failure = IllegalStateException("connect failed")
+        coEvery { engine.connect(h.handle) } returns Result.failure(failure)
+        coEvery { engine.stop() } returns true
+        assertSame(failure, h.open().connect(engine).exceptionOrNull())
+        coVerifyOrder { engine.connect(h.handle); engine.stop(); h.handle.close() }
         verify(exactly = 1) { h.handle.close() }
-        clearMocks(h.handle, answers = false)
+    }
+
+    @Test fun failedConnectionKeepsDeviceWhenStopIsUnconfirmedAndAllowsRetry() = runBlocking {
+        for (throwOnStop in listOf(false, true)) {
+            val h = Harness()
+            val session = h.open()
+            val engine = mockk<AutomationEngine>()
+            val failure = IllegalStateException("connect failed")
+            val stopFailure = IllegalStateException("stop failed")
+            every { engine.isRunning } returns false
+            coEvery { engine.connect(h.handle) } returns Result.failure(failure)
+            coEvery { engine.stop() } coAnswers { if (throwOnStop) throw stopFailure else false }
+
+            assertSame(failure, session.connect(engine).exceptionOrNull())
+            if (throwOnStop) assertTrue(failure.suppressed.any { it === stopFailure || it.cause === stopFailure })
+            coVerify(exactly = 1) { engine.stop() }
+            verify(exactly = 0) { h.handle.close() }
+
+            coEvery { engine.stop() } returns true
+            assertTrue(session.stop(engine))
+            verify(exactly = 1) { h.handle.close() }
+        }
+    }
+
+    @Test fun cancelledConnectionWaitsForStopWithoutReplacingTheCancellation() = runBlocking {
+        // The caller is already cancelled while stop suspends. Only a confirmed stop may close.
+        for (stopResult in listOf(true, false, null)) {
+            val h = Harness()
+            val session = h.open()
+            val engine = mockk<AutomationEngine>()
+            val entered = CompletableDeferred<Unit>()
+            val stopping = CompletableDeferred<Unit>()
+            val finishStop = CompletableDeferred<Unit>()
+            val observed = CompletableDeferred<Throwable>()
+            val cancellation = CancellationException("cancel connect")
+            val stopFailure = IllegalStateException("stop failed")
+            coEvery { engine.connect(h.handle) } coAnswers {
+                entered.complete(Unit)
+                awaitCancellation()
+            }
+            coEvery { engine.stop() } coAnswers {
+                check(currentCoroutineContext().isActive)
+                stopping.complete(Unit)
+                finishStop.await()
+                stopResult ?: throw stopFailure
+            }
+            val job = launch {
+                try { session.connect(engine) } catch (failure: Throwable) {
+                    observed.complete(failure)
+                    throw failure
+                }
+            }
+            try {
+                withTimeout(5_000) { entered.await() }
+                job.cancel(cancellation)
+                withTimeout(5_000) { stopping.await() }
+                assertFalse(job.isCompleted)
+                verify(exactly = 0) { h.handle.close() }
+                finishStop.complete(Unit)
+                withTimeout(5_000) { job.join() }
+                val reported = withTimeout(5_000) { observed.await() }
+                // Coroutine stack recovery may copy the exception and retain the original as cause.
+                assertTrue(reported === cancellation || reported.cause === cancellation)
+                if (stopResult == null) assertTrue(
+                    generateSequence(reported) { it.cause }.flatMap { it.suppressed.asSequence() }
+                        .any { it === stopFailure || it.cause === stopFailure },
+                )
+                verify(exactly = if (stopResult == true) 1 else 0) { h.handle.close() }
+            } finally {
+                finishStop.complete(Unit)
+                job.cancelAndJoin()
+                coEvery { engine.stop() } returns true
+                session.stop(engine)
+            }
+        }
+    }
+
+    @Test fun terminalStopRetainsDeviceOnFalseOrExceptionUntilSuccessfulRetry() = runBlocking {
+        val h = Harness()
+        val session = h.open()
+        val engine = mockk<AutomationEngine>()
+        every { engine.isRunning } returns false
         coEvery { engine.stop() } returns false
-        assertFalse(h.open().stop(engine))
-        coVerifyOrder { engine.stop(); h.handle.close() }
+        assertFalse(session.stop(engine))
+        verify(exactly = 0) { h.handle.close() }
+
+        val failure = IllegalStateException("stop failed")
+        coEvery { engine.stop() } throws failure
+        val reported = runCatching { session.stop(engine) }.exceptionOrNull()
+        assertTrue(reported === failure || reported?.cause === failure)
+        verify(exactly = 0) { h.handle.close() }
+
+        coEvery { engine.stop() } returns true
+        assertTrue(session.stop(engine))
+        verify(exactly = 1) { h.handle.close() }
+    }
+
+    @Test fun closedDeviceDoesNotConnectOrStopASuppliedEngine() = runBlocking {
+        val session = Harness().open()
+        session.close()
+        val engine = mockk<AutomationEngine>()
+        assertTrue(session.connect(engine).isFailure)
+        verify { engine wasNot Called }
     }
 
     @Test fun foregroundAndMissingGameFailBeforeDisplayCreation() = runBlocking {

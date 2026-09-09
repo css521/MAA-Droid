@@ -2502,7 +2502,16 @@
     <string name="engine_preview_fullscreen">Open fullscreen game controls</string>
     <string name="engine_preview_failed">Preview connection failed. Reopen this page to retry.</string>
     <string name="engine_preview_error_detail">Preview connection failed: %1$s</string>
-    <string name="engine_log_export_hint">Export diagnostic logs here after a startup failure or crash.</string>
+    <string name="engine_recent_crash_hint">A recent app crash was detected. Export logs to investigate.</string>
+    <string name="home_engine_resources">%1$s resources</string>
+    <string name="engine_resource_checking">Checking resources…</string>
+    <string name="engine_resource_connecting">Connecting to the resource server…</string>
+    <string name="engine_resource_version">Resources %1$s</string>
+    <string name="engine_resource_not_installed">Automation resources are not installed</string>
+    <string name="engine_resource_download">Download resources</string>
+    <string name="engine_resource_retry">Repair / Retry</string>
+    <string name="engine_resource_update">Update to %1$s</string>
+    <string name="engine_resource_check_update">Check for updates</string>
     <string name="engine_stop">Stop</string>
     <string name="engine_no_task_panels">This engine has no task panels yet</string>
     <string name="engine_no_games">No games are available</string>

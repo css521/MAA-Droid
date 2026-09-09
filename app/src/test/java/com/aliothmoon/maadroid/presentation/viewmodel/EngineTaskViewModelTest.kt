@@ -48,6 +48,7 @@ class EngineTaskViewModelTest {
         coEvery { prepare() } returns null
         coEvery { start() } returns true
         coEvery { stop() } returns true
+        coEvery { finishTask() } returns true
         every { events() } returns events
         every { previewReady } returns deviceReady
         every { appendTask(any(), any()) } returns 1
@@ -93,7 +94,7 @@ class EngineTaskViewModelTest {
 
         coVerify(exactly = 0) { session.start() }
         verify(exactly = 0) { session.appendTask(any(), any()) }
-        coVerify(exactly = 1) { session.stop() }
+        coVerify(exactly = 1) { session.finishTask() }
         assertFalse(model.running.value)
         assertNull(executionState.activeEngineId.value)
     }
@@ -139,7 +140,7 @@ class EngineTaskViewModelTest {
         val model = model()
         model.start()
         dispatcher.runCurrent()
-        coEvery { session.stop() } returns false
+        coEvery { session.finishTask() } returns false
         model.stop()
         dispatcher.runCurrent()
 
@@ -225,17 +226,74 @@ class EngineTaskViewModelTest {
 
     @Test
     fun cleanupFailureOnCompletedRunDoesNotCrashEventCollector() {
-        coEvery { session.close() } throws IllegalStateException("cleanup failed")
+        coEvery { session.finishTask() } throws IllegalStateException("cleanup failed")
         val model = model()
         model.start()
         dispatcher.runCurrent()
         events.tryEmit(EngineEvent.AllTasksFinished(true))
         dispatcher.runCurrent()
 
+        assertTrue(model.running.value)
+        assertEquals("limbus", executionState.activeEngineId.value)
+        assertEquals(1, events.subscriptionCount.value)
+        assertTrue(model.status.value.toString().contains("cleanup failed"))
+        assertTrue(model.diagnosticFailure.value.toString().contains("cleanup failed"))
+        coEvery { session.finishTask() } returns true
+        model.stop()
+        dispatcher.runCurrent()
         assertFalse(model.running.value)
         assertNull(executionState.activeEngineId.value)
         assertEquals(0, events.subscriptionCount.value)
-        assertTrue(model.status.value.toString().contains("cleanup failed"))
+    }
+
+    @Test
+    fun completionAndUserStopKeepPreviewAndManualInputWhileReleasingTaskAdmission() {
+        for (naturalCompletion in listOf(true, false)) {
+            val manual = mockk<EngineDeviceSession.ManualInput>(relaxed = true)
+            every { session.openManualInput() } returns manual
+            val model = model()
+            model.start()
+            dispatcher.runCurrent()
+            deviceReady.value = true
+            dispatcher.runCurrent()
+            if (naturalCompletion) events.tryEmit(EngineEvent.AllTasksFinished(true)) else model.stop()
+            dispatcher.runCurrent()
+            assertFalse(model.running.value)
+            assertTrue(model.previewReady.value)
+            assertNull(executionState.activeEngineId.value)
+            val input = model.openPreviewInput()!!
+            input.touchDown(500, 400, 8)
+            input.touchUp(500, 400, 8)
+            dispatcher.runCurrent()
+            verify { manual.touchDown(500, 400, 8); manual.touchUp(500, 400, 8) }
+            coVerify(exactly = 0) { session.close() }
+            deviceReady.value = false // A later game's handoff updates the old preview observer.
+            dispatcher.runCurrent()
+            assertFalse(model.previewReady.value)
+            assertNull(model.openPreviewInput())
+        }
+    }
+
+    @Test
+    fun warningsAndSuccessfulCompletionDoNotShowFailureHelpButFailuresDo() {
+        val model = model()
+        model.start()
+        dispatcher.runCurrent()
+        events.tryEmit(EngineEvent.Log(com.aliothmoon.maadroid.engine.LogLevel.Warn, "recognition recovered"))
+        dispatcher.runCurrent()
+        assertNull(model.diagnosticFailure.value)
+        events.tryEmit(EngineEvent.Failure("recognition failed"))
+        dispatcher.runCurrent()
+        assertTrue(model.diagnosticFailure.value.toString().contains("recognition failed"))
+        events.tryEmit(EngineEvent.AllTasksFinished(false))
+        dispatcher.runCurrent()
+        assertTrue(model.diagnosticFailure.value.toString().contains("recognition failed"))
+        model.start()
+        dispatcher.runCurrent()
+        assertNull(model.diagnosticFailure.value)
+        events.tryEmit(EngineEvent.AllTasksFinished(true))
+        dispatcher.runCurrent()
+        assertNull(model.diagnosticFailure.value)
     }
 
     @Test
