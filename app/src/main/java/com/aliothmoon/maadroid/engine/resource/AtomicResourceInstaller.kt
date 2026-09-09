@@ -20,8 +20,10 @@ class AtomicResourceInstaller(
         pack: ResourcePackSpec,
         revision: ResourceRevision,
         ensureActive: () -> Unit = {},
+        phaseChanged: (ResourceInstallPhase) -> Unit = {},
         progress: (Int, Int) -> Unit = { _, _ -> },
     ) {
+        phaseChanged(ResourceInstallPhase.VERIFYING_ARCHIVE)
         val source = requireNotNull(pack.upstreamArchive)
         require(!Files.isSymbolicLink(target.toPath())) { "Resource target must not be a symbolic link" }
         check(target.parentFile!!.mkdirs() || target.parentFile!!.isDirectory)
@@ -41,8 +43,11 @@ class AtomicResourceInstaller(
                     if (entry.isDirectory) null else source.mapEntry(name)?.let { entry to it }
                 }.toList()
                 require(entries.isNotEmpty() && entries.size <= 50_000) { "Unexpected resource file count: ${entries.size}" }
+                phaseChanged(ResourceInstallPhase.EXTRACTING)
+                progress(0, entries.size)
                 val seen = HashSet<String>()
                 var totalBytes = 0L
+                var lastReport = System.nanoTime()
                 val buffer = ByteArray(128 * 1024)
                 for ((index, pair) in entries.withIndex()) {
                     ensureActive()
@@ -52,7 +57,7 @@ class AtomicResourceInstaller(
                     check(dest.parentFile!!.mkdirs() || dest.parentFile!!.isDirectory)
                     var fileBytes = 0L
                     zip.getInputStream(entry).use { input ->
-                        dest.outputStream().use { output ->
+                        dest.outputStream().buffered(buffer.size).use { output ->
                             while (true) {
                                 ensureActive()
                                 val read = input.read(buffer)
@@ -66,14 +71,20 @@ class AtomicResourceInstaller(
                             }
                         }
                     }
-                    progress(index + 1, entries.size)
+                    val now = System.nanoTime()
+                    if (now - lastReport >= 100_000_000 || index + 1 == entries.size) {
+                        progress(index + 1, entries.size)
+                        lastReport = now
+                    }
                 }
             }
             ensureActive()
+            phaseChanged(ResourceInstallPhase.VERIFYING_FILES)
             pack.finalizeUpstreamInstall(staging, revision)
             pack.verifyInstalledFiles(staging)?.let { throw IOException(it) }
             check(!pack.readInstalledVersion(staging).isNullOrBlank()) { "Resource version missing after validation" }
             ensureActive()
+            phaseChanged(ResourceInstallPhase.ACTIVATING)
             // No suspension/cancellation point between the two renames.
             val backup = backupOf(target)
             if (target.exists()) check(move(target, backup)) { "Cannot back up installed resources" }
@@ -110,3 +121,5 @@ class AtomicResourceInstaller(
 
     private fun backupOf(target: File) = File(target.parentFile, ".${target.name}.previous")
 }
+
+enum class ResourceInstallPhase { VERIFYING_ARCHIVE, EXTRACTING, VERIFYING_FILES, ACTIVATING }

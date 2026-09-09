@@ -18,22 +18,23 @@ import com.aliothmoon.maadroid.data.config.MaaPathConfig
 import com.aliothmoon.maadroid.data.preferences.AppSettingsManager
 import com.aliothmoon.maadroid.data.preferences.TaskChainState
 import com.aliothmoon.maadroid.data.resource.MaaCoreVersion
+import com.aliothmoon.maadroid.diagnostics.AppDiagnostics
+import com.aliothmoon.maadroid.diagnostics.DiagnosticArchive
+import com.aliothmoon.maadroid.diagnostics.ExitHistoryCollector
 import com.aliothmoon.maadroid.manager.RemoteServiceManager
 import com.aliothmoon.maadroid.manager.ShizukuManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import rikka.shizuku.Shizuku
 import timber.log.Timber
-import java.io.BufferedOutputStream
 import java.io.File
-import java.io.FileInputStream
-import java.io.FileOutputStream
-import java.io.InputStream
+import java.nio.file.Files
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
 
 class LogExportService(
     private val context: Context,
@@ -43,41 +44,80 @@ class LogExportService(
     private val achievementRepository: AchievementRepository,
 ) {
     companion object {
+        private val exportMutex = Mutex()
+        private val historyEnricher = DiagnosticArchive.Enricher("diagnostic-exit-history")
+        private val legacyEnricher = DiagnosticArchive.Enricher("diagnostic-legacy-logs")
         private val DATE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")
         private val INFO_TIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS (Z)")
     }
 
-    /** 导出日志 ZIP；失败返回 null。无日志时仍生成仅含 properties/device_info 的包。不删除 debug 源日志。 */
+    /** Internal diagnostics are committed first. Optional collection can never replace them on failure. */
     suspend fun exportZip(): File? = withContext(Dispatchers.IO) {
-        try {
-            val dir = File(pathConfig.debugDir)
-            val exportDir = File(dir, LogExportCollector.EXPORT_DIR_NAME)
-            exportDir.mkdirs()
-            cleanupOldExports(exportDir)
+        exportMutex.withLock {
+            var snapshot: File? = null
+            var zipFile: File? = null
+            var committed = false
+            try {
+                val exportDir = File(context.cacheDir, LogExportCollector.EXPORT_DIR_NAME)
+                check(exportDir.isDirectory || exportDir.mkdirs())
+                cleanupOldExports(exportDir)
+                val zip = File.createTempFile("maa_logs_${ZonedDateTime.now().format(DATE_FORMAT)}_", ".zip", exportDir)
+                zipFile = zip
+                val staging = Files.createTempDirectory(exportDir.toPath(), "diagnostic_snapshot_").toFile()
+                snapshot = staging
+                AppDiagnostics.initialize(context)
+                AppDiagnostics.record("log_export", "snapshot")
+                val captured = AppDiagnostics.snapshot(context, File(staging, "diagnostics"))
+                DiagnosticArchive.create(zip) { writer ->
+                    val status = StringBuilder("Internal snapshot: ${if (captured) "complete" else "unavailable or partial (storage error)"}\n")
+                    for (file in LogExportCollector.collectDiagnostics(staging)) {
+                        val name = file.relativeTo(staging).invariantSeparatorsPath
+                        status.appendLine("$name: ${writer.file(name, file)}")
+                    }
+                    writer.text("diagnostics/collection_status.txt", status.toString())
+                    writer.text("diagnostics/environment.txt", buildBasicInfo())
+                    writer.text("diagnostics/exit_history/availability.txt", "Device API ${Build.VERSION.SDK_INT}\n" + ExitHistoryCollector.AVAILABILITY)
+                    writer.text("diagnostics/README.txt", """
+                        Offline diagnostic snapshot; original files are retained across app restarts.
+                        events.log is newest; events.1.log through events.3.log are older generations.
+                        java_crashes contains Java stacks including causes and suppressed exceptions.
+                        If exit_history/records.txt is absent, system collection failed, was busy or exceeded 5 seconds.
+                        API below 30 cannot provide historical exits. See exit_history/availability.txt.
+                        If attachments_status.txt is absent, optional logs failed, were busy or exceeded 5 seconds.
+                        Optional logs never invalidate this internal diagnostic snapshot.
+                        New text diagnostics omit configuration dumps and redact common credential patterns.
+                        Legacy logs and raw Android traces are not rewritten; inspect before sharing.
+                    """.trimIndent() + "\n")
+                }
+                committed = true
 
-            val zipFileName = "maa_logs_${ZonedDateTime.now().format(DATE_FORMAT)}.zip"
-            val zipFile = File(exportDir, zipFileName)
-
-            val logFiles = LogExportCollector.collect(dir)
-            if (logFiles.isEmpty()) {
-                Timber.w("No log files found, exporting device info only")
+                // Separate workers: an unresponsive remote Binder cannot block Android history next time.
+                historyEnricher.append(zip) { ExitHistoryCollector.append(context, it) }
+                legacyEnricher.append(zip) { appendLegacyLogs(it) }
+                // Achievement/reporting failures must not hide a valid ZIP from share or SAF.
+                withTimeoutOrNull(250) {
+                    runCatching { achievementRepository.report { event = AchievementEvents.LOG_EXPORTED } }
+                }
+                cleanupOldExports(exportDir)
+                zip
+            } catch (error: Exception) {
+                AppDiagnostics.record("log_export", "export_error", "error=${error.javaClass.name}")
+                if (committed) zipFile else {
+                    runCatching { zipFile?.delete() }
+                    null
+                }
+            } finally {
+                runCatching { snapshot?.deleteRecursively() }
             }
-
-            createZipFile(zipFile, logFiles, dir)
-
-            Timber.i("Exported ${logFiles.size} log files to ${zipFile.absolutePath}")
-            achievementRepository.report {
-                event = AchievementEvents.LOG_EXPORTED
-            }
-
-            zipFile
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to export logs")
-            null
         }
     }
 
-    suspend fun exportAllLogs(): Intent? = exportZip()?.let { createShareIntent(it) }
+    suspend fun exportAllLogs(): Intent? = exportZip()?.let { zip ->
+        runCatching { createShareIntent(zip) }.getOrElse {
+            AppDiagnostics.record("log_export", "share_unavailable", "error=${it.javaClass.name}")
+            null
+        }
+    }
 
     /** 写入 [targetUri]；成功返回显示名，失败返回 null。 */
     suspend fun exportToUri(targetUri: android.net.Uri): String? = withContext(Dispatchers.IO) {
@@ -108,60 +148,73 @@ class LogExportService(
         }
     }
 
-    private fun createZipFile(zipFile: File, logFiles: List<File>, baseDir: File) {
-        ZipOutputStream(BufferedOutputStream(FileOutputStream(zipFile))).use { zos ->
-            try {
-                val process = Runtime.getRuntime().exec("getprop")
-                zos.putNextEntry(ZipEntry("properties.txt"))
-                process.inputStream.use { input ->
-                    input.copyTo(zos, bufferSize = 8192)
-                }
-                zos.closeEntry()
-                process.waitFor()
-            } catch (e: Exception) {
-                Timber.w(e, "Failed to collect device properties")
-            }
+    private fun buildBasicInfo(): String = """
+        Export time: ${ZonedDateTime.now().format(INFO_TIME_FORMAT)}
+        App: ${BuildConfig.APPLICATION_ID}
+        Version: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})
+        Build type: ${BuildConfig.BUILD_TYPE}
+        Device: ${Build.MANUFACTURER} ${Build.MODEL}
+        Android: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})
+        ABI: ${Build.SUPPORTED_ABIS.joinToString()}
+    """.trimIndent() + "\n"
 
-            try {
-                zos.putNextEntry(ZipEntry("device_info.txt"))
-                zos.write(buildDeviceInfo().toByteArray(Charsets.UTF_8))
-                zos.closeEntry()
-            } catch (e: Exception) {
-                Timber.w(e, "Failed to collect device info")
-            }
-
-            appendRemoteDebugFiles(zos)
-
-            for (file in logFiles) {
-                FileInputStream(file).use { zos.addEntry(file.relativeTo(baseDir).path, it, file.lastModified()) }
-            }
+    private fun appendLegacyLogs(writer: DiagnosticArchive.Writer) {
+        val status = StringBuilder()
+        // A small allowlist avoids spawning getprop and dumping device identifiers or credentials.
+        writer.text("properties.txt", "Selected Android Build fields (no getprop subprocess).\n" + buildBasicInfo())
+        val deviceInfo = runCatching { buildDeviceInfo() }.getOrElse {
+            status.appendLine("device_info: unavailable (${it.javaClass.simpleName})")
+            buildBasicInfo()
         }
+        writer.text("device_info.txt", deviceInfo)
+        var remaining = DiagnosticArchive.MAX_ATTACHMENTS_BYTES
+        val debugDir = runCatching { File(pathConfig.debugDir) }.getOrNull()
+        val files = runCatching { debugDir?.let(LogExportCollector::collect).orEmpty() }.getOrElse {
+            status.appendLine("legacy: unavailable (${it.javaClass.simpleName})")
+            emptyList()
+        }
+        for (file in files.take(256)) {
+            if (remaining <= 0) break
+            val name = file.relativeTo(debugDir!!).invariantSeparatorsPath
+            if (!LogExportCollector.isLegacyEntryAllowed(name) || name.substringBefore('/') == MaaFiles.EXPORT_REMOTE_DIR) {
+                status.appendLine("Skipped reserved or unsafe local entry")
+                continue
+            }
+            val limit = minOf(file.length(), remaining, DiagnosticArchive.MAX_ATTACHMENT_BYTES)
+            status.appendLine("$name: ${writer.file(name, file, limit)}")
+            remaining -= limit
+        }
+        status.appendLine("Local candidates=${files.size}; at most 256 files; each snapshot <=32 MiB, total attachments <=128 MiB.")
+        appendRemoteDebugFiles(writer, status, remaining)
+        writer.text("attachments_status.txt", status.toString())
     }
 
-    private fun ZipOutputStream.addEntry(name: String, input: InputStream, time: Long = 0L) {
-        putNextEntry(ZipEntry(name).also { if (time > 0) it.time = time })
-        input.copyTo(this, bufferSize = 64 * 1024)
-        closeEntry()
-    }
-
-    private fun appendRemoteDebugFiles(zos: ZipOutputStream) {
-        // core 用 App 目录时它的日志就在 App 的 debug/ 里，已被 collect 收进去
+    private fun appendRemoteDebugFiles(writer: DiagnosticArchive.Writer, status: StringBuilder, byteBudget: Long) {
         if (!pathConfig.isCoreSeparated) return
         val srv = RemoteServiceManager.getInstanceOrNull()
         if (srv == null) {
-            Timber.w("Remote service not connected, core debug files skipped")
+            status.appendLine("remote: service not connected")
             return
         }
-        val files = runCatching { srv.listCoreDebugFiles() }
-            .onFailure { Timber.w(it, "listCoreDebugFiles failed") }
-            .getOrNull() ?: return
-        for (rel in files) {
-            try {
-                val pfd = srv.openCoreDebugFile(rel) ?: continue
-                ParcelFileDescriptor.AutoCloseInputStream(pfd).use { zos.addEntry("${MaaFiles.EXPORT_REMOTE_DIR}/$rel", it) }
-            } catch (e: Exception) {
-                Timber.w(e, "Failed to pull core debug file: %s", rel)
+        val files = runCatching { srv.listCoreDebugFiles() }.getOrElse {
+            status.appendLine("remote: list unavailable (${it.javaClass.simpleName})")
+            return
+        }
+        var remaining = byteBudget
+        for (rel in files.distinct().take(128)) {
+            if (remaining <= 0) break
+            val name = "${MaaFiles.EXPORT_REMOTE_DIR}/$rel"
+            if (!LogExportCollector.isLegacyEntryAllowed(name) || !DiagnosticArchive.validName(rel)) continue
+            val pfd = runCatching { srv.openCoreDebugFile(rel) }.getOrElse {
+                status.appendLine("$name: unavailable (${it.javaClass.simpleName})")
+                null
+            } ?: continue
+            val limit = minOf(remaining, DiagnosticArchive.MAX_ATTACHMENT_BYTES)
+            ParcelFileDescriptor.AutoCloseInputStream(pfd).use {
+                status.appendLine("$name: ${writer.stream(name, it, limit)}")
             }
+            // Unknown remote sizes: reserve the full limit to keep the total strictly bounded.
+            remaining -= limit
         }
     }
 
@@ -275,7 +328,7 @@ class LogExportService(
         val uri = FileProvider.getUriForFile(context, authority, zipFile)
 
         return Intent(Intent.ACTION_SEND).apply {
-            type = "application/octet-stream"
+            type = "application/zip"
             putExtra(Intent.EXTRA_STREAM, uri)
             putExtra(Intent.EXTRA_SUBJECT, "MAA Droid 日志导出")
             putExtra(
@@ -291,11 +344,17 @@ class LogExportService(
 
     private fun cleanupOldExports(dir: File) {
         try {
+            // Recover staging files left by process death, while leaving current work alone.
+            val cutoff = System.currentTimeMillis() - 24L * 60 * 60 * 1000
+            dir.listFiles { file ->
+                (file.name.startsWith("diagnostic_snapshot_") || file.name.startsWith("diagnostic_add_")) &&
+                    file.lastModified() < cutoff
+            }?.forEach { it.deleteRecursively() }
             dir.listFiles { file ->
                 file.isFile && file.name.startsWith("maa_logs_") && file.name.endsWith(".zip")
-            }?.forEach { it.delete() }
+            }?.sortedByDescending { it.lastModified() }?.drop(4)?.forEach { it.delete() }
         } catch (e: Exception) {
-            Timber.w(e, "Failed to cleanup old exports")
+            AppDiagnostics.record("log_export", "cleanup_unavailable", "error=${e.javaClass.name}")
         }
     }
 }

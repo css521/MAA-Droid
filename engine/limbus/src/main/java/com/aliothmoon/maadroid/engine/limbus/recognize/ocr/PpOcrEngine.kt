@@ -191,27 +191,28 @@ class PpOcrEngine private constructor(
         private const val CHARACTER_METADATA_KEY = "character"
 
         /**
-         * 从资源包装载。任一环节不满足即返回 null（OCR 不可用），调用方据此让
-         * 依赖文字的步骤走兜底分支，而不是让整条任务链失败。
+         * 缺少模型或字符表时返回 null。原生加载失败保留异常堆栈，由宿主报告并导出。
          */
         fun load(resourceDir: File, onLog: (String) -> Unit = {}): PpOcrEngine? {
             val dir = File(resourceDir, MODEL_DIR)
             val detFile = File(dir, DET_MODEL)
             val recFile = File(dir, REC_MODEL)
             if (!detFile.isFile || !recFile.isFile) {
-                onLog("资源包缺少 OCR 模型（$MODEL_DIR），依赖文字识别的步骤将走兜底分支")
+                onLog("资源包缺少 OCR 模型（$MODEL_DIR），请修复边狱资源")
                 return null
             }
 
-            return runCatching {
+            var openedDet: OrtSession? = null
+            var openedRec: OrtSession? = null
+            var loaded = false
+            return try {
                 val env = OrtEnvironment.getEnvironment()
-                val det = env.createSession(detFile.absolutePath)
-                val rec = env.createSession(recFile.absolutePath)
+                val det = env.createSession(detFile.absolutePath).also { openedDet = it }
+                val rec = env.createSession(recFile.absolutePath).also { openedRec = it }
 
                 val characters = rec.metadata.customMetadata[CHARACTER_METADATA_KEY]
                     ?.let(CtcDecoder::parseCharacters)
                 if (characters.isNullOrEmpty()) {
-                    det.close(); rec.close()
                     onLog("rec 模型未内嵌字符表，无法解码，已停用 OCR")
                     return null
                 }
@@ -225,7 +226,6 @@ class PpOcrEngine private constructor(
                 if (outputClasses != null && outputClasses > 0 &&
                     outputClasses != decoder.classCount
                 ) {
-                    det.close(); rec.close()
                     onLog(
                         "OCR 字符表与模型不匹配（字符表 ${decoder.classCount} 类，" +
                             "模型输出 $outputClasses 类），已停用 OCR 以免输出乱码"
@@ -233,8 +233,15 @@ class PpOcrEngine private constructor(
                     return null
                 }
 
-                PpOcrEngine(env, det, rec, decoder, onLog)
-            }.onFailure { onLog("OCR 模型加载失败: ${it.message}") }.getOrNull()
+                PpOcrEngine(env, det, rec, decoder, onLog).also { loaded = true }
+            } catch (failure: Exception) {
+                throw IllegalStateException("OCR 模型加载失败: ${failure.message}", failure)
+            } finally {
+                if (!loaded) {
+                    runCatching { openedRec?.close() }
+                    runCatching { openedDet?.close() }
+                }
+            }
         }
     }
 }

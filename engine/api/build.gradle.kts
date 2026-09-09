@@ -34,4 +34,5 @@ dependencies {
     api(libs.androidx.annotation)
     // EngineEvent 事件流
     api(libs.kotlinx.coroutines.core)
+    testImplementation(libs.junit)
 }

@@ -1,12 +1,22 @@
 package com.aliothmoon.maadroid.domain.service
 
 import com.aliothmoon.maadroid.constant.LogConfig
+import com.aliothmoon.maadroid.diagnostics.DiagnosticStore
+import com.aliothmoon.maadroid.diagnostics.DiagnosticArchive
 import java.io.File
 
 /** 日志导出筛选：不删源、不写盘。 */
 object LogExportCollector {
 
     const val EXPORT_DIR_NAME = "export"
+
+    private val RESERVED_ROOTS = setOf(
+        "diagnostics", "properties.txt", "device_info.txt", "attachments_status.txt", "export",
+    )
+
+    /** Preserve old relative paths without letting optional files shadow diagnostic/metadata entries. */
+    fun isLegacyEntryAllowed(name: String): Boolean =
+        DiagnosticArchive.validName(name) && name.substringBefore('/') !in RESERVED_ROOTS
 
     private const val MS_PER_DAY = 24L * 60 * 60 * 1000
 
@@ -19,14 +29,22 @@ object LogExportCollector {
 
     fun collect(debugDir: File): List<File> {
         if (!debugDir.isDirectory) return emptyList()
-        val exportPrefix = File(debugDir, EXPORT_DIR_NAME).invariantSeparatorsPath
+        val exportDir = File(debugDir, EXPORT_DIR_NAME)
         return select(
             debugDir.walkTopDown()
+                .onEnter { it != exportDir }
                 .filter { file ->
-                    file.isFile && !file.invariantSeparatorsPath.startsWith(exportPrefix)
+                    file.isFile
                 }
                 .toList(),
         )
+    }
+
+    /** Internal logs are retained across restart and are not subject to the legacy age filter. */
+    fun collectDiagnostics(filesDir: File): List<File> {
+        val directory = File(filesDir, DiagnosticStore.DIRECTORY)
+        if (!directory.isDirectory) return emptyList()
+        return directory.walkTopDown().filter { it.isFile && it.name != ".lock" }.toList()
     }
 
     fun select(files: Iterable<File>): List<File> {

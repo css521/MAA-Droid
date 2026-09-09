@@ -21,6 +21,7 @@ class EngineDeviceSessionTest {
         val frames = mockk<FrameSource>()
         val control = mockk<DeviceControl>()
         init {
+            every { profile.id } returns "test"
             every { profile.display } returns DisplaySpec(3, 2, 320)
             every { profile.gamePackages } returns listOf("missing", "installed")
             every { service.isPackageInstalled("installed") } returns true
@@ -95,5 +96,18 @@ class EngineDeviceSessionTest {
         every { h.service.isPackageInstalled(any()) } returns false
         assertTrue(runCatching { h.open() }.isFailure)
         verify(exactly = 0) { h.service.openDeviceSession(any(), any(), any(), any(), any()) }
+    }
+
+    @Test fun previewDetachDoesNotReleaseDisplayAndClosedSessionIgnoresNewSurface() = runBlocking {
+        val h = Harness()
+        val surface = mockk<android.view.Surface>()
+        val session = h.open()
+        session.setPreviewSurface(surface)
+        session.setPreviewSurface(null)
+        verifyOrder { h.handle.setPreviewSurface(surface); h.handle.setPreviewSurface(null) }
+        verify(exactly = 0) { h.handle.close() }
+        session.close()
+        session.setPreviewSurface(surface)
+        verify(exactly = 1) { h.handle.setPreviewSurface(surface) }
     }
 }

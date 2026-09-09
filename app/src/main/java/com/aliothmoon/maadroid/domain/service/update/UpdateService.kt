@@ -8,6 +8,8 @@ import androidx.core.net.toUri
 import com.aliothmoon.maadroid.BuildConfig
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.constant.MaaFiles
+import com.aliothmoon.maadroid.constant.AppApi
+import com.aliothmoon.maadroid.common.i18n.UiText
 import com.aliothmoon.maadroid.data.achievement.AchievementEvents
 import com.aliothmoon.maadroid.data.achievement.AchievementRepository
 import com.aliothmoon.maadroid.data.api.CdkRequiredException
@@ -18,10 +20,12 @@ import com.aliothmoon.maadroid.data.datasource.AppDownloader
 import com.aliothmoon.maadroid.data.datasource.ResourceDownloader
 import com.aliothmoon.maadroid.data.datasource.ZipExtractor
 import com.aliothmoon.maadroid.data.datasource.update.GitHubAppDownloadUrlResolver
+import com.aliothmoon.maadroid.data.datasource.update.GitHubAppVersionChecker
 import com.aliothmoon.maadroid.data.datasource.update.GitHubResourceDownloadUrlResolver
 import com.aliothmoon.maadroid.data.datasource.update.MirrorChyanAppDownloadUrlResolver
 import com.aliothmoon.maadroid.data.datasource.update.MirrorChyanResourceDownloadUrlResolver
 import com.aliothmoon.maadroid.data.model.update.UpdateChannel
+import com.aliothmoon.maadroid.data.model.update.AppUpdateSourceUnavailableException
 import com.aliothmoon.maadroid.data.model.update.UpdateCheckResult
 import com.aliothmoon.maadroid.data.model.update.UpdateError
 import com.aliothmoon.maadroid.data.model.update.UpdateError.MirrorchyanBizError
@@ -30,6 +34,7 @@ import com.aliothmoon.maadroid.data.model.update.UpdateSource
 import com.aliothmoon.maadroid.data.preferences.AppSettingsManager
 import com.aliothmoon.maadroid.domain.service.CoreDataPusher
 import com.aliothmoon.maadroid.domain.service.update.checker.AppVersionChecker
+import com.aliothmoon.maadroid.domain.service.update.checker.ConfiguredAppVersionChecker
 import com.aliothmoon.maadroid.domain.service.update.checker.ResourceVersionChecker
 import com.aliothmoon.maadroid.domain.service.update.resolver.AppDownloadUrlResolver
 import com.aliothmoon.maadroid.domain.service.update.resolver.ResourceDownloadUrlResolver
@@ -39,6 +44,7 @@ import com.aliothmoon.maadroid.common.i18n.LocalizedException
 import com.aliothmoon.maadroid.common.i18n.resolve
 import com.aliothmoon.maadroid.common.i18n.uiTextOf
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.currentCoroutineContext
@@ -46,8 +52,8 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.job
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
@@ -60,7 +66,7 @@ class UpdateService(
     apiClient: MirrorChyanApiClient,
     appSettingsManager: AppSettingsManager,
     httpClient: HttpClientHelper,
-    private val appVersionChecker: AppVersionChecker,
+    appVersionChecker: AppVersionChecker,
     private val resourceVersionChecker: ResourceVersionChecker,
     private val appDownloader: AppDownloader,
     private val resourceDownloader: ResourceDownloader,
@@ -68,6 +74,11 @@ class UpdateService(
     private val achievementRepository: AchievementRepository,
     private val coreDataPusher: CoreDataPusher,
 ) {
+    private val configuredAppVersionChecker = ConfiguredAppVersionChecker(
+        github = GitHubAppVersionChecker(httpClient),
+        mirrorChyan = appVersionChecker,
+    )
+
     private val appDownloadResolvers: Map<UpdateSource, AppDownloadUrlResolver> = mapOf(
         UpdateSource.MIRROR_CHYAN to MirrorChyanAppDownloadUrlResolver(
             apiClient,
@@ -95,7 +106,7 @@ class UpdateService(
     val appProcessState: StateFlow<UpdateProcessState> = _appProcessState.asStateFlow()
 
     suspend fun checkAppUpdate(channel: UpdateChannel = UpdateChannel.STABLE): UpdateCheckResult {
-        return appVersionChecker.check(BuildConfig.VERSION_NAME, channel)
+        return configuredAppVersionChecker.check(BuildConfig.VERSION_NAME, channel)
     }
 
     suspend fun downloadApp(
@@ -103,6 +114,15 @@ class UpdateService(
         version: String,
         channel: UpdateChannel = UpdateChannel.STABLE
     ): Result<Unit> {
+        // 在解析链接、读取缓存、启动安装器之前拒绝未配置的 APK 分发源。
+        val unavailableReason = if (source == UpdateSource.MIRROR_CHYAN) {
+            AppApi.APP_UPDATE_SOURCE.mirrorChyanUnavailableReason
+        } else {
+            AppApi.APP_UPDATE_SOURCE.disabledReason
+        }
+        unavailableReason?.let {
+            return failApp(UpdateError.UnknownError(UiText.Dynamic(it)))
+        }
         if (!appDownloading.compareAndSet(false, true)) {
             return Result.success(Unit)   // 已在进行中，幂等跳过
         }
@@ -349,7 +369,7 @@ class UpdateService(
         target: File,
         url: String,
         pack: ResourcePackSpec,
-    ): Result<Unit> {
+    ): Result<Unit> = withContext(Dispatchers.IO) {
         val downloadResult = resourceDownloader.downloadToTempFile(url) { progress ->
             _resourceProcessState.value = UpdateProcessState.Downloading(
                 progress = progress.progress,
@@ -362,49 +382,41 @@ class UpdateService(
         val tempFile = downloadResult.getOrElse { e ->
             _resourceProcessState.value =
                 UpdateProcessState.Failed(mapToUpdateError(e))
-            return Result.failure(e)
+            return@withContext Result.failure(e)
         }
 
-        // 同理，取消卡在解压前就别再动资源目录
-        if (!currentCoroutineContext().isActive) {
-            tempFile.delete()
-            throw CancellationException("resource download canceled")
-        }
+        var extractionStarted = false
+        try {
+            currentCoroutineContext().ensureActive()
+            _resourceProcessState.value = UpdateProcessState.Verifying
+            val extractResult = extractor.extract(
+                zipFile = tempFile,
+                destDir = target,
+                pathFilter = pack::mapZipEntry,
+                onProgress = { progress ->
+                    _resourceProcessState.value = if (progress.phase == ZipExtractor.Phase.VERIFYING) {
+                        UpdateProcessState.Verifying
+                    } else {
+                        extractionStarted = true
+                        UpdateProcessState.Extracting(progress.progress, progress.current, progress.total)
+                    }
+                },
+            )
 
-        _resourceProcessState.value = UpdateProcessState.Extracting(0, 0, 0)
-
-        target.mkdirs()
-
-        val extractResult = extractor.extract(
-            zipFile = tempFile,
-            destDir = target,
-            pathFilter = pack::mapZipEntry,
-            onProgress = { progress ->
-                _resourceProcessState.value = UpdateProcessState.Extracting(
-                    progress = progress.progress,
-                    current = progress.current,
-                    total = progress.total
-                )
-            }
-        )
-
-        // 留档供独立目录投递。只有引擎跑在提权进程的包才需要 ——
-        // 跑在 App 进程的引擎直接读自己的资源目录，留一份 zip 纯属占空间
-        if (extractResult.isSuccess && pack.requiresPrivilegedDelivery) {
-            val keep = File(target.parentFile, MaaFiles.LAST_RESOURCE_UPDATE_ZIP)
-            runCatching { if (!tempFile.renameTo(keep)) tempFile.copyTo(keep, overwrite = true) }
-                .onFailure { Timber.w(it, "keep last resource update zip failed") }
-        }
-        tempFile.delete()
-
-        return extractResult.fold(
-            onSuccess = {
+            extractResult.fold(onSuccess = {
+                currentCoroutineContext().ensureActive()
+                _resourceProcessState.value = UpdateProcessState.Installing
+                // Archive preservation, buffered copying and privileged delivery stay off the UI thread.
+                if (pack.requiresPrivilegedDelivery) {
+                    val keep = File(target.parentFile, MaaFiles.LAST_RESOURCE_UPDATE_ZIP)
+                    runCatching { if (!tempFile.renameTo(keep)) tempFile.copyTo(keep, overwrite = true) }
+                        .onFailure { Timber.w(it, "keep last resource update zip failed") }
+                    coreDataPusher.pushHotUpdateIfNeeded()
+                }
                 _resourceProcessState.value = UpdateProcessState.Success
                 Timber.i("Resource update completed: %s", pack.packId)
-                if (pack.requiresPrivilegedDelivery) coreDataPusher.pushHotUpdateIfNeeded()
                 Result.success(Unit)
-            },
-            onFailure = { e ->
+            }, onFailure = { e ->
                 // 解压中途失败时资源目录处于残缺状态，抹掉版本标记让下次重新触发完整更新
                 pack.invalidateInstalledVersion(target)
                 _resourceProcessState.value =
@@ -412,8 +424,17 @@ class UpdateService(
                         UpdateError.UnknownError(uiTextOf(R.string.update_error_extract_failed))
                     )
                 Result.failure(e)
-            }
-        )
+            })
+        } catch (cancelled: CancellationException) {
+            if (extractionStarted) pack.invalidateInstalledVersion(target)
+            throw cancelled
+        } catch (e: Exception) {
+            currentCoroutineContext().ensureActive()
+            _resourceProcessState.value = UpdateProcessState.Failed(mapToUpdateError(e))
+            Result.failure(e)
+        } finally {
+            tempFile.delete()
+        }
     }
 
     private fun failResource(error: UpdateError): Result<Unit> {
@@ -424,6 +445,7 @@ class UpdateService(
     // ==================== 工具方法 ====================
 
     private fun mapToUpdateError(e: Throwable): UpdateError = when (e) {
+        is AppUpdateSourceUnavailableException -> UpdateError.UnknownError(UiText.Dynamic(e.message.orEmpty()))
         is CdkRequiredException -> UpdateError.CdkRequired
         is LocalizedException -> UpdateError.UnknownError(e.uiText)
         is MirrorChyanBizException -> e.toUpdateError()

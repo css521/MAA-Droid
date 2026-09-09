@@ -1,6 +1,7 @@
 package com.aliothmoon.maadroid;
 
 import android.os.SharedMemory;
+import android.view.Surface;
 
 // One exclusive capture/display lease. Closed binders can never act on a later lease.
 interface IEngineDeviceSession {
@@ -19,4 +20,6 @@ interface IEngineDeviceSession {
     boolean matchesDisplaySpec(int width, int height, int dpi) = 13;
     // Synchronous and idempotent; also invoked when the owner's binder dies.
     void close() = 14;
+    // Attaches/detaches the UI preview only; capture and automation keep running.
+    void setPreviewSurface(in Surface surface) = 15;
 }

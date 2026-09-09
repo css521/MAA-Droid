@@ -297,7 +297,7 @@ open class RemoteServiceImpl : RemoteService.Stub() {
         }
     }
 
-    override fun setMonitorSurface(surface: Surface?) {
+    override fun setMonitorSurface(surface: Surface?) = deviceSessions.legacy {
         Ln.i("$TAG: setMonitorSurface(${surface != null})")
         VirtualDisplayManager.setMonitorSurface(surface)
         NativeBridgeLib.setPreviewSurface(surface)

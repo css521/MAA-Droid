@@ -1,7 +1,9 @@
 package com.aliothmoon.maadroid.remote.internal
 
 import android.os.IBinder
+import android.view.Surface
 import com.aliothmoon.maadroid.IEngineDeviceSession
+import com.aliothmoon.maadroid.bridge.NativeBridgeLib
 import com.aliothmoon.maadroid.constant.DisplayMode
 import com.aliothmoon.maadroid.input.InputControlUtils
 import com.aliothmoon.maadroid.third.Ln
@@ -54,6 +56,11 @@ internal class EngineDeviceSessionHost(private val legacyFrames: FrameChannel) {
         override fun openFrameChannel() = lease.use(this) { frames.open(width, height) }
         override fun grabFrame(): LongArray? = lease.use(this) { frames.grab() }
         override fun closeFrameChannel() = lease.use(this) { frames.close() }
+        override fun setPreviewSurface(surface: Surface?) = lease.use(this) {
+            // The Binder lease prevents an old tab/session from clearing a new game's preview.
+            VirtualDisplayManager.setMonitorSurface(surface)
+            NativeBridgeLib.setPreviewSurface(surface)
+        }
         override fun matchesDisplaySpec(width: Int, height: Int, dpi: Int): Boolean = lease.use(this) {
             this.width == width && this.height == height && this.dpi == dpi
         }
@@ -98,6 +105,8 @@ internal class EngineDeviceSessionHost(private val legacyFrames: FrameChannel) {
             runCatching { owner.unlinkToDeath(this, 0) }
             runCatching { frames.close() }
             if (captureStarted) {
+                runCatching { NativeBridgeLib.setPreviewSurface(null) }
+                runCatching { VirtualDisplayManager.setMonitorSurface(null) }
                 runCatching { InputControlUtils.cancel(id) }
                 heldKeys.forEach { key -> runCatching { InputControlUtils.keyUp(key, id) } }
                 heldKeys.clear()

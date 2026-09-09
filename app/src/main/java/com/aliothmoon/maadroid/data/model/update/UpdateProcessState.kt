@@ -1,5 +1,7 @@
 package com.aliothmoon.maadroid.data.model.update
 
+import com.aliothmoon.maadroid.data.datasource.ByteProgress
+
 /**
  * 下载/安装过程状态
  */
@@ -10,7 +12,11 @@ sealed class UpdateProcessState {
         val speed: String,
         val downloaded: Long,
         val total: Long
-    ) : UpdateProcessState()
+    ) : UpdateProcessState() {
+        val bytes: ByteProgress get() = ByteProgress(downloaded, total)
+    }
+
+    data object Verifying : UpdateProcessState()
 
     data class Extracting(
         val progress: Int,

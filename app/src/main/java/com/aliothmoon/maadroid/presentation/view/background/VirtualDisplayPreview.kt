@@ -30,6 +30,8 @@ import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.domain.service.AppWatchdog
 import org.koin.compose.koinInject
 
+enum class VirtualDisplayPreviewStatus { IDLE, RUNNING, STOPPED }
+
 @Composable
 fun VirtualDisplayPreview(
     modifier: Modifier = Modifier,
@@ -40,6 +42,31 @@ fun VirtualDisplayPreview(
     content: @Composable () -> Unit
 ) {
     val watchdogState by appWatchdog.state.collectAsStateWithLifecycle()
+    VirtualDisplayPreview(
+        modifier = modifier,
+        isRunning = isRunning,
+        isSurfaceAvailable = isSurfaceAvailable,
+        status = when (watchdogState) {
+            AppWatchdog.WatchdogState.WATCHING -> VirtualDisplayPreviewStatus.RUNNING
+            AppWatchdog.WatchdogState.APP_DIED -> VirtualDisplayPreviewStatus.STOPPED
+            AppWatchdog.WatchdogState.IDLE -> VirtualDisplayPreviewStatus.IDLE
+        },
+        onClick = onClick,
+        content = content,
+    )
+}
+
+/** Shared preview chrome. Other engines supply their own state instead of the Arknights watchdog. */
+@Composable
+fun VirtualDisplayPreview(
+    modifier: Modifier = Modifier,
+    isRunning: Boolean,
+    isSurfaceAvailable: Boolean,
+    status: VirtualDisplayPreviewStatus,
+    onClick: (() -> Unit)? = null,
+    unavailableMessage: String? = null,
+    content: @Composable () -> Unit,
+) {
     BoxWithConstraints(
         modifier = modifier,
         contentAlignment = Alignment.Center
@@ -61,7 +88,7 @@ fun VirtualDisplayPreview(
             modifier = Modifier
                 .width(cardWidth)
                 .height(cardHeight)
-                .clickable(onClick = onClick),
+                .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
             shape = MaterialTheme.shapes.medium,
             elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
         ) {
@@ -92,7 +119,8 @@ fun VirtualDisplayPreview(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = stringResource(R.string.virtual_display_waiting_surface),
+                                text = unavailableMessage ?: stringResource(R.string.virtual_display_waiting_surface),
+                                modifier = Modifier.padding(16.dp),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -100,17 +128,16 @@ fun VirtualDisplayPreview(
                     }
                 }
 
-                // 看门狗状态指示器
-                val (dotColor, label) = when (watchdogState) {
-                    AppWatchdog.WatchdogState.WATCHING -> {
+                val (dotColor, label) = when (status) {
+                    VirtualDisplayPreviewStatus.RUNNING -> {
                         Color(0xFF4CAF50) to stringResource(R.string.virtual_display_game_running)
                     }
 
-                    AppWatchdog.WatchdogState.APP_DIED -> {
+                    VirtualDisplayPreviewStatus.STOPPED -> {
                         Color(0xFFF44336) to stringResource(R.string.virtual_display_game_stopped)
                     }
 
-                    AppWatchdog.WatchdogState.IDLE -> {
+                    VirtualDisplayPreviewStatus.IDLE -> {
                         Color(0xFF9E9E9E) to stringResource(R.string.virtual_display_idle)
                     }
                 }

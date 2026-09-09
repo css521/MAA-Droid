@@ -29,9 +29,10 @@ class OnnxClassifier(
     }
 
     /** 启动时验证三个模型能推理；加载失败不能伪装成「当前画面没有目标」。 */
-    fun prepare() {
+    fun prepare(onModel: (String) -> Unit = {}) {
         val required = listOf("mirror_legend", "mirror_path", "skill_icon").map(::requireSpec)
         for (spec in required) {
+            onModel(spec.name)
             infer(spec, ByteArray(spec.inputWidth * spec.inputHeight * 3))
         }
     }

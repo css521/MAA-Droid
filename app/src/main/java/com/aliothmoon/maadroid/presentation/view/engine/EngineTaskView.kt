@@ -2,23 +2,33 @@ package com.aliothmoon.maadroid.presentation.view.engine
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -35,6 +45,7 @@ import com.aliothmoon.maadroid.engine.EngineSession
 import com.aliothmoon.maadroid.engine.EngineTaskStore
 import com.aliothmoon.maadroid.manager.RemoteServiceManager
 import com.aliothmoon.maadroid.presentation.viewmodel.EngineTaskViewModel
+import com.aliothmoon.maadroid.presentation.components.LogExportController
 import com.aliothmoon.maadroid.presentation.state.EngineTaskExecutionState
 import com.aliothmoon.maadroid.ui.asString
 import com.aliothmoon.maadroid.remote.EngineDataRoot
@@ -127,6 +138,14 @@ fun EngineTaskContent(
         val status by viewModel.status.collectAsStateWithLifecycle()
         val workspaceDraft by viewModel.workspaceDraft.collectAsStateWithLifecycle()
         val logs by viewModel.logs.collectAsStateWithLifecycle()
+        val previewReady by viewModel.previewReady.collectAsStateWithLifecycle()
+        val profile = EngineRegistry.provider(engineId)?.profile
+        var showLogExport by rememberSaveable { mutableStateOf(false) }
+        // Keep the document launcher registered even while the sheet is closed or the task is idle.
+        LogExportController(
+            sheetVisible = showLogExport,
+            onSheetDismiss = { showLogExport = false },
+        )
 
         if ((hostTaskActive && !running) || (activeEngineId != null && activeEngineId != engineId)) {
             EngineTaskBlockedContent(modifier)
@@ -135,57 +154,90 @@ fun EngineTaskContent(
                 Text(stringResource(R.string.engine_no_task_panels))
             }
         } else {
-            Column(modifier = modifier.fillMaxSize()) {
-                val workspace = viewModel.workspace
-                if (workspace != null) {
-                    Box(Modifier.weight(1f)) {
-                        workspace.Content(
-                            configJson = workspaceDraft ?: tasks.workspaceConfig ?: workspace.initialConfig(tasks.enabled, tasks.params),
-                            onConfigChange = viewModel::onWorkspaceChange,
-                            editable = !running,
-                            logs = logs,
-                            resourceDir = EngineRegistry.provider(engineId)?.profile?.resourcePacks?.firstOrNull()?.let { EngineDataRoot.forPack(context, it) },
+            BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+                // Budget for the usual footer, but let taller errors/download details scroll.
+                // The footer never consumes these weights: the workspace keeps at least 300dp.
+                val contentHeight = maxOf(maxHeight - 192.dp, 480.dp)
+                Column(
+                    modifier = Modifier.fillMaxSize()
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    // Bound the engine's nested LazyColumns even though the page can scroll.
+                    Column(Modifier.fillMaxWidth().height(contentHeight)) {
+                        profile?.display?.let { display ->
+                            EngineDisplayPreview(
+                                previewReady = previewReady,
+                                isRunning = running,
+                                displayWidth = display.width,
+                                displayHeight = display.height,
+                                onSurfaceAvailable = viewModel::onPreviewSurfaceAvailable,
+                                onSurfaceDestroyed = viewModel::onPreviewSurfaceDestroyed,
+                                modifier = Modifier.fillMaxWidth().weight(3f)
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                            )
+                        }
+                        val workspace = viewModel.workspace
+                        if (workspace != null) {
+                            Box(Modifier.fillMaxWidth().weight(5f)) {
+                                workspace.Content(
+                                    configJson = workspaceDraft ?: tasks.workspaceConfig ?: workspace.initialConfig(tasks.enabled, tasks.params),
+                                    onConfigChange = viewModel::onWorkspaceChange,
+                                    editable = !running,
+                                    logs = logs,
+                                    resourceDir = profile?.resourcePacks?.firstOrNull()?.let { EngineDataRoot.forPack(context, it) },
+                                )
+                            }
+                        } else EngineTaskList(
+                            panels = viewModel.panels,
+                            enabledOf = { tasks.enabled[it.taskType] ?: it.enabledByDefault },
+                            paramsOf = { tasks.params[it.taskType] ?: "" },
+                            onEnabledChange = viewModel::onEnabledChange,
+                            onParamsChange = viewModel::onParamsChange,
+                            expandedTaskType = expanded,
+                            onToggleExpand = viewModel::onToggleExpand,
+                            modifier = Modifier.weight(5f),
                         )
                     }
-                } else EngineTaskList(
-                    panels = viewModel.panels,
-                    enabledOf = { tasks.enabled[it.taskType] ?: it.enabledByDefault },
-                    paramsOf = { tasks.params[it.taskType] ?: "" },
-                    onEnabledChange = viewModel::onEnabledChange,
-                    onParamsChange = viewModel::onParamsChange,
-                    expandedTaskType = expanded,
-                    onToggleExpand = viewModel::onToggleExpand,
-                    modifier = Modifier.weight(1f),
-                )
 
-                status?.let {
-                    Text(
-                        text = it.asString(),
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                    )
-                }
-
-                EngineRegistry.provider(engineId)?.profile?.resourcePacks?.filter { it.upstreamArchive != null }?.forEach { pack ->
-                    EngineResourceCard(pack, resourceService, running)
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Button(
-                        onClick = viewModel::start,
-                        enabled = !running,
-                        modifier = Modifier.weight(1f),
+                    // Available after process restart, even when in-memory engine logs are empty.
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Text(stringResource(R.string.engine_start))
+                        Text(
+                            text = status?.asString() ?: stringResource(R.string.engine_log_export_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f).heightIn(max = 64.dp)
+                                .verticalScroll(rememberScrollState()).padding(vertical = 4.dp),
+                        )
+                        TextButton(onClick = { showLogExport = true }) {
+                            Text(stringResource(R.string.settings_log_export_chooser_title))
+                        }
                     }
-                    OutlinedButton(
-                        onClick = viewModel::stop,
-                        enabled = running && !stopping,
-                        modifier = Modifier.weight(1f),
+
+                    profile?.resourcePacks?.filter { it.upstreamArchive != null }?.forEach { pack ->
+                        EngineResourceCard(pack, resourceService, running)
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Text(stringResource(if (stopping) R.string.engine_stopping else R.string.engine_stop))
+                        Button(
+                            onClick = viewModel::start,
+                            enabled = !running,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(stringResource(R.string.engine_start))
+                        }
+                        OutlinedButton(
+                            onClick = viewModel::stop,
+                            enabled = running && !stopping,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(stringResource(if (stopping) R.string.engine_stopping else R.string.engine_stop))
+                        }
                     }
                 }
             }

@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
+    <!-- 内部离线诊断 ZIP；不依赖外部 Maa 资源目录 -->
+    <cache-path
+        name="diagnostic_exports"
+        path="export/" />
     <!-- 外部文件目录 - 用于日志导出 -->
     <external-files-path
         name="maa_files"

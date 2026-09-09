@@ -8,11 +8,14 @@ import java.io.IOException
 import java.util.Locale
 
 data class DownloadProgress(
+    /** Legacy percentage; only meaningful when total > 0. UI should use [bytes]. */
     val progress: Int,
     val speed: String,
     val downloaded: Long,
     val total: Long,
-)
+) {
+    val bytes: ByteProgress get() = ByteProgress(downloaded, total)
+}
 
 internal fun formatSpeed(bytesPerSecond: Long): String = when {
     bytesPerSecond >= 1024 * 1024 -> String.format(

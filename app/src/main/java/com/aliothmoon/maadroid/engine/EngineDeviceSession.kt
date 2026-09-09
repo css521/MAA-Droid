@@ -2,6 +2,8 @@ package com.aliothmoon.maadroid.engine
 
 import android.os.Binder
 import android.os.IBinder
+import android.view.Surface
+import com.aliothmoon.maadroid.diagnostics.AppDiagnostics
 import com.aliothmoon.maadroid.IEngineDeviceSession
 import com.aliothmoon.maadroid.RemoteService
 import com.aliothmoon.maadroid.domain.models.RunMode
@@ -33,6 +35,11 @@ class EngineDeviceSession private constructor(
 ) : AutoCloseable {
     private val closed = AtomicBoolean(false)
 
+    @Synchronized
+    fun setPreviewSurface(surface: Surface?) {
+        if (!closed.get()) device.setPreviewSurface(surface)
+    }
+
     /** A failed engine connection also releases this session's display and mapped frames. */
     suspend fun connect(engine: AutomationEngine): Result<Unit> {
         return try {
@@ -55,6 +62,7 @@ class EngineDeviceSession private constructor(
         }
     }
 
+    @Synchronized
     override fun close() {
         if (closed.compareAndSet(false, true)) device.close()
     }
@@ -101,11 +109,13 @@ class EngineDeviceSession private constructor(
             var session: EngineDeviceSession? = null
             try {
                 return withContext(Dispatchers.IO) {
+                    AppDiagnostics.record(profile.id, "device.setup")
                     val setup = service.setupDevice()
                     check(setup == SetupResult.OK) { "设备初始化失败: ${SetupResult.describe(setup)}" }
                     val pkg = profile.gamePackages.firstOrNull { service.isPackageInstalled(it) }
                         ?: error("未安装游戏，请安装以下包之一: ${profile.gamePackages.joinToString()}")
                     val owner = createOwner()
+                    AppDiagnostics.record(profile.id, "device.display.create", "${spec.width}x${spec.height}@${spec.dpi}")
                     val lease = service.openDeviceSession(owner, mode.displayMode, spec.width, spec.height, spec.dpi)
                         ?: error("未能创建设备会话，请检查远程服务版本和显示状态")
                     remote = lease
@@ -119,7 +129,9 @@ class EngineDeviceSession private constructor(
                             permissions = PermissionGrantRequest.PERM_BATTERY or PermissionGrantRequest.PERM_BACKGROUND,
                         ))
                     }.onFailure { Timber.w(it, "Failed to grant game battery/background permissions: %s", pkg) }
+                    AppDiagnostics.record(profile.id, "device.game.launch", pkg)
                     check(handle.control.startApp(pkg)) { "启动游戏失败: $pkg (display=${ready.displayId})" }
+                    AppDiagnostics.record(profile.id, "device.frame.wait")
                     val received = withTimeoutOrNull(firstFrameTimeoutMs) {
                         while (true) {
                             val frame = handle.frames.grab()
@@ -135,6 +147,7 @@ class EngineDeviceSession private constructor(
                         true
                     }
                     check(received == true) { "等待游戏 BGR 首帧超时 (${firstFrameTimeoutMs}ms, ${spec.width}x${spec.height})" }
+                    AppDiagnostics.record(profile.id, "device.frame.ready")
                     ready
                 }
             } catch (failure: Throwable) {

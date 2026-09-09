@@ -2551,6 +2551,10 @@
     <string name="blackflow_termination_planning_retry_exhausted">预览反复改变可选路线，已经超过重新规划次数</string>
     <string name="blackflow_termination_unknown">详细原因请查看文件日志</string>
     <string name="engine_start">开始</string>
+    <string name="engine_preview_description">游戏实时预览</string>
+    <string name="engine_preview_failed">预览连接失败，请切换页面后重试</string>
+    <string name="engine_preview_error_detail">小屏预览连接失败：%1$s</string>
+    <string name="engine_log_export_hint">启动失败或闪退后，可在此导出诊断日志</string>
     <string name="engine_stop">停止</string>
     <string name="engine_no_task_panels">该引擎的任务面板尚未接入</string>
     <string name="engine_no_games">当前没有可用的游戏</string>

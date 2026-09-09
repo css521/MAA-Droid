@@ -20,6 +20,19 @@ val localProperties = Properties().apply {
     }
 }
 
+// APK 分发源仅由构建者显式指定；空值表示关闭，不从 git remote / 原项目推断。
+// -P 优先于 local.properties；显式传空可以清除本地配置。见 APP_DISTRIBUTION.md。
+fun appUpdateProperty(name: String): String =
+    providers.gradleProperty(name).orNull?.trim()
+        ?: localProperties.getProperty(name, "").trim()
+
+fun buildConfigString(value: String): String = "\"" + value
+    .replace("\\", "\\\\")
+    .replace("\"", "\\\"")
+    .replace("\n", "\\n")
+    .replace("\r", "\\r")
+    .replace("\t", "\\t") + "\""
+
 // 见 version.properties：本仓库是从 MAA-Meow（688 提交）切出的独立仓库，
 // 提交数从 1 重新开始，必须叠加基线否则 versionCode 回退、已装用户无法升级
 val versionProps = Properties().apply {
@@ -102,6 +115,10 @@ android {
         val maaCoreVersion = rootProject.file(".maaversion")
             .takeIf { it.isFile }?.readText()?.trim().orEmpty()
         buildConfigField("String", "MAA_CORE_VERSION", "\"$maaCoreVersion\"")
+
+        buildConfigField("String", "APP_UPDATE_GITHUB_OWNER", buildConfigString(appUpdateProperty("maa.appUpdate.githubOwner")))
+        buildConfigField("String", "APP_UPDATE_GITHUB_REPO", buildConfigString(appUpdateProperty("maa.appUpdate.githubRepo")))
+        buildConfigField("String", "APP_UPDATE_MIRROR_CHYAN_RID", buildConfigString(appUpdateProperty("maa.appUpdate.mirrorChyanRid")))
 
         ndk {
             abiFilters.addAll(nativeAbis)

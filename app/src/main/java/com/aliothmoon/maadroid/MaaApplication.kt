@@ -1,6 +1,7 @@
 package com.aliothmoon.maadroid
 
 import android.app.Application
+import com.aliothmoon.maadroid.diagnostics.AppDiagnostics
 import com.aliothmoon.maadroid.data.config.MaaPathConfig
 import com.aliothmoon.maadroid.data.datasource.AppDownloader
 import com.aliothmoon.maadroid.data.preferences.AppSettingsManager
@@ -53,6 +54,8 @@ class MaaApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        AppDiagnostics.initialize(this)
+        CrashHandler.installEarly(this)
         // 引擎装配先于 Koin：宿主的 ViewModel 会读 EngineRegistry 决定显示哪些游戏
         EngineSetup.install()
         val app = this

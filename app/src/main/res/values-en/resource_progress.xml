@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="resource_progress_downloading">Downloading resources</string>
+    <string name="resource_progress_known_size">%1$s / %2$s · %3$d%%</string>
+    <string name="resource_progress_unknown_size">%1$s downloaded · Total size unknown</string>
+    <string name="resource_progress_verifying">Verifying resources…</string>
+    <string name="resource_progress_extracting">Extracting resources %1$d / %2$d</string>
+    <string name="resource_progress_installing">Installing resources…</string>
+    <string name="resource_progress_app_downloading">Downloading application</string>
+</resources>

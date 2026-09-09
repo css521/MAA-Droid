@@ -23,6 +23,9 @@ interface AutomationEngine {
 
     val isRunning: Boolean
 
+    /** Optional host-owned diagnostics. Do not send task configuration, credentials or frames. */
+    fun setDiagnosticSink(sink: EngineDiagnosticSink?) {}
+
     /**
      * 装载资源（模板图 / 流水线 / 模型）。资源目录由宿主按 [ResourcePackSpec] 准备好。
      * 装载前宿主已做过兼容门闸（`requiredActions` / `minEngineVersion`）。

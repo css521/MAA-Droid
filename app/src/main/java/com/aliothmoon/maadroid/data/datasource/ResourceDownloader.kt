@@ -35,9 +35,9 @@ class ResourceDownloader(
     suspend fun downloadToTempFile(
         url: String,
         onProgress: (DownloadProgress) -> Unit
-    ): Result<File> {
+    ): Result<File> = withContext(Dispatchers.IO) {
         var tempFile: File? = null
-        return try {
+        try {
             val request = Request.Builder().url(url)
                 .header("Accept-Encoding", "identity")
                 .build()
@@ -57,12 +57,10 @@ class ResourceDownloader(
                 val file = File(context.cacheDir, "MaaResources-${UUID.randomUUID()}.zip")
                 tempFile = file
 
-                withContext(Dispatchers.IO) {
-                    val bfz = 256 * 1024
-                    BufferedOutputStream(FileOutputStream(file)).use { output ->
-                        body.byteStream().use { input ->
-                            input.copyWithProgress(output, total, bfz, onProgress)
-                        }
+                val bufferSize = 64 * 1024
+                BufferedOutputStream(FileOutputStream(file), bufferSize).use { output ->
+                    body.byteStream().use { input ->
+                        input.copyWithProgress(output, total, bufferSize, onProgress)
                     }
                 }
 
@@ -72,10 +70,10 @@ class ResourceDownloader(
             tempFile?.delete()
             throw e
         } catch (e: Exception) {
+            tempFile?.delete()
             // 断连抛的 IOException 不是网络错误
             currentCoroutineContext().ensureActive()
             Timber.e(e, "下载文件失败")
-            tempFile?.delete()
             Result.failure(LocalizedException(formatDownloadError(e), e))
         }
     }

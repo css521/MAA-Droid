@@ -56,6 +56,8 @@ import timber.log.Timber
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import com.aliothmoon.maadroid.maa.maaCoreService
+import com.aliothmoon.maadroid.engine.EngineExecutionCoordinator
+import com.aliothmoon.maadroid.remote.EngineIds
 
 class MaaCompositionService(
     private val context: Context,
@@ -79,6 +81,8 @@ class MaaCompositionService(
 
     private val _state = MutableStateFlow(MaaExecutionState.IDLE)
     val state: StateFlow<MaaExecutionState> = _state.asStateFlow()
+    private val executionLease = AtomicReference<EngineExecutionCoordinator.Lease?>()
+    private val startupInProgress = AtomicBoolean(false)
 
     /** 宿主任务页只需知道设备是否占用，无需依赖方舟的执行状态枚举。 */
     val isTaskActive: Boolean
@@ -139,6 +143,9 @@ class MaaCompositionService(
             liveCoordinator.prepareProgress(liveCoordinator.beginRun())
         }
         _state.value = state
+        if (!startupInProgress.get() && (state == MaaExecutionState.IDLE || state == MaaExecutionState.ERROR)) {
+            executionLease.getAndSet(null)?.close()
+        }
         // 仅在 STARTING 拉起前台服务；终态不做外部 stopService —
         // 快速失败时 stopService 可能抢在服务创建之前到达，系统会因
         // startForeground 契约未履行直接杀进程（RemoteServiceException）。
@@ -537,9 +544,23 @@ class MaaCompositionService(
         preflightLogs: List<Pair<UiText, LogLevel>> = emptyList(),
         onSessionStarted: (suspend () -> Unit)? = null,
     ): StartResult = startMutex.withLock {
-        executeStartLocked(
-            tasks, clientType, startMessage, successMessage, preflightLogs, onSessionStarted,
-        )
+        // 位于资源装载/进程重启之前，定时、作业和手动入口均必须取得同一准入。
+        if (isTaskActive) return@withLock StartResult.AlreadyRunning
+        val reservation = EngineExecutionCoordinator.shared.tryStart(EngineIds.ARKNIGHTS)
+            ?: return@withLock StartResult.AlreadyRunning
+        startupInProgress.set(true)
+        executionLease.set(reservation)
+        var result: StartResult? = null
+        try {
+            executeStartLocked(
+                tasks, clientType, startMessage, successMessage, preflightLogs, onSessionStarted,
+            ).also { result = it }
+        } finally {
+            startupInProgress.set(false)
+            if (result !is StartResult.Success || !isTaskActive) {
+                if (executionLease.compareAndSet(reservation, null)) reservation.close()
+            }
+        }
     }
 
     private suspend fun executeStartLocked(

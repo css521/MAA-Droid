@@ -10,27 +10,33 @@ import com.aliothmoon.maadroid.data.model.update.UpdateInfo
 import com.aliothmoon.maadroid.data.preferences.AppSettingsManager
 import com.aliothmoon.maadroid.domain.service.update.checker.AppVersionChecker
 import com.aliothmoon.maadroid.constant.AppApi
+import com.aliothmoon.maadroid.common.i18n.UiText
+import com.aliothmoon.maadroid.data.model.update.AppUpdateSourceConfig
 
 class MirrorChyanAppVersionChecker(
     private val apiClient: MirrorChyanApiClient,
-    private val appSettings: AppSettingsManager
+    private val appSettings: AppSettingsManager,
+    private val sources: AppUpdateSourceConfig = AppApi.APP_UPDATE_SOURCE,
 ) : AppVersionChecker {
 
     override suspend fun check(
         current: String,
         channel: UpdateChannel,
     ): UpdateCheckResult {
+        sources.mirrorChyanUnavailableReason?.let {
+            return UpdateCheckResult.Error(UpdateError.UnknownError(UiText.Dynamic(it)))
+        }
         val cdk = appSettings.mirrorChyanCdk.value
         val query = mapOf(
             "current_version" to current,
-            "user_agent" to "MAA-Meow",
+            "user_agent" to sources.githubRepo,
             "os" to "android",
             "channel" to channel.value,
         ).let {
             if (cdk.length == 24) it + mapOf("cdk" to cdk) else it
         }
         val result = apiClient.getLatest(
-            AppApi.MIRROR_CHYAN_APP_RESOURCE,
+            sources.mirrorChyanResourceUrl(),
             query = query,
             fetchVersion = true
         )

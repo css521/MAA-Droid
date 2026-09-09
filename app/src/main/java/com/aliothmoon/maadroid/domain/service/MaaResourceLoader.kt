@@ -35,6 +35,8 @@ import timber.log.Timber
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import com.aliothmoon.maadroid.maa.maaCoreService
+import com.aliothmoon.maadroid.engine.EngineExecutionCoordinator
+import com.aliothmoon.maadroid.remote.EngineIds
 
 class MaaResourceLoader(
     private val pathConfig: MaaPathConfig,
@@ -82,6 +84,12 @@ class MaaResourceLoader(
         loadMutex.withLock { loadLocked(clientType) }
 
     private suspend fun loadLocked(clientType: String): Result<Unit> {
+        val reservation = EngineExecutionCoordinator.shared.tryPrepareResources(EngineIds.ARKNIGHTS)
+            ?: return Result.failure(IllegalStateException("Another game is active; cannot switch Arknights resources or restart the remote service"))
+        return reservation.use { loadWithReservation(clientType) }
+    }
+
+    private suspend fun loadWithReservation(clientType: String): Result<Unit> {
         // MaaCore 的 TaskData 和函数内 static 在进程内不可回滚，日服写入的
         // CharsNameOcrReplace.replaceFull 切回国服也删不掉，换资源档只能换进程
         val previousClientType = loadedClientType

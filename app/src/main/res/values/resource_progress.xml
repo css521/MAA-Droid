@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="resource_progress_downloading">正在下载资源</string>
+    <string name="resource_progress_known_size">%1$s / %2$s · %3$d%%</string>
+    <string name="resource_progress_unknown_size">已下载 %1$s · 总大小未知</string>
+    <string name="resource_progress_verifying">正在校验资源…</string>
+    <string name="resource_progress_extracting">正在解压资源 %1$d / %2$d</string>
+    <string name="resource_progress_installing">正在安装资源…</string>
+    <string name="resource_progress_app_downloading">正在下载应用</string>
+</resources>

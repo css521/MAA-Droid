@@ -84,7 +84,7 @@ class EngineResourceService internal constructor(
             require(target.canonicalPath.startsWith(root.path + File.separator)) { "Resource root escapes app data" }
             lease = if (waitForLock) ResourcePackLocks.acquire(pack.packId)
                 else ResourcePackLocks.tryAcquire(pack.packId) ?: throw ResourcePackBusyException(pack.packId)
-            state.update { it.copy(phase = ResourcePhase.CHECKING, error = null, download = null) }
+            state.update { it.copy(phase = ResourcePhase.CHECKING, error = null, download = null, filesInstalled = 0, filesTotal = 0) }
             if (recover) installer.recover(target)
             val installed = pack.readInstalledVersion(target)
             state.update { it.copy(installedVersion = installed, installedRevision = readRevision(pack, target)) }
@@ -127,10 +127,18 @@ class EngineResourceService internal constructor(
         }
         try {
             val context = currentCoroutineContext()
-            state.update { it.copy(phase = ResourcePhase.INSTALLING, filesInstalled = 0, filesTotal = 0) }
-            installer.install(archive, target, pack, revision, ensureActive = { context.ensureActive() }) { done, total ->
-                state.update { it.copy(filesInstalled = done, filesTotal = total) }
-            }
+            installer.install(
+                archive, target, pack, revision,
+                ensureActive = { context.ensureActive() },
+                phaseChanged = { phase ->
+                    state.update { it.copy(phase = when (phase) {
+                        ResourceInstallPhase.VERIFYING_ARCHIVE, ResourceInstallPhase.VERIFYING_FILES -> ResourcePhase.VERIFYING
+                        ResourceInstallPhase.EXTRACTING -> ResourcePhase.EXTRACTING
+                        ResourceInstallPhase.ACTIVATING -> ResourcePhase.INSTALLING
+                    }) }
+                },
+                progress = { done, total -> state.update { it.copy(filesInstalled = done, filesTotal = total) } },
+            )
             ready(pack, target)
         } finally {
             archive.delete()
@@ -154,7 +162,7 @@ class EngineResourceService internal constructor(
 
 class ResourcePackBusyException(val packId: String) : IOException("资源包 $packId 正在使用中，请结束任务后重试")
 
-enum class ResourcePhase { NOT_INSTALLED, CHECKING, DOWNLOADING, INSTALLING, READY, FAILED }
+enum class ResourcePhase { NOT_INSTALLED, CHECKING, DOWNLOADING, VERIFYING, EXTRACTING, INSTALLING, READY, FAILED }
 
 data class EngineResourceState(
     val phase: ResourcePhase = ResourcePhase.NOT_INSTALLED,
@@ -165,7 +173,12 @@ data class EngineResourceState(
     val filesInstalled: Int = 0,
     val filesTotal: Int = 0,
     val error: String? = null,
-)
+) {
+    val busy: Boolean get() = phase in setOf(
+        ResourcePhase.CHECKING, ResourcePhase.DOWNLOADING, ResourcePhase.VERIFYING,
+        ResourcePhase.EXTRACTING, ResourcePhase.INSTALLING,
+    )
+}
 
 internal data class ResourceTagPage(val body: String, val hasNext: Boolean = false)
 internal interface ResourceTransport {

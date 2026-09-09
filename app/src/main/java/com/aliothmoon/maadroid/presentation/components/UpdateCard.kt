@@ -254,7 +254,7 @@ fun UpdateCard(
     val resIsDownloading = resourceUpdateState is UpdateProcessState.Downloading
     val resIsExtracting = resourceUpdateState is UpdateProcessState.Extracting
     val resIsInstalling = resourceUpdateState is UpdateProcessState.Installing
-    val resIsUpdating = resIsDownloading || resIsExtracting || resIsInstalling
+    val resIsUpdating = resIsDownloading || resIsExtracting || resIsInstalling || resourceUpdateState is UpdateProcessState.Verifying
 
     val appIsDownloading = appUpdateState is UpdateProcessState.Downloading
     val appIsInstalling = appUpdateState is UpdateProcessState.Installing
@@ -652,34 +652,12 @@ private fun AppUpdateProgress(
 ) {
     when (appUpdateState) {
         is UpdateProcessState.Downloading -> {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(
-                            R.string.update_progress_app_downloading,
-                            appUpdateState.progress.toString()
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Text(
-                        text = appUpdateState.speed,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
-                    )
-                    CancelDownloadButton(onCancel = onCancel)
-                }
-                LinearProgressIndicator(
-                    progress = { appUpdateState.progress / 100f },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
+            DownloadProgressContent(
+                title = stringResource(R.string.resource_progress_app_downloading),
+                bytes = appUpdateState.bytes,
+                speed = appUpdateState.speed,
+                actions = { CancelDownloadButton(onCancel = onCancel) },
+            )
         }
 
         is UpdateProcessState.Installing -> {
@@ -735,61 +713,40 @@ private fun ResourceUpdateProgress(
 ) {
     when (resourceUpdateState) {
         is UpdateProcessState.Downloading -> {
+            DownloadProgressContent(
+                title = stringResource(R.string.resource_progress_downloading),
+                bytes = resourceUpdateState.bytes,
+                speed = resourceUpdateState.speed,
+                actions = { CancelDownloadButton(onCancel = onCancel) },
+            )
+        }
+
+        is UpdateProcessState.Verifying, is UpdateProcessState.Installing -> {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(
-                            R.string.update_progress_resource_downloading,
-                            resourceUpdateState.progress.toString()
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Text(
-                        text = resourceUpdateState.speed,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
-                    )
-                    CancelDownloadButton(onCancel = onCancel)
-                }
-                LinearProgressIndicator(
-                    progress = { resourceUpdateState.progress / 100f },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.primary
+                Text(
+                    stringResource(if (resourceUpdateState is UpdateProcessState.Verifying)
+                        R.string.resource_progress_verifying else R.string.resource_progress_installing),
+                    style = MaterialTheme.typography.bodySmall,
                 )
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
         }
 
         is UpdateProcessState.Extracting -> {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = stringResource(
-                            R.string.update_progress_resource_extracting,
-                            resourceUpdateState.progress.toString()
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer
-                    )
-                    Text(
-                        text = "${resourceUpdateState.current}/${resourceUpdateState.total}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
-                    )
-                }
-                LinearProgressIndicator(
-                    progress = { resourceUpdateState.progress / 100f },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.secondary
+                Text(
+                    stringResource(R.string.resource_progress_extracting, resourceUpdateState.current, resourceUpdateState.total),
+                    style = MaterialTheme.typography.bodySmall,
                 )
+                if (resourceUpdateState.total > 0) {
+                    LinearProgressIndicator(
+                        progress = { (resourceUpdateState.current.toFloat() / resourceUpdateState.total).coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                } else {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
             }
         }
 

@@ -8,6 +8,7 @@ import com.aliothmoon.maadroid.data.resource.ItemHelper
 import com.aliothmoon.maadroid.data.resource.ResourceDataManager
 import com.aliothmoon.maadroid.domain.service.CoreDataPusher
 import com.aliothmoon.maadroid.domain.service.MaaResourceLoader
+import com.aliothmoon.maadroid.engine.EngineExecutionCoordinator
 import com.aliothmoon.maadroid.manager.RemoteServiceManager
 import com.aliothmoon.maadroid.remote.SetupResult
 import io.mockk.coEvery
@@ -174,6 +175,21 @@ class MaaResourceLoaderTest {
             assertTrue(env.loader.load("Bilibili").isSuccess)
             assertTrue(env.loader.load("Official").isSuccess)
             verify(exactly = 0) { RemoteServiceManager.unbind() }
+        }
+    }
+
+    @Test
+    fun limbusRunPreventsArknightsResourceSwitchFromRestartingRemoteService() = runBlocking {
+        withEnv { env ->
+            assertTrue(env.loader.load("YoStarJP").isSuccess)
+            val before = env.loader.state.value
+            requireNotNull(EngineExecutionCoordinator.shared.tryStart("limbus")).use {
+                assertTrue(env.loader.load("Official").isFailure)
+                assertEquals(before, env.loader.state.value)
+                verify(exactly = 0) { RemoteServiceManager.unbind() }
+            }
+            assertTrue(env.loader.load("Official").isSuccess)
+            verify(exactly = 1) { RemoteServiceManager.unbind() }
         }
     }
 

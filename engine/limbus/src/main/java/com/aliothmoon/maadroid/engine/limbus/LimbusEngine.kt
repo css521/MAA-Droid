@@ -4,6 +4,7 @@ import com.aliothmoon.maadroid.engine.AutomationEngine
 import com.aliothmoon.maadroid.engine.ConnectionState
 import com.aliothmoon.maadroid.engine.DeviceHandle
 import com.aliothmoon.maadroid.engine.EngineEvent
+import com.aliothmoon.maadroid.engine.EngineDiagnosticSink
 import com.aliothmoon.maadroid.engine.GameProfile
 import com.aliothmoon.maadroid.engine.LogLevel
 import com.aliothmoon.maadroid.engine.TaskPhase
@@ -85,6 +86,10 @@ class LimbusEngine(
 
     override val isRunning: Boolean get() = runJob?.isActive == true
 
+    @Volatile private var diagnosticSink: EngineDiagnosticSink? = null
+    override fun setDiagnosticSink(sink: EngineDiagnosticSink?) { diagnosticSink = sink }
+    private fun trace(phase: String, detail: String = "") { diagnosticSink?.record(phase, detail) }
+
     // ---------------------------------------------------------------- prepare
 
     /**
@@ -132,7 +137,9 @@ class LimbusEngine(
     // ---------------------------------------------------------------- connect
 
     override suspend fun connect(device: DeviceHandle): Result<Unit> = runCatching {
+        trace("native.opencv.load")
         check(OpenCVLoader.initLocal()) { "OpenCV 初始化失败，请重新安装完整 APK" }
+        trace("native.opencv.ready")
         emit(EngineEvent.Connection(ConnectionState.Connecting))
         val index = templateIndex
             ?: throw IllegalStateException("请先 prepare 装载资源")
@@ -143,17 +150,21 @@ class LimbusEngine(
         val dir = resourceDir ?: throw IllegalStateException("请先 prepare 装载资源")
         val classifier = OnnxClassifier(dir) { warn(it) }
         try {
-            classifier.prepare()
+            classifier.prepare { model -> trace("native.classifier.prepare", model) }
+            trace("native.classifier.ready")
+            trace("native.ocr.load")
+            val ocr = PpOcrEngine.load(dir) { warn(it) } ?: error("OCR 模型加载失败，请重新安装边狱资源")
+            trace("native.ocr.ready")
             recognizer = LimbusRecognizer(
                 frames = device.frames,
                 index = index,
                 templateFileOf = index::fileOf,
                 classifier = classifier,
-                ocr = PpOcrEngine.load(dir) { warn(it) } ?: error("OCR 模型加载失败，请重新安装边狱资源"),
+                ocr = ocr,
                 onLog = { warn(it) },
             )
         } catch (failure: Throwable) {
-            classifier.release()
+            runCatching { classifier.release() }.exceptionOrNull()?.let(failure::addSuppressed)
             throw failure
         }
 
@@ -164,7 +175,7 @@ class LimbusEngine(
 
         emit(EngineEvent.Connection(ConnectionState.Connected))
     }.onFailure {
-        recognizer?.release()
+        runCatching { recognizer?.release() }.exceptionOrNull()?.let(it::addSuppressed)
         recognizer = null
         this.device = null
         emit(EngineEvent.Connection(ConnectionState.Failed, it.message))
@@ -389,6 +400,7 @@ class LimbusEngine(
     private fun warn(message: String) = emit(EngineEvent.Log(LogLevel.Warn, message))
 
     private fun fail(reason: String, cause: Throwable? = null) {
+        trace("engine.failure", cause?.stackTraceToString() ?: reason)
         emit(EngineEvent.Log(LogLevel.Error, reason))
         emit(EngineEvent.Failure(reason, cause))
     }

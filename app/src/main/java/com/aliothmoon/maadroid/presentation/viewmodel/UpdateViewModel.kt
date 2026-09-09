@@ -126,7 +126,7 @@ class UpdateViewModel(
 
     fun checkResourceUpdate() {
         val currentState = resourceUpdateState.value
-        if (_resourceChecking.value || currentState is UpdateProcessState.Downloading || currentState is UpdateProcessState.Extracting || currentState is UpdateProcessState.Installing) {
+        if (_resourceChecking.value || currentState is UpdateProcessState.Downloading || currentState is UpdateProcessState.Verifying || currentState is UpdateProcessState.Extracting || currentState is UpdateProcessState.Installing) {
             return
         }
         viewModelScope.launch {

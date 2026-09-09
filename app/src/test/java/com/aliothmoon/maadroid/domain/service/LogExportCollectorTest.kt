@@ -3,6 +3,7 @@ package com.aliothmoon.maadroid.domain.service
 import com.aliothmoon.maadroid.constant.LogConfig
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -130,5 +131,34 @@ class LogExportCollectorTest {
     fun collect_emptyWhenDebugMissing() {
         val missing = File(tempFolder.root, "no_such_debug")
         assertTrue(LogExportCollector.collect(missing).isEmpty())
+    }
+
+    @Test
+    fun collect_keepsSiblingWithExportPrefix() {
+        val sibling = fileAt("export_notes/diagnostic.log")
+        fileAt("export/old.zip")
+        assertEquals(listOf(sibling), LogExportCollector.collect(debugDir))
+    }
+
+    @Test
+    fun collectDiagnostics_hasNoAgeFilterAndExcludesLock() {
+        val filesDir = tempFolder.newFolder("files")
+        val diagnostics = File(filesDir, "diagnostics").apply { mkdirs() }
+        val old = File(diagnostics, "events.1.log").apply {
+            writeText("previous boot")
+            setLastModified(System.currentTimeMillis() - 90 * dayMs)
+        }
+        File(diagnostics, ".lock").writeText("")
+        assertEquals(listOf(old), LogExportCollector.collectDiagnostics(filesDir))
+    }
+
+    @Test
+    fun legacyEntryPathsPreserveAnalysisLayoutAndCannotShadowDiagnostics() {
+        for (name in listOf("gui/meow.log", "error_logs/error.log", "asst.log", "logcat/core/log.txt")) {
+            assertTrue(name, LogExportCollector.isLegacyEntryAllowed(name))
+        }
+        for (name in listOf("diagnostics/events.log", "diagnostics", "properties.txt", "device_info.txt/child", "attachments_status.txt", "../events.log", "export/old.zip")) {
+            assertFalse(name, LogExportCollector.isLegacyEntryAllowed(name))
+        }
     }
 }

@@ -1,5 +1,6 @@
 package com.aliothmoon.maadroid.presentation.viewmodel
 
+import android.view.Surface
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.aliothmoon.maadroid.R
@@ -10,9 +11,12 @@ import com.aliothmoon.maadroid.engine.EngineSession
 import com.aliothmoon.maadroid.engine.EngineTaskStore
 import com.aliothmoon.maadroid.engine.LogLevel
 import com.aliothmoon.maadroid.engine.TaskPanelSpec
+import com.aliothmoon.maadroid.engine.isRecoverableEngineFailure
+import com.aliothmoon.maadroid.diagnostics.AppDiagnostics
 import com.aliothmoon.maadroid.presentation.state.EngineTaskExecutionState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -28,7 +32,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import timber.log.Timber
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * 驱动「按引擎声明渲染的任务页」。
@@ -47,6 +54,7 @@ class EngineTaskViewModel(
     private val executionState: EngineTaskExecutionState,
     private val canStart: () -> Boolean = { true },
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+    private val previewDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel(scope) {
 
     /** 该引擎声明的面板；引擎未提供则为空表，UI 据此显示「该引擎暂无任务面板」 */
@@ -84,11 +92,40 @@ class EngineTaskViewModel(
     private val _stopping = MutableStateFlow(false)
     val stopping: StateFlow<Boolean> = _stopping.asStateFlow()
 
+    private val _previewReady = MutableStateFlow(false)
+    val previewReady: StateFlow<Boolean> = _previewReady.asStateFlow()
+    private val previewSurface = AtomicReference<Surface?>(null)
+    private val previewMutex = Mutex()
+    private var previewJob: Job? = null
+
+    fun onPreviewSurfaceAvailable(surface: Surface) {
+        previewSurface.set(surface)
+        session?.let { s -> viewModelScope.launch { syncPreview(s) } }
+    }
+
+    fun onPreviewSurfaceDestroyed(surface: Surface) {
+        if (previewSurface.compareAndSet(surface, null)) {
+            session?.let { s -> viewModelScope.launch { syncPreview(s) } }
+        }
+    }
+
+    private suspend fun syncPreview(s: EngineSession) = withContext(previewDispatcher) {
+        previewMutex.withLock {
+            if (session !== s) return@withLock
+            try { s.setPreviewSurface(previewSurface.get()) }
+            catch (failure: Throwable) {
+                if (!failure.isRecoverableEngineFailure()) throw failure
+                AppDiagnostics.failure(engineId, "preview.surface", failure)
+                _status.value = uiTextOf(R.string.engine_preview_error_detail, failure.message.orEmpty())
+            }
+        }
+    }
+
     /** 面向用户的最近一条状态；失败原因（含门闸的「请升级 App」）走这里 */
     private val _status = MutableStateFlow<UiText?>(null)
     val status: StateFlow<UiText?> = _status.asStateFlow()
 
-    private var session: EngineSession? = null
+    @Volatile private var session: EngineSession? = null
     private var startJob: Job? = null
     private var eventsJob: Job? = null
     private var ownsDevice = false
@@ -127,6 +164,7 @@ class EngineTaskViewModel(
         ownsDevice = true
         _running.value = true
         _status.value = null
+        AppDiagnostics.record(engineId, "ui.start.clicked")
         startJob = viewModelScope.launch {
             try {
                 saveJob?.join()
@@ -136,7 +174,7 @@ class EngineTaskViewModel(
                     w.validate(config)?.let { reason ->
                         _status.value = UiText.Dynamic(reason)
                         closeSession()
-                        _running.value = false
+                        _running.value = session?.isRunning == true
                         return@launch
                     }
                     // 验证和下发使用同一份快照，不能在最后一次持久化失败后跑旧配置。
@@ -146,19 +184,21 @@ class EngineTaskViewModel(
                 if (selected.isEmpty()) {
                     _status.value = uiTextOf(R.string.engine_no_tasks_selected)
                     closeSession()
-                    _running.value = false
+                    _running.value = session?.isRunning == true
                     return@launch
                 }
 
                 val s = sessionFactory(engineId).also { session = it }
                 _logs.value = emptyList()
+                previewJob = viewModelScope.launch { s.previewReady.collect { _previewReady.value = it } }
+                syncPreview(s)
                 collectEvents(s)
                 val failure = s.prepare()
                 ensureActive()
                 if (failure != null) {
                     _status.value = UiText.Dynamic(failure)
                     closeSession()
-                    _running.value = false
+                    _running.value = session?.isRunning == true
                     return@launch
                 }
                 selected.forEach { (type, params) ->
@@ -168,15 +208,17 @@ class EngineTaskViewModel(
                 if (!s.start()) {
                     _status.value = uiTextOf(R.string.engine_start_rejected)
                     closeSession()
-                    _running.value = false
+                    _running.value = session?.isRunning == true
                 }
             } catch (cancelled: CancellationException) {
                 // stop() 先等启动协程退出，再释放它的会话，不能在取消后继续 append/start。
                 throw cancelled
-            } catch (error: Exception) {
-                _status.value = uiTextOf(R.string.engine_start_failed, error.message.orEmpty())
+            } catch (error: Throwable) {
+                if (!error.isRecoverableEngineFailure()) throw error
+                AppDiagnostics.failure(engineId, "ui.start.failed", error)
+                _status.value = uiTextOf(R.string.engine_start_failed, "${error.javaClass.simpleName}: ${error.message.orEmpty()}")
                 closeSession()
-                _running.value = false
+                _running.value = session?.isRunning == true
             }
         }
     }
@@ -190,12 +232,18 @@ class EngineTaskViewModel(
                     _status.value = uiTextOf(R.string.engine_stop_rejected)
                 } else {
                     closeSession()
-                    _running.value = false
+                    _running.value = session?.isRunning == true
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (error: Exception) {
+            } catch (error: Throwable) {
+                if (!error.isRecoverableEngineFailure()) throw error
+                AppDiagnostics.failure(engineId, "ui.stop.failed", error)
                 _status.value = uiTextOf(R.string.engine_stop_failed, error.message.orEmpty())
+                if (session?.isRunning != true) {
+                    closeSession()
+                    _running.value = session?.isRunning == true
+                }
             } finally {
                 _stopping.value = false
             }
@@ -222,16 +270,19 @@ class EngineTaskViewModel(
                         if (event.level >= LogLevel.Warn) _status.value = UiText.Dynamic(event.message)
                     }
                     is com.aliothmoon.maadroid.engine.EngineEvent.Failure -> {
+                        event.cause?.let { AppDiagnostics.failure(engineId, "engine.failure", it) }
+                            ?: AppDiagnostics.record(engineId, "engine.failure", event.reason)
                         _status.value = UiText.Dynamic(event.reason)
                         _logs.value = (_logs.value + "[Error] ${event.reason}").takeLast(500)
                     }
                     is com.aliothmoon.maadroid.engine.EngineEvent.AllTasksFinished -> {
+                        AppDiagnostics.record(engineId, "engine.finished", "success=${event.success}")
                         _status.value = uiTextOf(
                             if (event.success) R.string.engine_tasks_completed
                             else R.string.engine_tasks_incomplete,
                         )
                         closeSession()
-                        _running.value = false
+                        _running.value = session?.isRunning == true
                     }
                     else -> Unit
                 }
@@ -248,14 +299,27 @@ class EngineTaskViewModel(
     }
 
     private suspend fun closeSession() = withContext(NonCancellable) {
-        if (eventsJob != currentCoroutineContext()[Job]) eventsJob?.cancel()
+        val collector = eventsJob
+        if (collector != currentCoroutineContext()[Job]) collector?.cancel()
         eventsJob = null
-        try { session?.close() } finally {
-            session = null
-            if (ownsDevice) {
-                executionState.release(engineId)
-                ownsDevice = false
+        previewJob?.cancel()
+        previewJob = null
+        try { session?.close() }
+        catch (error: Throwable) {
+            if (!error.isRecoverableEngineFailure()) throw error
+            AppDiagnostics.failure(engineId, "ui.cleanup.failed", error)
+            _status.value = uiTextOf(R.string.engine_stop_failed, error.message.orEmpty())
+        } finally {
+            // Failed stops keep the reservation and stop button available for retry.
+            if (session?.isRunning != true) {
+                session = null
+                _previewReady.value = false
+                if (ownsDevice) {
+                    executionState.release(engineId)
+                    ownsDevice = false
+                }
             }
+            collector?.cancel()
         }
     }
 

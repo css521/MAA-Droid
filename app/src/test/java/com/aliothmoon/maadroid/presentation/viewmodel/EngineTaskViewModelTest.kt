@@ -1,6 +1,7 @@
 package com.aliothmoon.maadroid.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
+import android.view.Surface
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
@@ -40,11 +41,13 @@ class EngineTaskViewModelTest {
         coEvery { setWorkspaceConfig(any(), any()) } returns Unit
     }
     private val events = MutableSharedFlow<EngineEvent>(extraBufferCapacity = 8)
+    private val deviceReady = MutableStateFlow(false)
     private val session = mockk<EngineSession>(relaxed = true) {
         coEvery { prepare() } returns null
         coEvery { start() } returns true
         coEvery { stop() } returns true
         every { events() } returns events
+        every { previewReady } returns deviceReady
         every { appendTask(any(), any()) } returns 1
     }
 
@@ -52,7 +55,7 @@ class EngineTaskViewModelTest {
         id: String = "limbus",
         canStart: () -> Boolean = { true },
         factory: (String) -> EngineSession = { session },
-    ) = EngineTaskViewModel(id, store, factory, executionState, canStart, scope)
+    ) = EngineTaskViewModel(id, store, factory, executionState, canStart, scope, dispatcher)
 
     @After
     fun tearDown() {
@@ -202,6 +205,70 @@ class EngineTaskViewModelTest {
         assertEquals(secondTasks, second.tasks.value)
         assertEquals("task", first.expandedTaskType.value)
         assertNull(second.expandedTaskType.value)
+    }
+
+    @Test
+    fun nativeLinkageFailureBecomesStatusAndReleasesReservation() {
+        coEvery { session.prepare() } throws UnsatisfiedLinkError("missing native symbol")
+        val model = model()
+        model.start()
+        dispatcher.runCurrent()
+
+        assertFalse(model.running.value)
+        assertNull(executionState.activeEngineId.value)
+        assertTrue(model.status.value.toString().contains("missing native symbol"))
+        coVerify(exactly = 1) { session.close() }
+        coVerify(exactly = 0) { session.start() }
+    }
+
+    @Test
+    fun cleanupFailureOnCompletedRunDoesNotCrashEventCollector() {
+        coEvery { session.close() } throws IllegalStateException("cleanup failed")
+        val model = model()
+        model.start()
+        dispatcher.runCurrent()
+        events.tryEmit(EngineEvent.AllTasksFinished(true))
+        dispatcher.runCurrent()
+
+        assertFalse(model.running.value)
+        assertNull(executionState.activeEngineId.value)
+        assertEquals(0, events.subscriptionCount.value)
+        assertTrue(model.status.value.toString().contains("cleanup failed"))
+    }
+
+    @Test
+    fun previewCanPrecedeStartAndTabDetachNeverStopsTheGame() {
+        val surface = mockk<Surface>()
+        val model = model()
+        model.onPreviewSurfaceAvailable(surface)
+        model.start()
+        dispatcher.runCurrent()
+        verify { session.setPreviewSurface(surface) }
+        deviceReady.value = true
+        dispatcher.runCurrent()
+        assertTrue(model.previewReady.value)
+
+        model.onPreviewSurfaceDestroyed(surface)
+        dispatcher.runCurrent()
+        verify { session.setPreviewSurface(null) }
+        assertTrue(model.running.value)
+        coVerify(exactly = 0) { session.stop() }
+        coVerify(exactly = 0) { session.close() }
+    }
+
+    @Test
+    fun staleSurfaceDisposalDoesNotDetachItsReplacement() {
+        val old = mockk<Surface>()
+        val next = mockk<Surface>()
+        val model = model()
+        model.onPreviewSurfaceAvailable(old)
+        model.start()
+        dispatcher.runCurrent()
+        model.onPreviewSurfaceAvailable(next)
+        model.onPreviewSurfaceDestroyed(old)
+        dispatcher.runCurrent()
+        verify { session.setPreviewSurface(next) }
+        verify(exactly = 0) { session.setPreviewSurface(null) }
     }
 
     /** 可控地延后 launch，覆盖连续点击早于协程执行的竞态；不依赖 Android Main looper。 */

@@ -9,6 +9,10 @@ import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.toList
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -159,5 +163,46 @@ class EngineResourceInstallTest {
             assertEquals(ResourcePhase.FAILED, service.state(pack).value.phase)
             assertEquals(first, service.state(pack).value.installedRevision)
         }
+    }
+
+    @Test fun installerReportsVerificationExtractionAndActivationInOrder() {
+        val phases = mutableListOf<ResourceInstallPhase>()
+        val counts = mutableListOf<Pair<Int, Int>>()
+        AtomicResourceInstaller().install(
+            goodArchive(), File(temp.root, "phases"), pack, first,
+            phaseChanged = phases::add,
+            progress = { done, total -> counts += done to total },
+        )
+        assertEquals(listOf(ResourceInstallPhase.VERIFYING_ARCHIVE, ResourceInstallPhase.EXTRACTING,
+            ResourceInstallPhase.VERIFYING_FILES, ResourceInstallPhase.ACTIVATING), phases)
+        assertEquals(listOf(0 to 1, 1 to 1), counts)
+    }
+
+    @Test fun lalctypeServiceEmitsByteProgressAndEveryInstallPhaseBeforeReady() = runBlocking {
+        val callerThread = Thread.currentThread()
+        val transport = object : ResourceTransport {
+            override suspend fun tags(url: String): ResourceTagPage = error("No tags expected")
+            override suspend fun download(url: String, progress: (DownloadProgress) -> Unit): File {
+                assertNotSame(callerThread, Thread.currentThread())
+                progress(DownloadProgress(0, "1 KB/s", 1024, 0))
+                progress(DownloadProgress(0, "2 KB/s", 4096, 0))
+                return goodArchive()
+            }
+        }
+        val service = EngineResourceService(temp.root, transport)
+        val events = mutableListOf<EngineResourceState>()
+        val collect = launch(Dispatchers.Unconfined) { service.state(pack).toList(events) }
+        assertTrue(service.ensureInstalled(pack).isSuccess)
+        collect.cancelAndJoin()
+        val bytes = events.mapNotNull { it.download }.map { it.bytes }.distinct()
+        assertEquals(listOf(1024L, 4096L), bytes.map { it.downloaded })
+        assertTrue(bytes.all { it.percent == null })
+        val phases = events.map { it.phase }.distinct()
+        for (phase in listOf(ResourcePhase.DOWNLOADING, ResourcePhase.VERIFYING, ResourcePhase.EXTRACTING, ResourcePhase.INSTALLING)) {
+            assertTrue("Missing phase $phase", phase in phases)
+            assertTrue(events.filter { it.phase == phase }.all { it.busy })
+        }
+        assertEquals(ResourcePhase.READY, events.last().phase)
+        assertFalse(events.last().busy)
     }
 }

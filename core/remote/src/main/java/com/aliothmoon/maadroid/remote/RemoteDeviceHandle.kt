@@ -2,6 +2,7 @@ package com.aliothmoon.maadroid.remote
 
 import android.content.Intent
 import android.os.SharedMemory
+import android.view.Surface
 import com.aliothmoon.maadroid.RemoteService
 import com.aliothmoon.maadroid.IEngineDeviceSession
 import com.aliothmoon.maadroid.engine.DeviceControl
@@ -38,6 +39,10 @@ class RemoteDeviceHandle(
 
     override val control: DeviceControl = session?.let { SessionDeviceControl(service, it) }
         ?: RemoteDeviceControl(service)
+
+    fun setPreviewSurface(surface: Surface?) {
+        if (session != null) session.setPreviewSurface(surface) else service.setMonitorSurface(surface)
+    }
 
     fun close() {
         try {
