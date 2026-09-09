@@ -121,7 +121,7 @@ class MaaCallbackDispatcher(
     }
 
     private fun handleAsyncCallInfo(details: JSONObject?) {
-        Timber.d("收到 AsyncCallInfo，由 MaaCompositionService 处理")
+        Timber.d("收到 AsyncCallInfo，由 MaaCoreSession 处理")
     }
 
     private fun handleDestroyed(details: JSONObject?) {

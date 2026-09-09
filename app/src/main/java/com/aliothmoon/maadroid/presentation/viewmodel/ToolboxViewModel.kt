@@ -316,14 +316,20 @@ class ToolboxViewModel(
             ToolboxTab.MINI_GAME -> miniGame.onStop()
             ToolboxTab.GACHA -> viewModelScope.launch {
                 _statusMessage.value = uiTextOf(R.string.toolbox_status_stopping)
-                compositionService.stop()
+                if (compositionService.stop() != MaaCompositionService.StopResult.Success) {
+                    _statusMessage.value = uiTextOf(R.string.runlog_task_stop_failed)
+                    return@launch
+                }
                 stopGachaTipRotation()
                 _statusMessage.value = uiTextOf(R.string.toolbox_status_stopped)
             }
 
             else -> viewModelScope.launch {
                 _statusMessage.value = uiTextOf(R.string.toolbox_status_stopping)
-                compositionService.stop()
+                if (compositionService.stop() != MaaCompositionService.StopResult.Success) {
+                    _statusMessage.value = uiTextOf(R.string.runlog_task_stop_failed)
+                    return@launch
+                }
                 _statusMessage.value = uiTextOf(R.string.toolbox_status_stopped)
             }
         }

@@ -34,8 +34,8 @@ object EngineSetup {
 /**
  * 方舟引擎供给。
  *
- * [createEngine] 暂未实现 —— 现有方舟逻辑（MaaCompositionService 等）还在直接使用
- * MaaCoreService，把它收拢成 AutomationEngine 是 engine-arknights 模块化那一步的事。
+ * [createEngine] 暂未实现 —— MaaCompositionService 已委托引擎模块的 MaaCoreSession
+ * 管理核心生命周期，资源准备与业务回调仍走旧编排，尚未收拢成 AutomationEngine。
  * 但 profile 与资源包已可用，宿主的游戏列表与资源中心因此已能同时看到两个游戏。
  */
 private object ArknightsEngineProvider : EngineProvider {

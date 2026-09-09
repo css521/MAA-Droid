@@ -1183,7 +1183,10 @@ class CopilotViewModel(
     fun onStop() {
         viewModelScope.launch {
             _state.update { it.copy(statusMessage = text(R.string.toolbox_status_stopping)) }
-            compositionService.stop()
+            if (compositionService.stop() != MaaCompositionService.StopResult.Success) {
+                _state.update { it.copy(statusMessage = text(R.string.runlog_task_stop_failed)) }
+                return@launch
+            }
             runtimeStateStore.resetCurrentCopilotIndex()
             _state.update { it.copy(statusMessage = text(R.string.toolbox_status_stopped)) }
         }

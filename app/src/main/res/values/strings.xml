@@ -2338,6 +2338,7 @@
     <string name="runlog_maa_start_failed">MaaCore 启动失败</string>
     <string name="runlog_remote_connect_failed">无法连接远程服务：%1$s</string>
     <string name="runlog_task_stopping">正在停止任务...</string>
+    <string name="runlog_task_stop_failed">未能确认任务已停止，仍保留游戏控制。请重试停止或检查提权服务。</string>
     <string name="runlog_task_stopped">任务停止，状态: %1$s</string>
     <string name="runlog_service_terminated">MAA服务异常终止</string>
     <string name="runlog_game_process_gone">游戏进程未启动或被异常关闭(%1$s)</string>

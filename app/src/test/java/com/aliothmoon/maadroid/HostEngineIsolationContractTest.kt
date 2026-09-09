@@ -93,7 +93,7 @@ class HostEngineIsolationContractTest {
     private val hostToArknights = mapOf(
         // ---- 待清理：抽 engine/arknights 时逐条归零 ----
         "presentation/viewmodel" to 61,      // 方舟 ViewModel 尚未随面板迁出
-        "domain/service" to 45,              // MaaCompositionService / MaaSessionLogger 等
+        "domain/service" to 43,              // MaaCore 生命周期已委托给引擎模块
         "data/model" to 39,                  // 方舟任务配置与宿主模型混居
         "koin" to 20,                        // 方舟类进宿主容器；改构造函数注入后可清零
         "presentation/view/background" to 10, // BackgroundTaskView 直连方舟 panel 符号

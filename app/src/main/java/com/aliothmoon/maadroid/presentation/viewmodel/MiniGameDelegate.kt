@@ -188,7 +188,10 @@ class MiniGameDelegate(
     fun onStop() {
         scope.launch {
             _state.update { it.copy(statusMessage = uiTextOf(R.string.toolbox_status_stopping)) }
-            compositionService.stop()
+            if (compositionService.stop() != MaaCompositionService.StopResult.Success) {
+                _state.update { it.copy(statusMessage = uiTextOf(R.string.runlog_task_stop_failed)) }
+                return@launch
+            }
             _state.update { it.copy(statusMessage = uiTextOf(R.string.toolbox_status_stopped)) }
         }
     }

@@ -2281,6 +2281,7 @@
     <string name="runlog_maa_start_failed">Failed to start MaaCore</string>
     <string name="runlog_remote_connect_failed">Cannot connect to remote service: %1$s</string>
     <string name="runlog_task_stopping">Stopping tasks...</string>
+    <string name="runlog_task_stop_failed">Could not confirm that tasks stopped. Game control is still reserved. Retry stopping or check the privileged service.</string>
     <string name="runlog_task_stopped">Tasks stopped, status: %1$s</string>
     <string name="runlog_service_terminated">MAA service terminated unexpectedly</string>
     <string name="runlog_game_process_gone">Game process not started or closed unexpectedly (%1$s)</string>

@@ -1,8 +1,7 @@
 package com.aliothmoon.maadroid.domain.service
 
 import android.content.Context
-import com.alibaba.fastjson2.JSON
-import com.aliothmoon.maadroid.MaaCoreCallback
+import android.os.IBinder
 import com.aliothmoon.maadroid.MaaCoreService
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.RemoteService
@@ -16,10 +15,8 @@ import com.aliothmoon.maadroid.domain.models.RemoteBackend
 import com.aliothmoon.maadroid.domain.models.RunMode
 import com.aliothmoon.maadroid.domain.notification.LiveSessionCoordinator
 import com.aliothmoon.maadroid.engine.arknights.state.MaaExecutionState
-import com.aliothmoon.maadroid.engine.arknights.core.AsstMsg
-import com.aliothmoon.maadroid.engine.arknights.core.MaaInstanceOptions.ANDROID
-import com.aliothmoon.maadroid.engine.arknights.core.MaaInstanceOptions.DEPLOYMENT_WITH_PAUSE
-import com.aliothmoon.maadroid.engine.arknights.core.MaaInstanceOptions.TOUCH_MODE
+import com.aliothmoon.maadroid.engine.arknights.core.AidlMaaCoreClient
+import com.aliothmoon.maadroid.engine.arknights.core.MaaCoreSession
 import com.aliothmoon.maadroid.maa.callback.MaaCallbackDispatcher
 import com.aliothmoon.maadroid.maa.callback.MaaExecutionStateHolder
 import com.aliothmoon.maadroid.maa.callback.SubTaskHandler
@@ -35,12 +32,10 @@ import com.aliothmoon.maadroid.utils.Misc
 import com.aliothmoon.maadroid.common.i18n.UiText
 import com.aliothmoon.maadroid.common.i18n.resolve
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -48,7 +43,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.koin.java.KoinJavaComponent.inject
@@ -159,7 +153,21 @@ class MaaCompositionService(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val connectDeferred = AtomicReference<CompletableDeferred<Boolean>?>()
+    private data class CoreBinding(val binder: IBinder, val session: MaaCoreSession)
+    private val coreBinding = AtomicReference<CoreBinding?>()
+    // 受 startMutex 保护。只清理本轮实际接触的核心，不能误停上轮闲置 Binder。
+    private var startupBinding: CoreBinding? = null
+    private var startupCleanupResult: Boolean? = null
+
+    private fun sessionFor(maa: MaaCoreService): MaaCoreSession {
+        val binder = maa.asBinder()
+        coreBinding.get()?.takeIf { it.binder == binder }?.let { return it.session }
+        val session = MaaCoreSession(AidlMaaCoreClient(maa), onEvent = { msg, json ->
+            callbackDispatcher.onEvent(msg, json)
+        })
+        coreBinding.getAndSet(CoreBinding(binder, session))?.session?.invalidate()
+        return session
+    }
 
     /** 回调侧停止请求的去重闸门 */
     private val callbackStopRequested = AtomicBoolean(false)
@@ -222,6 +230,7 @@ class MaaCompositionService(
     init {
         scope.launch {
             unifiedStateDispatcher.serviceDiedEvent.collect {
+                coreBinding.getAndSet(null)?.session?.invalidate()
                 stopBackgroundMonitors()
                 setRunState(MaaExecutionState.ERROR)
                 sessionLogger.completeSessionAndWait(
@@ -254,27 +263,6 @@ class MaaCompositionService(
         }
     }
 
-    fun handleCallback(msg: Int, json: String?) {
-        if (onAsyncConnectCallback(msg, json)) return
-        callbackDispatcher.onEvent(msg, json)
-    }
-
-    val callback = object : MaaCoreCallback.Stub() {
-        override fun onCallback(msg: Int, json: String?) = handleCallback(msg, json)
-    }
-
-    private fun onAsyncConnectCallback(msg: Int, json: String?): Boolean {
-        if (msg != AsstMsg.AsyncCallInfo.value) return false
-        val deferred = connectDeferred.get() ?: return true
-        val obj = JSON.parseObject(json)
-        val details = obj.getJSONObject("details")
-        if (details != null) {
-            val ret = details.getBooleanValue("ret", false)
-            deferred.complete(ret)
-        }
-        return true
-    }
-
     suspend fun start(
         tasks: List<MaaTaskParams>,
         clientType: String,
@@ -302,6 +290,7 @@ class MaaCompositionService(
     private suspend fun failStart(
         message: String, sessionStatus: String, result: StartResult
     ): StartResult {
+        if (!settleFailedStartup()) return retainFailedStartup(message, result)
         setRunState(MaaExecutionState.ERROR)
         sessionLogger.appendAndWait(message, LogLevel.ERROR)
         sessionLogger.endSessionAndWait(sessionStatus)
@@ -313,12 +302,38 @@ class MaaCompositionService(
     private suspend fun rejectStart(
         message: String, sessionStatus: String, result: StartResult
     ): StartResult {
+        if (!settleFailedStartup()) return retainFailedStartup(message, result)
         setRunState(MaaExecutionState.IDLE)
         sessionLogger.appendAndWait(message, LogLevel.WARNING)
         sessionLogger.endSessionAndWait(sessionStatus)
         // 前置失败未进 STARTING；先 beginRun 刷新 token，否则 notifyStartFailed 会因旧 run 已 claim 结果而被吞
         liveCoordinator.beginRun()
         notificationCenter.notifyStartFailed(message)
+        return result
+    }
+
+    /** 先确认 native 已停止，再发布终态；否则前台服务与日志会先于核心退出。 */
+    private suspend fun settleFailedStartup(): Boolean {
+        startupCleanupResult?.let { return it }
+        return withContext(NonCancellable + Dispatchers.IO) {
+            val binding = startupBinding
+            val stopped = if (binding == null || coreBinding.get() !== binding) true else {
+                runCatching { binding.session.stop() }
+                    .onFailure { Timber.e(it, "Failed to clean up MaaCore startup") }
+                    .getOrDefault(false)
+            } || coreBinding.get() !== binding
+            // 写在不可取消的块内，切回取消的调用者时仍保留结果，避免再次等待超时。
+            startupCleanupResult = stopped
+            stopped
+        }
+    }
+
+    private suspend fun retainFailedStartup(message: String, result: StartResult): StartResult {
+        if (coreBinding.get() !== startupBinding) return result // 服务死亡已有独立收尾。
+        setRunState(MaaExecutionState.RUNNING)
+        sessionLogger.appendAndWait(message, LogLevel.ERROR)
+        sessionLogger.appendAndWait(context.getString(R.string.runlog_task_stop_failed), LogLevel.ERROR)
+        // 不结束会话、不发终态通知；前台服务和设备准入一直保留到用户重试停止。
         return result
     }
 
@@ -396,40 +411,25 @@ class MaaCompositionService(
         return null
     }
 
-    private suspend fun ensureMaaInstance(maa: MaaCoreService): StartResult? {
-        if (maa.hasInstance()) return null
-        if (!maa.CreateInstance(callback)) {
-            return failStart(
+    private suspend fun ensureMaaInstance(session: MaaCoreSession): StartResult? =
+        when (session.initialize()) {
+            MaaCoreSession.Initialization.READY -> null
+            MaaCoreSession.Initialization.BUSY -> {
+                setRunState(MaaExecutionState.RUNNING)
+                StartResult.AlreadyRunning
+            }
+            MaaCoreSession.Initialization.CREATE_FAILED -> failStart(
                 context.getString(R.string.runlog_create_instance_failed), "CREATE_INSTANCE_ERROR",
                 StartResult.InitializationError(StartResult.InitializationError.InitPhase.CREATE_INSTANCE)
             )
-        }
-        if (!maa.SetInstanceOption(TOUCH_MODE, ANDROID)) {
-            return failStart(
+            MaaCoreSession.Initialization.TOUCH_MODE_FAILED -> failStart(
                 context.getString(R.string.runlog_set_touch_mode_failed), "SET_TOUCH_MODE_ERROR",
                 StartResult.InitializationError(StartResult.InitializationError.InitPhase.SET_TOUCH_MODE)
             )
         }
-        return null
-    }
-
-    private suspend fun asyncConnect(maa: MaaCoreService, config: String): StartResult? {
-        val deferred = CompletableDeferred<Boolean>()
-        connectDeferred.set(deferred)
-        maa.AsyncConnect("", "Android", config, false)
-        val ret = withTimeoutOrNull(2000) { deferred.await() }
-        connectDeferred.set(null)
-        if (ret != true) {
-            return failStart(
-                context.getString(R.string.runlog_maa_connect_failed), "MAA_CONNECT_ERROR",
-                StartResult.ConnectionError(StartResult.ConnectionError.ConnectPhase.MAA_CONNECT)
-            )
-        }
-        return null
-    }
 
     private suspend fun setupDisplayAndConnect(
-        service: RemoteService, maa: MaaCoreService, mode: RunMode, clientType: String
+        service: RemoteService, session: MaaCoreSession, mode: RunMode, clientType: String
     ): StartResult? {
         if (!service.setVirtualDisplayMode(mode.displayMode))
             return failStart(
@@ -454,12 +454,10 @@ class MaaCompositionService(
         // 在 MAA 连接（含 force_stop 重启游戏）之前提前授予电池优化豁免与后台不受限权限，
         // 让新进程一启动就处于受保护状态
         grantGameBatteryExemption(clientType)
-        // Assistant 实例跨任务复用，关闭时必须显式写 0
-        maa.SetInstanceOption(
-            DEPLOYMENT_WITH_PAUSE,
-            if (appSettings.deployWithPause.value) "1" else "0"
+        return if (session.connect(config, appSettings.deployWithPause.value)) null else failStart(
+            context.getString(R.string.runlog_maa_connect_failed), "MAA_CONNECT_ERROR",
+            StartResult.ConnectionError(StartResult.ConnectionError.ConnectPhase.MAA_CONNECT)
         )
-        return asyncConnect(maa, config)
     }
 
     /** 虚拟显示启动失败；若是 Root 授权的 Shizuku（uid 0）则附加改用内置 Root 模式的提示 */
@@ -498,7 +496,7 @@ class MaaCompositionService(
     }
 
     private suspend fun appendTasksAndStart(
-        maa: MaaCoreService,
+        session: MaaCoreSession,
         tasks: List<MaaTaskParams>,
         successMessage: String,
         mode: RunMode,
@@ -506,19 +504,30 @@ class MaaCompositionService(
         // 独立目录：先投递用户文件，送不过去 core 那边就是 file-not-found，直接报资源错误
         if (!coreDataPusher.pushUserData()) {
             Timber.e("core user data push failed before start")
-            return StartResult.ResourceError(IllegalStateException("core user data push failed"))
+            return failStart(
+                context.getString(R.string.runlog_resource_load_failed), "RESOURCE_ERROR",
+                StartResult.ResourceError(IllegalStateException("core user data push failed"))
+            )
         }
         taskChainStatusTracker.clear()
         // 不清 dropsRefresher：stage 已在 Analyze 完成，会话结束/下次 Analyze 再清
         tasks.forEach { t ->
             sessionLogger.appendToFileOnly("[TaskParams] ${t.type.value}: ${t.params}")
-            val taskId = maa.AppendTask(t.type.value, t.params)
-            if (taskId > 0) {
-                taskChainStatusTracker.register(taskId, t.type.value, t.slot)
-                t.slot?.let { dropsRefresher.bind(it, taskId) }
-            }
         }
-        if (!maa.Start()) {
+        val started = session.startTasks(tasks.map { MaaCoreSession.Task(it.type.value, it.params) }) { index, taskId ->
+            val task = tasks[index]
+            taskChainStatusTracker.register(taskId, task.type.value, task.slot)
+            task.slot?.let { dropsRefresher.bind(it, taskId) }
+        }
+        if (started != MaaCoreSession.StartResult.Started) {
+            if (started == MaaCoreSession.StartResult.Busy) {
+                setRunState(MaaExecutionState.RUNNING)
+                return StartResult.AlreadyRunning
+            }
+            if (started is MaaCoreSession.StartResult.RejectedTask) {
+                Timber.e("MaaCore rejected task #%d (%s)", started.index + 1, tasks[started.index].type.value)
+            }
+            taskChainStatusTracker.clear()
             return failStart(
                 context.getString(R.string.runlog_maa_start_failed),
                 "START_ERROR",
@@ -530,7 +539,7 @@ class MaaCompositionService(
             startBackgroundMonitors()
         }
         sessionLogger.appendAndWait(successMessage, LogLevel.SUCCESS)
-        return StartResult.Success(maa.GetVersion())
+        return StartResult.Success(session.version)
     }
 
     /** 启动互斥：前置检查耗时，双入口/双击可能同时穿过 AlreadyRunning 窗口 */
@@ -549,6 +558,8 @@ class MaaCompositionService(
         val reservation = EngineExecutionCoordinator.shared.tryStart(EngineIds.ARKNIGHTS)
             ?: return@withLock StartResult.AlreadyRunning
         startupInProgress.set(true)
+        startupBinding = null
+        startupCleanupResult = null
         executionLease.set(reservation)
         var result: StartResult? = null
         try {
@@ -556,9 +567,27 @@ class MaaCompositionService(
                 tasks, clientType, startMessage, successMessage, preflightLogs, onSessionStarted,
             ).also { result = it }
         } finally {
-            startupInProgress.set(false)
-            if (result !is StartResult.Success || !isTaskActive) {
-                if (executionLease.compareAndSet(reservation, null)) reservation.close()
+            try {
+                if (result !is StartResult.Success && result !is StartResult.AlreadyRunning) {
+                    // 启动取消/异常也可能发生在 native 已接受任务之后。确认停止后再归还设备。
+                    withContext(NonCancellable + Dispatchers.IO) {
+                        val binding = startupBinding
+                        val stopped = settleFailedStartup()
+                        if (!stopped && binding != null && coreBinding.get() === binding) {
+                            setRunState(MaaExecutionState.RUNNING)
+                        } else if (isTaskActive) {
+                            stopBackgroundMonitors()
+                            setRunState(MaaExecutionState.ERROR)
+                        }
+                        if (stopped && result == null) sessionLogger.endSessionAndWait("START_ABORTED")
+                    }
+                }
+            } finally {
+                // 切回已取消的调用者上下文也可能抛异常，准入收尾必须仍然执行。
+                startupInProgress.set(false)
+                if (!isTaskActive) {
+                    if (executionLease.compareAndSet(reservation, null)) reservation.close()
+                }
             }
         }
     }
@@ -600,16 +629,17 @@ class MaaCompositionService(
 
             try {
                 useRemoteService { service ->
-                    val maa = service.maaCoreService
-                    ensureMaaInstance(maa)?.let { return@useRemoteService it }
+                    val session = sessionFor(service.maaCoreService)
+                    startupBinding = coreBinding.get()
+                    ensureMaaInstance(session)?.let { return@useRemoteService it }
 
                     setupDisplayAndConnect(
                         service,
-                        maa,
+                        session,
                         mode,
                         clientType
                     )?.let { return@useRemoteService it }
-                    val result = appendTasksAndStart(maa, tasks, successMessage, mode)
+                    val result = appendTasksAndStart(session, tasks, successMessage, mode)
                     if (result is StartResult.Success) {
                         taskChainState.saveLastUsedClientType(clientType)
                     }
@@ -680,35 +710,25 @@ class MaaCompositionService(
         }
     }
 
-    suspend fun stop(origin: StopOrigin = StopOrigin.USER): StopResult {
+    suspend fun stop(origin: StopOrigin = StopOrigin.USER): StopResult = startMutex.withLock {
+        if (!isTaskActive) return@withLock StopResult.Success
         // 先记来源再切状态，TaskEndRegistry 在 STOPPING→IDLE 边沿读取
         lastStopOrigin = origin
         setRunState(MaaExecutionState.STOPPING)
-        sessionLogger.appendAndWait(context.getString(R.string.runlog_task_stopping), LogLevel.INFO)
 
-        return withContext(Dispatchers.IO) {
-            useRemoteService { service ->
-                val maa = service.maaCoreService
-                if (!maa.Running()) {
-                    return@useRemoteService finishStop(StopResult.Success)
-                }
-
-                if (!maa.Stop()) {
-                    return@useRemoteService finishStop(StopResult.Failed)
-                }
-
-                // 轮询等待 Core 真正停止，60 秒超时
-                var elapsed = 0
-                while (maa.Running() && elapsed < 60_000) {
-                    delay(100)
-                    elapsed += 100
-                }
-
-                if (maa.Running()) {
-                    finishStop(StopResult.Failed)
-                } else {
-                    finishStop(StopResult.Success)
-                }
+        // 停止已经发出后必须确认结局；页面离开不能中断收尾并留下 STOPPING。
+        withContext(NonCancellable + Dispatchers.IO) {
+            sessionLogger.appendAndWait(context.getString(R.string.runlog_task_stopping), LogLevel.INFO)
+            val stopped = runCatching {
+                coreBinding.get()?.session?.stop() ?: true
+            }.onFailure {
+                Timber.e(it, "Failed to stop MaaCore")
+            }.getOrDefault(false)
+            if (_state.value == MaaExecutionState.ERROR) {
+                // 服务死亡已有独立错误通知，不能再覆盖成“任务已停止”。
+                StopResult.Failed
+            } else {
+                finishStop(if (stopped) StopResult.Success else StopResult.Failed)
             }
         }
     }
@@ -725,12 +745,18 @@ class MaaCompositionService(
     }
 
     private fun finishStop(result: StopResult): StopResult {
+        if (result == StopResult.Failed) {
+            // 核心仍可能注入输入；保留占用、日志和监视器，恢复停止按钮以允许重试。
+            setRunState(MaaExecutionState.RUNNING)
+            sessionLogger.append(context.getString(R.string.runlog_task_stop_failed), LogLevel.ERROR)
+            return result
+        }
         stopBackgroundMonitors()
         setRunState(MaaExecutionState.IDLE)
-        val status = if (result is StopResult.Success) "STOPPED" else "STOP_FAILED"
+        val status = "STOPPED"
         sessionLogger.append(
             context.getString(R.string.runlog_task_stopped, status),
-            if (result is StopResult.Success) LogLevel.INFO else LogLevel.ERROR
+            LogLevel.INFO
         )
         sessionLogger.endSession(status)
         notificationCenter.notifyTaskStopped()
