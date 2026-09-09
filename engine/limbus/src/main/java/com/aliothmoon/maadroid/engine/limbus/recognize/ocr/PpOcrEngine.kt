@@ -36,14 +36,14 @@ class PpOcrEngine private constructor(
      * @param screenBgr 整屏或已裁剪的 BGR 图
      * @return 合并后的文本块，坐标相对传入图像的左上角
      */
-    fun detect(screenBgr: Mat): List<TextBox> {
+    fun detect(screenBgr: Mat, mergeX: Boolean = true, mergeY: Boolean = true): List<TextBox> {
         val probMap = runDetection(screenBgr) ?: return emptyList()
         try {
             val boxes = DbDetector.boxesFrom(probMap, screenBgr.cols(), screenBgr.rows())
             if (boxes.isEmpty()) return emptyList()
 
             val recognized = recognize(screenBgr, boxes)
-            return TextMerge.merge(recognized)
+            return TextMerge.merge(recognized, mergeX, mergeY)
         } finally {
             probMap.release()
         }
@@ -210,7 +210,7 @@ class PpOcrEngine private constructor(
                 val det = env.createSession(detFile.absolutePath).also { openedDet = it }
                 val rec = env.createSession(recFile.absolutePath).also { openedRec = it }
 
-                val characters = rec.metadata.customMetadata[CHARACTER_METADATA_KEY]
+                val characters = OnnxMetadata.read(recFile, CHARACTER_METADATA_KEY)
                     ?.let(CtcDecoder::parseCharacters)
                 if (characters.isNullOrEmpty()) {
                     onLog("rec 模型未内嵌字符表，无法解码，已停用 OCR")

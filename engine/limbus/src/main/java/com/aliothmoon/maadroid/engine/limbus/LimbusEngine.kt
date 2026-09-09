@@ -88,7 +88,14 @@ class LimbusEngine(
 
     @Volatile private var diagnosticSink: EngineDiagnosticSink? = null
     override fun setDiagnosticSink(sink: EngineDiagnosticSink?) { diagnosticSink = sink }
-    private fun trace(phase: String, detail: String = "") { diagnosticSink?.record(phase, detail) }
+    private fun trace(phase: String, detail: String = "") {
+        try {
+            // DiagnosticStore bounds/redacts persisted text; also cap work passed to any sink.
+            diagnosticSink?.record(phase, detail.take(2048))
+        } catch (_: Throwable) {
+            // Diagnostics must not change engine execution or event delivery.
+        }
+    }
 
     // ---------------------------------------------------------------- prepare
 
@@ -163,6 +170,8 @@ class LimbusEngine(
                 ocr = ocr,
                 onLog = { warn(it) },
                 titleAnchorFiles = index.titleAnchors,
+                gameLanguage = loadedLanguage,
+                onInfo = { info(it) },
             )
         } catch (failure: Throwable) {
             runCatching { classifier.release() }.exceptionOrNull()?.let(failure::addSuppressed)
@@ -394,6 +403,37 @@ class LimbusEngine(
     private fun emit(event: EngineEvent) {
         // tryEmit 而非 emit：事件投递绝不该阻塞识别循环。缓冲满了宁可丢日志
         _events.tryEmit(event)
+        // Persist selected boundaries even when no UI is collecting events. Raw payloads
+        // and per-frame debug/trace messages never enter the synchronous diagnostic sink.
+        when (event) {
+            is EngineEvent.Task -> trace(
+                "task.${event.phase.name.lowercase()}",
+                "taskId=${event.taskId} type=${event.type}" +
+                    (event.message?.let { " message=$it" } ?: ""),
+            )
+            is EngineEvent.AllTasksFinished -> trace("tasks.finished", "success=${event.success}")
+            is EngineEvent.Log -> when (event.level) {
+                LogLevel.Info, LogLevel.Warn, LogLevel.Error ->
+                    trace("log.${event.level.name.lowercase()}", event.message)
+                LogLevel.Debug -> {
+                    // PipelineRunner emits these only at action/branch boundaries.
+                    val message = event.message
+                    if (message.startsWith("节点 ") && (
+                        message.contains(" 执行动作 ") ||
+                            message.contains(" 结束流水线:") ||
+                            message.endsWith(" 的 next 与 interrupt 均未命中，该分支结束")
+                        )) {
+                        trace("pipeline.node", message)
+                    }
+                }
+                LogLevel.Trace -> Unit
+            }
+            is EngineEvent.Failure -> trace(
+                "engine.failure",
+                "cause=${event.cause?.javaClass?.name ?: "none"} reason=${event.reason}",
+            )
+            else -> Unit
+        }
     }
 
     private fun info(message: String) = emit(EngineEvent.Log(LogLevel.Info, message))
@@ -401,7 +441,6 @@ class LimbusEngine(
     private fun warn(message: String) = emit(EngineEvent.Log(LogLevel.Warn, message))
 
     private fun fail(reason: String, cause: Throwable? = null) {
-        trace("engine.failure", cause?.stackTraceToString() ?: reason)
         emit(EngineEvent.Log(LogLevel.Error, reason))
         emit(EngineEvent.Failure(reason, cause))
     }

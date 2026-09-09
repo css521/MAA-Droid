@@ -31,6 +31,8 @@ class LimbusRecognizer(
     private val ocr: com.aliothmoon.maadroid.engine.limbus.recognize.ocr.PpOcrEngine? = null,
     private val onLog: (String) -> Unit = {},
     private val titleAnchorFiles: List<File> = emptyList(),
+    private val gameLanguage: String = "zh",
+    private val onInfo: (String) -> Unit = {},
 ) : Recognizer {
 
     private val templateCache = HashMap<Pair<String, Boolean>, Mat?>()
@@ -81,7 +83,7 @@ class LimbusRecognizer(
                 if (maskTemplate != null && templateRegion == null) return emptyList()
                 val effectiveTpl = templateRegion?.let { Mat(tpl, it.toRect()) } ?: tpl
                 try {
-                    return TemplateMatcher.match(
+                    val matches = TemplateMatcher.match(
                         screen = work,
                         template = effectiveTpl,
                         threshold = threshold,
@@ -89,6 +91,19 @@ class LimbusRecognizer(
                         offsetY = region?.y ?: 0,
                         screenshotScale = screenshotScale,
                     )
+                    if (matches.isNotEmpty() || crop != null || maskTemplate != null || screenshotScale != 1.0 ||
+                        !AndroidHomeNavigation.supports(template)) return matches
+
+                    val drive = templateOf("main_drive_no_text") ?: return emptyList()
+                    val coroutine = currentCoroutineContext()
+                    val mobile = AndroidHomeNavigation.match(
+                        screen, template, tpl, drive, threshold, gameLanguage, ocr,
+                        checkActive = { coroutine.ensureActive() },
+                    ) ?: return emptyList()
+                    if (warned.add("android_home:$template")) {
+                        onInfo("已识别 Android 主页导航 $template，位置=${mobile.x},${mobile.y}")
+                    }
+                    return listOf(mobile)
                 } finally {
                     if (effectiveTpl !== tpl) effectiveTpl.release()
                 }
