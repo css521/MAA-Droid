@@ -190,6 +190,11 @@ class NativeLinkageTests(unittest.TestCase):
         layout[OTHER_RUNTIME] = elf(OTHER_RUNTIME, exports=[(API, "MAA_ABI")])
         self.assertEqual("", self.errors(layout))
 
+    def test_consumer_without_soname_is_valid_like_official_jni(self):
+        layout = shared_layout()
+        layout[JNI].soname = None
+        self.assertEqual("", self.errors(layout))
+
     def test_old_735_jni_runtime_mismatch_is_reported(self):
         layout = shared_layout("VERS_1.19.2")
         layout[JNI] = elf(JNI, [RUNTIME], [(API, "VERS_1.20.0", RUNTIME)])

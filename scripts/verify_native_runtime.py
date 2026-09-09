@@ -215,7 +215,7 @@ def elf_hash(name: str) -> int:
     """System V ELF hash used by Verdef.vd_hash and Vernaux.vna_hash."""
     value = 0
     for byte in name.encode("utf-8"):
-        value = (value << 4) + byte
+        value = ((value << 4) + byte) & 0xFFFFFFFF
         high = value & 0xF0000000
         value ^= high >> 24
         value &= ~high
@@ -276,7 +276,7 @@ def validate_abi(abi: str, libraries: dict[str, ElfInfo]) -> tuple[list[str], li
         for dependency in info.needed:
             if dependency not in libraries and dependency not in ANDROID_SYSTEM_LIBRARIES:
                 errors.append(f"{label}: unresolved DT_NEEDED {dependency} in this ABI")
-        for need in set(info.version_needs.values()):
+        for need in sorted(set(info.version_needs.values()), key=lambda n: (n.library, n.name)):
             if need.library not in info.needed:
                 errors.append(
                     f"{label}: version need {need.library}:{need.name} is absent from DT_NEEDED"
@@ -304,7 +304,7 @@ def validate_abi(abi: str, libraries: dict[str, ElfInfo]) -> tuple[list[str], li
             symbol_label = f"{symbol.name}@{symbol.version or '<unversioned>'}"
             index = consumer.symbol_versions.get(symbol.index)
             need = consumer.version_needs.get(index)
-            if symbol.version is None or need is None or need.name != symbol.version:
+            if symbol.version is None or index is None or index <= 1 or need is None or need.name != symbol.version:
                 errors.append(
                     f"{label}: {symbol_label} has no matching indexed .gnu.version_r requirement"
                 )
