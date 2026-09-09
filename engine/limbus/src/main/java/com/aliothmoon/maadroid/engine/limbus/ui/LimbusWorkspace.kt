@@ -1,31 +1,23 @@
 package com.aliothmoon.maadroid.engine.limbus.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aliothmoon.maadroid.engine.EngineWorkspace
 import com.aliothmoon.maadroid.engine.limbus.config.*
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import java.io.File
 
@@ -44,7 +36,7 @@ object LimbusWorkspace : EngineWorkspace {
         if (config == null) {
             Text("配置读取失败，请检查导入文件：${result.exceptionOrNull()?.message}", Modifier.padding(16.dp))
         } else {
-            WorkspaceContent(config, { onConfigChange(it.encode()) }, editable, logs, resourceDir)
+            WorkspaceContent(config, { if (editable) onConfigChange(it.encode()) }, editable, logs, resourceDir)
         }
     }
 }
@@ -52,32 +44,35 @@ object LimbusWorkspace : EngineWorkspace {
 @Composable
 private fun WorkspaceContent(config: LimbusWorkspaceConfig, change: (LimbusWorkspaceConfig) -> Unit, editable: Boolean, logs: List<String>, root: File?) {
     var page by rememberSaveable { mutableIntStateOf(0) }
-    val context = LocalContext.current
-    val catalog by produceState(LimbusCatalog(), root) { value = withContext(Dispatchers.IO) { LimbusCatalog.load(context, root) } }
+    val resources by rememberLimbusCatalog(root)
     var transfer by rememberSaveable { mutableStateOf(false) }
+    var more by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("LALC", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text(if (editable) "配置自动保存 · 与游戏内队伍槽位对应" else "任务运行中 · 配置已锁定", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TabRow(selectedTabIndex = page, modifier = Modifier.weight(1f)) {
+                listOf("任务", "队伍", "卡包", "日志").forEachIndexed { index, title ->
+                    Tab(selected = page == index, onClick = { page = index }, text = { Text(title) })
+                }
             }
-            TextButton(onClick = { transfer = true }, enabled = editable) { Text("导入 / 导出") }
-        }
-        TabRow(selectedTabIndex = page) {
-            listOf("任务", "队伍", "卡包", "日志").forEachIndexed { index, title ->
-                Tab(selected = page == index, onClick = { page = index }, text = { Text(title) })
+            Box {
+                TextButton(onClick = { more = true }, modifier = Modifier.width(48.dp), contentPadding = PaddingValues(0.dp)) { Text("更多") }
+                DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
+                    DropdownMenuItem(text = { Text("导入 / 导出配置") }, onClick = { more = false; transfer = true })
+                }
             }
         }
-        Box(Modifier.weight(1f)) {
-            when (page) {
-                0 -> TasksPage(config, change, editable, onTeams = { page = 1 })
-                1 -> TeamsPage(config, change, editable, catalog, root)
-                2 -> PacksPage(config, change, editable, catalog, root)
-                3 -> LogsPage(logs)
+        CompositionLocalProvider(LocalLimbusResourceRevision provides resources.revision) {
+            Box(Modifier.weight(1f)) {
+                when (page) {
+                    0 -> TasksPage(config, change, editable, onTeams = { page = 1 })
+                    1 -> TeamsPage(config, change, editable, resources, root)
+                    2 -> PacksPage(config, change, editable, resources, root)
+                    3 -> LogsPage(logs)
+                }
             }
         }
     }
-    if (transfer) ConfigTransferDialog(config, { change(it); transfer = false }, { transfer = false })
+    if (transfer) ConfigTransferDialog(config, editable, { change(it); transfer = false }, { transfer = false })
 }
 
 internal val taskLabels = linkedMapOf(
@@ -204,11 +199,18 @@ internal fun Section(title: String? = null, content: @Composable ColumnScope.() 
 }
 
 @Composable
-private fun PacksPage(config: LimbusWorkspaceConfig, change: (LimbusWorkspaceConfig) -> Unit, editable: Boolean, catalog: LimbusCatalog, root: File?) {
+private fun PacksPage(config: LimbusWorkspaceConfig, change: (LimbusWorkspaceConfig) -> Unit, editable: Boolean, resources: LimbusCatalogState, root: File?) {
+    val catalog = resources.catalog
+    if (resources.message != null || catalog.packs.isEmpty()) {
+        Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+            Hint(resources.message ?: "资源中没有主题卡包图鉴，请更新或重新下载边狱资源。已有权重已保留。")
+        }
+        return
+    }
     var search by rememberSaveable { mutableStateOf("") }
     var weighted by rememberSaveable { mutableStateOf(false) }
     val rows = catalog.packs.filter { it.title.contains(search, true) || it.name.contains(search, true) }
-        .let { if (weighted) it.sortedByDescending { config.themePackWeights[it.name] ?: 10 } else it.sortedBy { it.name } }
+        .let { if (weighted) it.sortedByDescending { it.weight(config.themePackWeights) } else it.sortedBy { it.name } }
     Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
         InputField("搜索主题卡包", search, true) { search = it }
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -222,7 +224,7 @@ private fun PacksPage(config: LimbusWorkspaceConfig, change: (LimbusWorkspaceCon
                         LimbusArtwork(item.path, root, Modifier.width(80.dp).height(72.dp))
                         Column(Modifier.weight(1f)) {
                             Text(item.title, style = MaterialTheme.typography.titleSmall)
-                            NumberField("权重", config.themePackWeights[item.name] ?: 10, 0..1000, editable) { change(config.copy(themePackWeights = config.themePackWeights + (item.name to it))) }
+                            NumberField("权重", item.weight(config.themePackWeights), 0..999, editable) { change(config.copy(themePackWeights = config.themePackWeights + (item.name to it))) }
                         }
                     }
                 }
@@ -247,18 +249,18 @@ private fun LogsPage(logs: List<String>) {
 }
 
 @Composable
-private fun ConfigTransferDialog(config: LimbusWorkspaceConfig, apply: (LimbusWorkspaceConfig) -> Unit, dismiss: () -> Unit) {
+private fun ConfigTransferDialog(config: LimbusWorkspaceConfig, editable: Boolean, apply: (LimbusWorkspaceConfig) -> Unit, dismiss: () -> Unit) {
     val clipboard = LocalClipboardManager.current
     var raw by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     AlertDialog(onDismissRequest = dismiss, title = { Text("导入 / 导出配置") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Hint("复制当前配置，或粘贴含 taskConfigs、teamConfigs、themePackWeights 的 LALC 配置。导入会替换当前边狱配置。")
-            OutlinedTextField(raw, { raw = it; error = null }, label = { Text("配置 JSON") }, modifier = Modifier.heightIn(max = 220.dp))
+            OutlinedTextField(raw, { raw = it; error = null }, enabled = editable, label = { Text("配置 JSON") }, modifier = Modifier.heightIn(max = 220.dp))
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
     }, confirmButton = {
-        TextButton(enabled = raw.isNotBlank(), onClick = {
+        TextButton(enabled = editable && raw.isNotBlank(), onClick = {
             runCatching {
                 val root = LimbusWorkspaceConfig.json.parseToJsonElement(raw).jsonObject
                 require(root["taskConfigs"] is JsonObject && root["teamConfigs"] is JsonObject) { "缺少 taskConfigs 或 teamConfigs" }

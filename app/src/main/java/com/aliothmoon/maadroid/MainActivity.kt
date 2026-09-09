@@ -72,6 +72,7 @@ class MainActivity : AppCompatActivity(), PipHost {
         val splash = installSplashScreen()
         splash.setKeepOnScreenCondition { !isUiReady }
         super.onCreate(savedInstanceState)
+        _isInPictureInPicture.value = isInPictureInPictureMode
         dispatchScheduledLaunchIntent(intent)
         enableEdgeToEdge()
         lifecycleScope.launch {

@@ -39,6 +39,8 @@ import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.aliothmoon.maadroid.R
+import com.aliothmoon.maadroid.constant.DefaultDisplayConfig
+import com.aliothmoon.maadroid.engine.DisplaySpec
 import com.aliothmoon.maadroid.engine.EngineRegistry
 import com.aliothmoon.maadroid.engine.EngineSession
 import com.aliothmoon.maadroid.engine.EngineTaskStore
@@ -46,6 +48,7 @@ import com.aliothmoon.maadroid.manager.RemoteServiceManager
 import com.aliothmoon.maadroid.presentation.viewmodel.EngineTaskViewModel
 import com.aliothmoon.maadroid.presentation.components.LogExportController
 import com.aliothmoon.maadroid.presentation.state.EngineTaskExecutionState
+import com.aliothmoon.maadroid.presentation.pip.LocalIsInPip
 import com.aliothmoon.maadroid.ui.asString
 import com.aliothmoon.maadroid.remote.EngineDataRoot
 import com.aliothmoon.maadroid.engine.resource.EngineResourceService
@@ -66,12 +69,15 @@ fun EngineTaskView(
     hostTaskActive: Boolean,
     canStart: () -> Boolean,
     viewModelStoreOwner: ViewModelStoreOwner = checkNotNull(LocalViewModelStoreOwner.current),
+    isActivePage: Boolean = true,
 ) {
     val profile = EngineRegistry.provider(engineId)?.profile
+    val chromeHidden = LocalIsInPip.current ||
+        LocalEnginePreviewNavigation.current?.fullscreenEngineId == engineId
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            if (!chromeHidden) TopAppBar(
                 title = {
                     Text(profile?.displayNameRes?.let { stringResource(it) } ?: engineId)
                 },
@@ -87,7 +93,8 @@ fun EngineTaskView(
             engineId = engineId,
             hostTaskActive = hostTaskActive,
             canStart = canStart,
-            modifier = Modifier.padding(padding),
+            modifier = if (chromeHidden) Modifier else Modifier.padding(padding),
+            isActivePage = isActivePage,
             viewModelStoreOwner = viewModelStoreOwner,
         )
     }
@@ -101,6 +108,7 @@ fun EngineTaskContent(
     canStart: () -> Boolean,
     modifier: Modifier = Modifier,
     viewModelStoreOwner: ViewModelStoreOwner = checkNotNull(LocalViewModelStoreOwner.current),
+    isActivePage: Boolean = true,
 ) {
     key(engineId) {
         val context = LocalContext.current.applicationContext
@@ -138,6 +146,7 @@ fun EngineTaskContent(
         val workspaceDraft by viewModel.workspaceDraft.collectAsStateWithLifecycle()
         val logs by viewModel.logs.collectAsStateWithLifecycle()
         val previewReady by viewModel.previewReady.collectAsStateWithLifecycle()
+        val pipOnHome by settings.pipOnHome.collectAsStateWithLifecycle()
         val profile = EngineRegistry.provider(engineId)?.profile
         val workspace = viewModel.workspace
         // Start idle workspaces with room to configure teams/packs; later task state changes
@@ -148,115 +157,121 @@ fun EngineTaskContent(
         var showLogExport by rememberSaveable { mutableStateOf(false) }
         // Keep the document launcher registered even while the sheet is closed or the task is idle.
         LogExportController(
-            sheetVisible = showLogExport,
+            sheetVisible = showLogExport && !LocalIsInPip.current &&
+                LocalEnginePreviewNavigation.current?.fullscreenEngineId != engineId,
             onSheetDismiss = { showLogExport = false },
         )
 
-        if ((hostTaskActive && !running) || (activeEngineId != null && activeEngineId != engineId)) {
-            EngineTaskBlockedContent(modifier)
-        } else if (viewModel.panels.isEmpty()) {
-            Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(stringResource(R.string.engine_no_task_panels))
-            }
-        } else {
-            BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-                val resourceDetailsMaxHeight = maxHeight * 0.2f
-                Column(modifier = Modifier.fillMaxSize()) {
-                    // Give nested workspace lists a finite viewport after measuring the footer.
-                    // Collapsing the preview returns its entire weight to the configuration area.
-                    Column(Modifier.fillMaxWidth().weight(1f)) {
-                        profile?.display?.let { display ->
-                            EnginePreviewControls(
-                                expanded = previewExpanded,
-                                isRunning = running,
-                                onToggleExpanded = { previewExpanded = !previewExpanded },
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                            )
-                            if (previewExpanded) {
-                                // Disposal only detaches the borrowed preview Surface. The VM and
-                                // its running session remain alive while the configuration is used.
-                                EngineDisplayPreview(
-                                    previewReady = previewReady,
+        EnginePreviewHost(
+            engineId = engineId,
+            viewModel = viewModel,
+            display = profile?.display ?: DisplaySpec(DefaultDisplayConfig.WIDTH, DefaultDisplayConfig.HEIGHT),
+            previewReady = previewReady,
+            running = running,
+            stopping = stopping,
+            expanded = previewExpanded,
+            isActivePage = isActivePage,
+            pipOnHome = pipOnHome,
+            modifier = modifier,
+        ) { preview, enterFullscreen ->
+            if ((hostTaskActive && !running) || (activeEngineId != null && activeEngineId != engineId)) {
+                EngineTaskBlockedContent()
+            } else if (viewModel.panels.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(stringResource(R.string.engine_no_task_panels))
+                }
+            } else {
+                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                    val resourceDetailsMaxHeight = maxHeight * 0.2f
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        // Give nested workspace lists a finite viewport after measuring the footer.
+                        // Collapsing the preview returns its entire weight to the configuration area.
+                        Column(Modifier.fillMaxWidth().weight(1f)) {
+                            profile?.display?.let {
+                                EnginePreviewControls(
+                                    expanded = previewExpanded,
                                     isRunning = running,
-                                    displayWidth = display.width,
-                                    displayHeight = display.height,
-                                    onSurfaceAvailable = viewModel::onPreviewSurfaceAvailable,
-                                    onSurfaceDestroyed = viewModel::onPreviewSurfaceDestroyed,
-                                    modifier = Modifier.fillMaxWidth().weight(3f)
-                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    onToggleExpanded = { previewExpanded = !previewExpanded },
+                                    canEnterFullscreen = previewReady && !stopping && isActivePage,
+                                    onEnterFullscreen = enterFullscreen,
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                                 )
+                                if (previewExpanded) {
+                                    // Full available width, 16:9, with the same 16dp margins as Arknights.
+                                    preview()
+                                }
+                            }
+                            if (workspace != null) {
+                                Box(Modifier.fillMaxWidth().weight(5f)) {
+                                    workspace.Content(
+                                        configJson = workspaceDraft ?: tasks.workspaceConfig ?: workspace.initialConfig(tasks.enabled, tasks.params),
+                                        onConfigChange = viewModel::onWorkspaceChange,
+                                        editable = !running,
+                                        logs = logs,
+                                        resourceDir = profile?.resourcePacks?.firstOrNull()?.let { EngineDataRoot.forPack(context, it) },
+                                    )
+                                }
+                            } else EngineTaskList(
+                                panels = viewModel.panels,
+                                enabledOf = { tasks.enabled[it.taskType] ?: it.enabledByDefault },
+                                paramsOf = { tasks.params[it.taskType] ?: "" },
+                                onEnabledChange = viewModel::onEnabledChange,
+                                onParamsChange = viewModel::onParamsChange,
+                                expandedTaskType = expanded,
+                                onToggleExpand = viewModel::onToggleExpand,
+                                modifier = Modifier.weight(5f),
+                            )
+                        }
+
+                        // Available after process restart, even when in-memory engine logs are empty.
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(
+                                text = status?.asString() ?: stringResource(R.string.engine_log_export_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f).heightIn(max = 64.dp)
+                                    .verticalScroll(rememberScrollState()).padding(vertical = 4.dp),
+                            )
+                            TextButton(onClick = { showLogExport = true }) {
+                                Text(stringResource(R.string.settings_log_export_chooser_title))
                             }
                         }
-                        if (workspace != null) {
-                            Box(Modifier.fillMaxWidth().weight(5f)) {
-                                workspace.Content(
-                                    configJson = workspaceDraft ?: tasks.workspaceConfig ?: workspace.initialConfig(tasks.enabled, tasks.params),
-                                    onConfigChange = viewModel::onWorkspaceChange,
-                                    editable = !running,
-                                    logs = logs,
-                                    resourceDir = profile?.resourcePacks?.firstOrNull()?.let { EngineDataRoot.forPack(context, it) },
-                                )
-                            }
-                        } else EngineTaskList(
-                            panels = viewModel.panels,
-                            enabledOf = { tasks.enabled[it.taskType] ?: it.enabledByDefault },
-                            paramsOf = { tasks.params[it.taskType] ?: "" },
-                            onEnabledChange = viewModel::onEnabledChange,
-                            onParamsChange = viewModel::onParamsChange,
-                            expandedTaskType = expanded,
-                            onToggleExpand = viewModel::onToggleExpand,
-                            modifier = Modifier.weight(5f),
-                        )
-                    }
 
-                    // Available after process restart, even when in-memory engine logs are empty.
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text(
-                            text = status?.asString() ?: stringResource(R.string.engine_log_export_hint),
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.weight(1f).heightIn(max = 64.dp)
-                                .verticalScroll(rememberScrollState()).padding(vertical = 4.dp),
-                        )
-                        TextButton(onClick = { showLogExport = true }) {
-                            Text(stringResource(R.string.settings_log_export_chooser_title))
-                        }
-                    }
-
-                    val downloadablePacks = profile?.resourcePacks.orEmpty()
-                        .filter { it.upstreamArchive != null }
-                    if (downloadablePacks.isNotEmpty()) {
-                        // Long download/error details scroll locally, keeping task actions visible.
-                        Column(
-                            Modifier.fillMaxWidth().heightIn(max = resourceDetailsMaxHeight)
-                                .verticalScroll(rememberScrollState()),
-                        ) {
-                            downloadablePacks.forEach { pack ->
-                                EngineResourceCard(pack, resourceService, running)
+                        val downloadablePacks = profile?.resourcePacks.orEmpty()
+                            .filter { it.upstreamArchive != null }
+                        if (downloadablePacks.isNotEmpty()) {
+                            // Long download/error details scroll locally, keeping task actions visible.
+                            Column(
+                                Modifier.fillMaxWidth().heightIn(max = resourceDetailsMaxHeight)
+                                    .verticalScroll(rememberScrollState()),
+                            ) {
+                                downloadablePacks.forEach { pack ->
+                                    EngineResourceCard(pack, resourceService, running)
+                                }
                             }
                         }
-                    }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Button(
-                            onClick = viewModel::start,
-                            enabled = !running,
-                            modifier = Modifier.weight(1f),
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            Text(stringResource(R.string.engine_start))
-                        }
-                        OutlinedButton(
-                            onClick = viewModel::stop,
-                            enabled = running && !stopping,
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Text(stringResource(if (stopping) R.string.engine_stopping else R.string.engine_stop))
+                            Button(
+                                onClick = viewModel::start,
+                                enabled = !running,
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Text(stringResource(R.string.engine_start))
+                            }
+                            OutlinedButton(
+                                onClick = viewModel::stop,
+                                enabled = running && !stopping,
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Text(stringResource(if (stopping) R.string.engine_stopping else R.string.engine_stop))
+                            }
                         }
                     }
                 }

@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import com.aliothmoon.maadroid.engine.EngineEvent
+import com.aliothmoon.maadroid.engine.EngineDeviceSession
 import com.aliothmoon.maadroid.engine.EngineSession
 import com.aliothmoon.maadroid.engine.EngineTaskStore
 import com.aliothmoon.maadroid.presentation.state.EngineTaskExecutionState
@@ -307,6 +308,103 @@ class EngineTaskViewModelTest {
         dispatcher.runCurrent()
         verify { session.setPreviewSurface(next) }
         verify(exactly = 0) { session.setPreviewSurface(null) }
+    }
+
+    @Test
+    fun previewInputIsUnavailableBeforePreparationAndWhileStopping() {
+        val model = model()
+        assertNull(model.openPreviewInput())
+        model.start()
+        dispatcher.runCurrent()
+        assertNull(model.openPreviewInput())
+        deviceReady.value = true
+        dispatcher.runCurrent()
+        model.stop()
+        assertNull(model.openPreviewInput())
+        verify(exactly = 0) { session.openManualInput() }
+    }
+
+    @Test
+    fun manualInputEventsAreSerializedAndClosingDropsUnsentGestures() {
+        val manual = mockk<EngineDeviceSession.ManualInput>(relaxed = true)
+        every { session.openManualInput() } returns manual
+        val model = model()
+        model.start()
+        dispatcher.runCurrent()
+        deviceReady.value = true
+        dispatcher.runCurrent()
+        val input = model.openPreviewInput()!!
+        input.touchDown(100, 200, 8)
+        input.touchMove(200, 300, 8)
+        input.touchUp(200, 300, 8)
+        dispatcher.runCurrent()
+        verifyOrder {
+            manual.touchDown(100, 200, 8)
+            manual.touchMove(200, 300, 8)
+            manual.touchUp(200, 300, 8)
+        }
+        input.touchDown(300, 400, 9)
+        input.close()
+        input.touchDown(400, 500, 10)
+        dispatcher.runCurrent()
+        verify(exactly = 0) { manual.touchDown(any(), any(), 9) }
+        verify(exactly = 0) { manual.touchDown(any(), any(), 10) }
+        verify(atLeast = 1) { manual.close() }
+        coVerify(exactly = 0) { session.stop() }
+        coVerify(exactly = 0) { session.close() }
+    }
+
+    @Test
+    fun previewControllerKeepsItsCapturedLeaseAcrossSessionReplacement() {
+        val oldManual = mockk<EngineDeviceSession.ManualInput>(relaxed = true)
+        val nextManual = mockk<EngineDeviceSession.ManualInput>(relaxed = true)
+        val nextSession = mockk<EngineSession>(relaxed = true) {
+            coEvery { prepare() } returns null
+            coEvery { start() } returns true
+            every { events() } returns MutableSharedFlow()
+            every { previewReady } returns MutableStateFlow(true)
+            every { appendTask(any(), any()) } returns 1
+            every { openManualInput() } returns nextManual
+        }
+        every { session.openManualInput() } returns oldManual
+        var factorySession = session
+        val model = model(factory = { factorySession })
+        model.start()
+        dispatcher.runCurrent()
+        deviceReady.value = true
+        dispatcher.runCurrent()
+        val oldInput = model.openPreviewInput()!!
+        model.stop()
+        dispatcher.runCurrent()
+        factorySession = nextSession
+        model.start()
+        dispatcher.runCurrent()
+        val nextInput = model.openPreviewInput()!!
+        nextInput.touchDown(100, 200, 8)
+        oldInput.touchMove(1, 2, 8)
+        oldInput.close()
+        dispatcher.runCurrent()
+        verify(exactly = 1) { nextManual.touchDown(100, 200, 8) }
+        verify(exactly = 0) { nextManual.touchMove(any(), any(), any()) }
+        verify(exactly = 0) { nextManual.close() }
+        nextInput.close()
+        dispatcher.runCurrent()
+    }
+
+    @Test
+    fun cancellingTheViewModelBeforeTheInputWorkerRunsStillReleasesItsController() {
+        val manual = mockk<EngineDeviceSession.ManualInput>(relaxed = true)
+        every { session.openManualInput() } returns manual
+        val model = model()
+        model.start()
+        dispatcher.runCurrent()
+        deviceReady.value = true
+        dispatcher.runCurrent()
+        model.openPreviewInput()!!.touchDown(100, 200, 8)
+        scope.cancel()
+        dispatcher.runCurrent()
+        verify(exactly = 0) { manual.touchDown(any(), any(), any()) }
+        verify(atLeast = 1) { manual.close() }
     }
 
     /** 可控地延后 launch，覆盖连续点击早于协程执行的竞态；不依赖 Android Main looper。 */

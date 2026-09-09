@@ -24,6 +24,7 @@ import com.aliothmoon.maadroid.data.background.BackgroundImageStore
 import com.aliothmoon.maadroid.ui.components.consumeAllPointerEvents
 import com.aliothmoon.maadroid.presentation.pip.LocalIsInPip
 import com.aliothmoon.maadroid.presentation.view.background.BackgroundGamesView
+import com.aliothmoon.maadroid.presentation.view.engine.LocalEnginePreviewNavigation
 import com.aliothmoon.maadroid.presentation.view.home.HomeView
 import com.aliothmoon.maadroid.presentation.view.settings.SettingsView
 import com.aliothmoon.maadroid.presentation.viewmodel.BackgroundTaskViewModel
@@ -55,7 +56,8 @@ fun MainScreen(
     val pagerState = rememberPagerState(pageCount = { BottomNavTab.all.size })
     val scope = rememberCoroutineScope()
     val reduceMotion = LocalReduceMotion.current
-    val chromeHidden = fullscreen || LocalIsInPip.current
+    val chromeHidden = fullscreen || LocalIsInPip.current ||
+        LocalEnginePreviewNavigation.current?.fullscreenEngineId != null
     val appSettings: AppSettingsManager = koinInject()
 
     // targetPage：点击/滑动一旦确定目标即生效，停稳后等于 currentPage。

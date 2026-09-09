@@ -32,9 +32,14 @@ class EngineSession(
     private val closeMutex = Mutex()
     private val previewLock = Any()
     private var previewSurface: Surface? = null
+    private var acceptsManualInput = false
     private val _previewReady = MutableStateFlow(false)
     val previewReady = _previewReady.asStateFlow()
     val isRunning: Boolean get() = ownedEngine?.isRunning == true
+
+    fun openManualInput(): EngineDeviceSession.ManualInput? = synchronized(previewLock) {
+        if (acceptsManualInput && _previewReady.value) deviceSession?.openManualInput() else null
+    }
 
     /** A tab owns only this surface, not the display or the automation lifetime. */
     fun setPreviewSurface(surface: Surface?) = synchronized(previewLock) {
@@ -82,6 +87,7 @@ class EngineSession(
                         AppDiagnostics.failure(engineId, "preview.attach", failure)
                     }
                     _previewReady.value = true
+                    acceptsManualInput = true
                 }
                 trace("device.ready", "display=${device.displayId} package=${device.packageName}")
                 trace("engine.connect")
@@ -123,6 +129,10 @@ class EngineSession(
 
     suspend fun close(): Unit = withContext(NonCancellable + Dispatchers.IO) {
         closeMutex.withLock {
+            synchronized(previewLock) {
+                acceptsManualInput = false
+                deviceSession?.releaseManualInput()
+            }
             try {
                 check(ownedEngine?.stop() != false) { "引擎尚未停止，保留设备会话以便重试停止" }
             } catch (failure: Throwable) {

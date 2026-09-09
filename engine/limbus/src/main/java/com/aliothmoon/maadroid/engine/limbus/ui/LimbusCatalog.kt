@@ -1,61 +1,75 @@
 package com.aliothmoon.maadroid.engine.limbus.ui
 
-import android.content.Context
-import android.graphics.BitmapFactory
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Box
-import androidx.compose.material3.Text
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
 import java.io.File
 
-@Serializable
-internal data class CatalogEntry(val name: String, val title: String, val style: String = "", val path: String, val weight: Int = 10)
+internal data class CatalogEntry(
+    val name: String,
+    val title: String,
+    val style: String = "",
+    val path: String,
+) {
+    // LALC theme_pack_page.dart: saved user weight, otherwise 10. The backend's
+    // theme_pack_cfg.json is a desktop user's configuration, not catalog metadata.
+    fun weight(weights: Map<String, Int>): Int = weights[name] ?: 10
+}
 
-@Serializable
-internal data class LimbusCatalog(val gifts: List<CatalogEntry> = emptyList(), val packs: List<CatalogEntry> = emptyList()) {
+/** Derived from the installed LALC archive, never merged with an APK snapshot. */
+internal data class LimbusCatalog(
+    val gifts: List<CatalogEntry> = emptyList(),
+    val packs: List<CatalogEntry> = emptyList(),
+) {
     companion object {
-        fun load(context: Context, root: File?): LimbusCatalog {
-            val bundled = context.assets.open("lalc/ui/catalog.json").bufferedReader().use {
-                Json { ignoreUnknownKeys = true }.decodeFromString<LimbusCatalog>(it.readText())
-            }
-            // 安装的上游图片可增加新条目；用户权重和偏好独立保存，更新不覆盖。
-            fun extend(entries: List<CatalogEntry>, directory: String): List<CatalogEntry> {
-                val result = entries.associateByTo(linkedMapOf()) { it.name }
-                root?.resolve("img/general/$directory")?.takeIf { it.isDirectory }?.walkTopDown()?.filter { it.isFile && it.extension == "png" }?.forEach { file ->
-                    result.putIfAbsent(file.nameWithoutExtension, CatalogEntry(file.nameWithoutExtension, file.nameWithoutExtension, file.parentFile?.name.orEmpty(), file.relativeTo(root).invariantSeparatorsPath))
+        fun load(root: File?): LimbusCatalog {
+            if (root == null || !root.isDirectory) return LimbusCatalog()
+            val language = root.resolve("config/language/zh/ego_gifts.json")
+            val titles = if (language.isFile) Json.parseToJsonElement(language.readText()).jsonObject else emptyMap()
+            val giftRoot = root.resolve("img/general/ego_gifts")
+            val gifts = giftRoot.walkTopDown().filter { it.isFile && it.extension == "png" }
+                .sortedBy { it.relativeTo(root).invariantSeparatorsPath }.map { file ->
+                    val name = file.nameWithoutExtension
+                    val title = (titles[name] as? JsonPrimitive)?.takeIf { it.isString }?.content
+                        ?.takeIf { it.isNotBlank() } ?: name
+                    CatalogEntry(name, title, file.parentFile!!.relativeTo(giftRoot).invariantSeparatorsPath,
+                        file.relativeTo(root).invariantSeparatorsPath)
+                }.distinctBy { it.name }.toList()
+            // Upstream lists only direct children of theme_packs.
+            val packs = root.resolve("img/general/theme_packs").listFiles().orEmpty()
+                .filter { it.isFile && it.extension == "png" }.sortedBy { it.name }.map { file ->
+                    CatalogEntry(file.nameWithoutExtension, file.nameWithoutExtension,
+                        path = file.relativeTo(root).invariantSeparatorsPath)
                 }
-                return result.values.toList()
-            }
-            return LimbusCatalog(extend(bundled.gifts, "ego_gifts"), extend(bundled.packs, "theme_packs"))
+            return LimbusCatalog(gifts, packs)
         }
     }
 }
 
-@Composable
-internal fun LimbusArtwork(path: String, root: File?, modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    val bitmap by produceState<ImageBitmap?>(null, path, root) {
-        value = withContext(Dispatchers.IO) {
-            runCatching {
-                val installed = root?.resolve(path)
-                val decoded = if (installed?.isFile == true) BitmapFactory.decodeFile(installed.path)
-                else context.assets.open("lalc/ui/$path").use { BitmapFactory.decodeStream(it) }
-                decoded?.asImageBitmap()
-            }.getOrNull()
+internal data class LimbusCatalogState(
+    val revision: String? = null,
+    val catalog: LimbusCatalog = LimbusCatalog(),
+    val message: String? = "正在读取资源图鉴…",
+)
+
+/** Called off the UI thread. A new manifest revision replaces the whole catalog. */
+internal class LimbusCatalogReader {
+    private var source: Pair<File?, String?>? = null
+    private var state = LimbusCatalogState()
+
+    fun refresh(root: File?, revision: String?): LimbusCatalogState {
+        val next = root to revision
+        if (next == source) return state
+        state = if (root == null || revision == null) {
+            LimbusCatalogState(message = "请先下载边狱资源，再配置图鉴。已有配置已保留，任务和队伍设置仍可编辑。")
+        } else {
+            try {
+                LimbusCatalogState(revision, LimbusCatalog.load(root), message = null)
+            } catch (_: Exception) {
+                LimbusCatalogState(revision, message = "图鉴资源读取失败，请重新下载边狱资源。已有配置已保留。")
+            }
         }
-    }
-    Box(modifier, contentAlignment = Alignment.Center) {
-        if (bitmap != null) Image(bitmap!!, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.matchParentSize())
-        else Text("◇")
+        source = next
+        return state
     }
 }

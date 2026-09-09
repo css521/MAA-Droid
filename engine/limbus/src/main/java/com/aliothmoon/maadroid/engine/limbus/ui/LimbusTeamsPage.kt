@@ -17,7 +17,7 @@ import com.aliothmoon.maadroid.engine.limbus.config.LimbusWorkspaceConfig
 import java.io.File
 
 @Composable
-internal fun TeamsPage(config: LimbusWorkspaceConfig, change: (LimbusWorkspaceConfig) -> Unit, editable: Boolean, catalog: LimbusCatalog, root: File?) {
+internal fun TeamsPage(config: LimbusWorkspaceConfig, change: (LimbusWorkspaceConfig) -> Unit, editable: Boolean, resources: LimbusCatalogState, root: File?) {
     var slot by rememberSaveable { mutableIntStateOf(0) }
     var section by rememberSaveable { mutableIntStateOf(0) }
     var copyTo by rememberSaveable { mutableStateOf(false) }
@@ -36,20 +36,23 @@ internal fun TeamsPage(config: LimbusWorkspaceConfig, change: (LimbusWorkspaceCo
                 FilterChip(section == index, { section = index }, label = { Text(title) })
             }
         }
+        resources.message?.let { message ->
+            Box(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) { Hint(message) }
+        }
         when (section) {
             0 -> MembersPage(team, update, editable, root)
             1 -> StarsPage(team, update, editable, root)
-            2 -> GiftsPage(team, update, editable, catalog, root)
+            2 -> GiftsPage(team, update, editable, resources.catalog, root)
             3 -> SkillsPage(team, update, editable, root)
         }
     }
-    if (copyTo) AlertDialog(onDismissRequest = { copyTo = false }, title = { Text("将 ${team.teamName} 复制到") }, text = {
+    if (copyTo && editable) AlertDialog(onDismissRequest = { copyTo = false }, title = { Text("将 ${team.teamName} 复制到") }, text = {
         LazyColumn(Modifier.heightIn(max = 350.dp)) {
             items((0 until 20).filter { it != slot }) { index ->
                 TextButton(onClick = {
                     change(config.withTeam(index, team.copy(teamName = config.team(index).teamName)))
                     copyTo = false
-                }, modifier = Modifier.fillMaxWidth()) { Text("${index + 1} · ${config.team(index).teamName}") }
+                }, enabled = editable, modifier = Modifier.fillMaxWidth()) { Text("${index + 1} · ${config.team(index).teamName}") }
             }
         }
     }, confirmButton = { TextButton(onClick = { copyTo = false }) { Text("取消") } })
@@ -141,6 +144,10 @@ private fun GiftsPage(team: LimbusTeamConfig, update: (LimbusTeamConfig) -> Unit
                     }
                 }
             }
+        }
+        if (catalog.gifts.isEmpty()) {
+            item { Hint("请先下载包含饰品图鉴的边狱资源，再配置单件饰品。已有允许 / 排除设置已保留。") }
+            return@LazyColumn
         }
         item { InputField("搜索饰品名称", search, true) { search = it } }
         item {

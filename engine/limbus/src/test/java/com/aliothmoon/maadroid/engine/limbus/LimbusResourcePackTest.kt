@@ -88,11 +88,24 @@ class LimbusResourcePackTest {
     @Test
     fun zipEntryMappingKeepsOnlyResourceDirs() {
         // 我们自己的包是平铺布局，四份资源原样落盘
-        listOf("config/task/main.json", "img/zh/battle/x.png", "ai/model/skill_icon/best_model.onnx")
+        listOf("config/task/main.json", "img/zh/battle/x.png", "ai/model/skill_icon/best_model.onnx",
+            "config/language/zh/ego_gifts.json", "img/general/ego_gifts/Bleed/Gift.png",
+            "img/general/theme_packs/Pack.png", "img/general/sinners/RyoShu.png",
+            "img/general/mirror/stars/mirror_00.png")
             .forEach { assertTrue(it, LimbusResourcePack.mapZipEntry(it) == it) }
         // 目录条目与包外文件必须被忽略，避免热更包塞进无关内容
         listOf("config/", "README.md", "../evil.so", "lalc_backend/main.py")
             .forEach { assertNull(it, LimbusResourcePack.mapZipEntry(it)) }
+    }
+
+    @Test
+    fun upstreamArchiveAlreadyIncludesEveryDynamicUiSource() {
+        val archive = LimbusResourcePack.upstreamArchive
+        listOf("config/language/zh/ego_gifts.json", "img/general/ego_gifts/Bleed/Gift.png",
+            "img/general/theme_packs/Pack.png", "img/general/sinners/RyoShu.png",
+            "img/general/mirror/stars/mirror_00.png").forEach { path ->
+            assertTrue(path, archive.mapEntry("upstream-commit/lalc_backend/$path") == path)
+        }
     }
 }
 

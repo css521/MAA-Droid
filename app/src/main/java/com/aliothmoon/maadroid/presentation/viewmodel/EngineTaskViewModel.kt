@@ -7,6 +7,7 @@ import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.common.i18n.UiText
 import com.aliothmoon.maadroid.common.i18n.uiTextOf
 import com.aliothmoon.maadroid.engine.EngineRegistry
+import com.aliothmoon.maadroid.engine.EngineDeviceSession
 import com.aliothmoon.maadroid.engine.EngineSession
 import com.aliothmoon.maadroid.engine.EngineTaskStore
 import com.aliothmoon.maadroid.engine.LogLevel
@@ -25,6 +26,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -36,6 +38,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import timber.log.Timber
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * 驱动「按引擎声明渲染的任务页」。
@@ -97,6 +100,50 @@ class EngineTaskViewModel(
     private val previewSurface = AtomicReference<Surface?>(null)
     private val previewMutex = Mutex()
     private var previewJob: Job? = null
+
+    /** Capture the current device once; queued events must not look up a newer session. */
+    fun openPreviewInput(): PreviewInput? {
+        if (!_previewReady.value || _stopping.value) return null
+        val input = session?.openManualInput() ?: return null
+        return PreviewInput(input, viewModelScope, previewDispatcher)
+    }
+
+    class PreviewInput internal constructor(
+        private val input: EngineDeviceSession.ManualInput,
+        scope: CoroutineScope,
+        dispatcher: CoroutineDispatcher,
+    ) : AutoCloseable {
+        private val closed = AtomicBoolean(false)
+        private val events = Channel<(EngineDeviceSession.ManualInput) -> Unit>(Channel.UNLIMITED)
+
+        init {
+            scope.launch(dispatcher) {
+                try {
+                    for (event in events) if (!closed.get()) event(input)
+                } finally {
+                    closed.set(true)
+                    events.cancel()
+                    input.close()
+                }
+            }.invokeOnCompletion {
+                // Also release if the scope was cancelled before the worker first ran.
+                close()
+                input.close()
+            }
+        }
+
+        fun touchDown(x: Int, y: Int, contact: Int) = enqueue { it.touchDown(x, y, contact) }
+        fun touchMove(x: Int, y: Int, contact: Int) = enqueue { it.touchMove(x, y, contact) }
+        fun touchUp(x: Int, y: Int, contact: Int) = enqueue { it.touchUp(x, y, contact) }
+
+        private fun enqueue(event: (EngineDeviceSession.ManualInput) -> Unit) {
+            if (!closed.get()) events.trySend(event)
+        }
+
+        override fun close() {
+            if (closed.compareAndSet(false, true)) events.close()
+        }
+    }
 
     fun onPreviewSurfaceAvailable(surface: Surface) {
         previewSurface.set(surface)

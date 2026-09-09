@@ -20,6 +20,7 @@ class EngineDeviceSessionTest {
         val profile = mockk<GameProfile>()
         val frames = mockk<FrameSource>()
         val control = mockk<DeviceControl>()
+        val input = mockk<InputSink>(relaxed = true)
         init {
             every { profile.id } returns "test"
             every { profile.display } returns DisplaySpec(3, 2, 320)
@@ -29,6 +30,7 @@ class EngineDeviceSessionTest {
             every { lease.displayId } returns 7
             every { handle.frames } returns frames
             every { handle.control } returns control
+            every { handle.input } returns input
             every { control.startApp("installed") } returns true
             coEvery { frames.grab() } returns Frame(3, 2, 9, 1, ByteBuffer.allocateDirect(18))
         }
@@ -109,5 +111,108 @@ class EngineDeviceSessionTest {
         session.close()
         session.setPreviewSurface(surface)
         verify(exactly = 1) { h.handle.setPreviewSurface(surface) }
+    }
+
+    @Test fun manualTouchesUseReservedSlotsAndDisposeReleasesOnlyTheirLastPositions() = runBlocking {
+        val h = Harness()
+        val session = h.open()
+        val manual = session.openManualInput()!!
+        listOf(-1, 0, 7, 16).forEach { manual.touchDown(1, 1, it) }
+        verify(exactly = 0) { h.input.touchDown(any(), any(), any()) }
+
+        // The pipeline owns contact 0, independently of the preview.
+        h.input.touchDown(0, 0, 0)
+        manual.touchDown(1, 1, 8)
+        manual.touchDown(2, 1, 15)
+        manual.touchMove(2, 0, 8)
+        manual.touchUp(2, 1, 15)
+        session.setPreviewSurface(null)
+        manual.close()
+        manual.close()
+
+        verifyOrder {
+            h.input.touchDown(1, 1, 8)
+            h.input.touchDown(2, 1, 15)
+            h.input.touchMove(2, 0, 8)
+            h.input.touchUp(2, 1, 15)
+            h.input.touchUp(2, 0, 8)
+        }
+        verify(exactly = 1) { h.input.touchUp(any(), any(), 8) }
+        verify(exactly = 1) { h.input.touchUp(any(), any(), 15) }
+        verify(exactly = 0) { h.input.touchUp(any(), any(), 0) }
+        verify(exactly = 0) { h.input.touchCancel() }
+        verify(exactly = 0) { h.handle.close() }
+        session.close()
+    }
+
+    @Test fun replacedPreviewCannotMoveOrReleaseTheNewPreviewsContacts() = runBlocking {
+        val h = Harness()
+        val session = h.open()
+        val old = session.openManualInput()!!
+        old.touchDown(1, 1, 8)
+        val next = session.openManualInput()!!
+        verify(exactly = 1) { h.input.touchUp(1, 1, 8) }
+        clearMocks(h.input, answers = false)
+        next.touchDown(2, 1, 8)
+        old.touchDown(0, 0, 9)
+        old.touchMove(0, 0, 8)
+        old.touchUp(0, 0, 8)
+        old.close()
+        verify(exactly = 1) { h.input.touchDown(any(), any(), any()) }
+        verify(exactly = 0) { h.input.touchMove(any(), any(), any()) }
+        verify(exactly = 0) { h.input.touchUp(any(), any(), any()) }
+        next.close()
+        verify { h.input.touchUp(2, 1, 8) }
+        session.close()
+    }
+
+    @Test fun closedSessionCannotInjectIntoAReplacementSession() = runBlocking {
+        val oldHarness = Harness()
+        val oldSession = oldHarness.open()
+        val old = oldSession.openManualInput()!!
+        old.touchDown(1, 1, 8)
+        oldSession.close()
+        assertNull(oldSession.openManualInput())
+        clearMocks(oldHarness.input, answers = false)
+
+        val nextHarness = Harness()
+        val nextSession = nextHarness.open()
+        val next = nextSession.openManualInput()!!
+        next.touchDown(2, 1, 8)
+        old.touchDown(0, 0, 8)
+        old.touchMove(0, 0, 8)
+        old.touchUp(0, 0, 8)
+        old.close()
+        verify { oldHarness.input wasNot Called }
+        verify(exactly = 0) { nextHarness.input.touchUp(any(), any(), any()) }
+        verify(exactly = 0) { nextHarness.input.touchCancel() }
+        nextSession.close()
+    }
+
+    @Test fun failedManualInputReleasesOtherManualContactsWithoutCancellingAutomation() = runBlocking {
+        val h = Harness()
+        val session = h.open()
+        val manual = session.openManualInput()!!
+        manual.touchDown(1, 1, 8)
+        every { h.input.touchDown(2, 1, 9) } throws IllegalStateException("expired lease")
+        manual.touchDown(2, 1, 9)
+        manual.touchDown(1, 0, 10)
+        verify { h.input.touchUp(1, 1, 8); h.input.touchUp(2, 1, 9) }
+        verify(exactly = 0) { h.input.touchDown(any(), any(), 10) }
+        verify(exactly = 0) { h.input.touchCancel() }
+        session.close()
+    }
+
+    @Test fun failedManualReleaseStillClosesTheOwnedDevice() = runBlocking {
+        val h = Harness()
+        val session = h.open()
+        val manual = session.openManualInput()!!
+        manual.touchDown(1, 1, 8)
+        manual.touchDown(2, 1, 9)
+        every { h.input.touchUp(any(), any(), 8) } throws IllegalStateException("dead remote")
+        session.close()
+        verify { h.input.touchUp(2, 1, 9) }
+        verify(exactly = 1) { h.handle.close() }
+        verify(exactly = 0) { h.input.touchCancel() }
     }
 }

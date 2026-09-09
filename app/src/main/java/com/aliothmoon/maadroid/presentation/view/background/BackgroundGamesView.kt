@@ -9,10 +9,14 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,6 +28,7 @@ import com.aliothmoon.maadroid.engine.EngineRegistry
 import com.aliothmoon.maadroid.presentation.components.MaaWindowInsets
 import com.aliothmoon.maadroid.presentation.pip.LocalIsInPip
 import com.aliothmoon.maadroid.presentation.view.engine.EngineTaskContent
+import com.aliothmoon.maadroid.presentation.view.engine.LocalEnginePreviewNavigation
 import com.aliothmoon.maadroid.presentation.view.engine.EngineTaskBlockedContent
 import com.aliothmoon.maadroid.presentation.view.engine.engineTaskExecutionState
 import com.aliothmoon.maadroid.presentation.viewmodel.BackgroundTaskViewModel
@@ -49,9 +54,16 @@ fun BackgroundGamesView(
     val pageStates = rememberSaveableStateHolder()
     val executionState = engineTaskExecutionState()
     val activeEngineId by executionState.activeEngineId.collectAsStateWithLifecycle()
-    val chromeHidden = fullscreen || LocalIsInPip.current
-    // 全屏 / PiP 属于方舟预览，即使偏好同时改变也要保留它的 Surface 和退出逻辑。
-    val displayedGameId = if (chromeHidden) EngineIds.ARKNIGHTS else currentGameId
+    val engineFullscreen = LocalEnginePreviewNavigation.current?.fullscreenEngineId
+    val chromeHidden = fullscreen || LocalIsInPip.current || engineFullscreen != null
+    // Keep the game whose preview entered PiP even if the saved selection changes meanwhile.
+    var previewGameId by rememberSaveable { mutableStateOf(currentGameId) }
+    if (!chromeHidden) SideEffect { previewGameId = currentGameId }
+    val displayedGameId = engineFullscreen ?: when {
+        fullscreen -> EngineIds.ARKNIGHTS
+        LocalIsInPip.current -> previewGameId
+        else -> currentGameId
+    }
     val selectedProfile = profiles.firstOrNull { it.id == displayedGameId }
         ?: profiles.firstOrNull()
 
@@ -103,6 +115,7 @@ fun BackgroundGamesView(
                             engineId = selectedProfile.id,
                             hostTaskActive = hostTaskActive,
                             canStart = canStartEngineTask,
+                            isActivePage = isActivePage,
                         )
                     }
                 }

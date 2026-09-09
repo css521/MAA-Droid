@@ -75,6 +75,8 @@ import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import com.aliothmoon.maadroid.presentation.view.engine.EngineTaskView
+import com.aliothmoon.maadroid.presentation.view.engine.EnginePreviewNavigation
+import com.aliothmoon.maadroid.presentation.view.engine.LocalEnginePreviewNavigation
 
 /** 主 Tab 路由集合（与 [BottomNavTab.all] 单一真源），用于判断是否处于主界面。 */
 private val MAIN_TAB_ROUTES: Set<String> = BottomNavTab.all.mapTo(HashSet()) { it.route }
@@ -108,6 +110,7 @@ fun AppNavigation(
             .map { it.isFullscreenMonitor }
             .distinctUntilChanged()
     }.collectAsStateWithLifecycle(initialValue = false)
+    val enginePreviewNavigation = remember { EnginePreviewNavigation() }
     var forceShowAnnouncement by remember { mutableStateOf(false) }
     var announcementDismissedOnce by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
@@ -193,6 +196,7 @@ fun AppNavigation(
     CompositionLocalProvider(
         LocalToaster provides toaster,
         LocalOnboardingState provides onboardingState,
+        LocalEnginePreviewNavigation provides enginePreviewNavigation,
     ) {
         Box(modifier = Modifier
             .fillMaxSize()
@@ -229,6 +233,8 @@ fun AppNavigation(
                             hostTaskActive = hostTaskActive,
                             canStart = canStartEngineTask,
                             viewModelStoreOwner = engineViewModelStoreOwner,
+                            isActivePage = currentNavRoute == Routes.ENGINE_TASK &&
+                                navBackStackEntry?.arguments?.getString("engineId") == engineId,
                         )
                     }
                 }
