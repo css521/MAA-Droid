@@ -10,12 +10,42 @@ import org.koin.test.verify.injectedParameters
 import org.koin.test.verify.verify
 import com.aliothmoon.maadroid.data.config.MaaPathConfig
 import com.aliothmoon.maadroid.data.resource.ActivityManager
+import com.aliothmoon.maadroid.domain.service.CoreDataPusher
+import com.aliothmoon.maadroid.domain.service.MaaResourceLoader
+import com.aliothmoon.maadroid.engine.arknights.ArknightsResourcePreparation
+import com.aliothmoon.maadroid.engine.arknights.MaaResourcePreparation
+import io.mockk.mockk
+import org.junit.Assert.assertSame
+import org.koin.dsl.koinApplication
 
 /**
  * 静态校验 Koin 依赖图，防止运行期 NoDefinitionFound 启动崩溃
  * 模块列表与 MaaApplication.startKoin 保持一致
  */
 class AppModuleVerifyTest {
+
+    @Test
+    fun arknightsResourcePreparationContractResolvesToTheRegisteredSingleton() {
+        val loader = mockk<MaaResourceLoader>()
+        val paths = mockk<MaaPathConfig>()
+        val pusher = mockk<CoreDataPusher>()
+        val activity = mockk<ActivityManager>()
+        val application = koinApplication {
+            modules(appModule, module {
+                single { loader }
+                single { paths }
+                single { pusher }
+                single { activity }
+            })
+        }
+        try {
+            val concrete = application.koin.get<ArknightsResourcePreparation>()
+            assertSame(concrete, application.koin.get<MaaResourcePreparation>())
+            assertSame(concrete, application.koin.get<MaaResourcePreparation>())
+        } finally {
+            application.close()
+        }
+    }
 
     @Test
     fun allModules_dependencyGraph_isClosed() {

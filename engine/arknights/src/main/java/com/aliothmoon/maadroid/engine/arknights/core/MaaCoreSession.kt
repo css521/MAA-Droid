@@ -18,6 +18,8 @@ import kotlinx.serialization.json.intOrNull
  *
  * 生命周期调用由同一个控制器串行执行。Native 回调可并发到达，而且可能早于
  * AsyncConnect 返回；回调不获取生命周期锁，也不通过异步转发延迟任务参数刷新。
+ * 分步任务入口透传 native 返回值和异常，调用者负责失败后的 clearTasks/stop；
+ * startTasks 则负责完整计划的失败清理。
  */
 class MaaCoreSession(
     private val client: MaaCoreClient,
@@ -47,18 +49,29 @@ class MaaCoreSession(
     val isBusy: Boolean get() = pendingConnect.get()?.result?.isCompleted == false || client.running()
     val version: String get() = client.version()
 
-    fun clearTasks(): Boolean = !isBusy && client.stop()
+    /** 仅清理已初始化的闲置实例；pending Connect 同样禁止修改队列。 */
+    fun clearTasks(): Boolean {
+        check(initialized) { "MaaCore session has not been initialized" }
+        return !isBusy && client.stop()
+    }
 
+    /** 返回 native 的真实 taskId；忙碌时返回 0，不追加任务。 */
     fun appendTask(type: String, params: String): Int {
         check(initialized) { "MaaCore session has not been initialized" }
+        if (isBusy) return 0
         return client.appendTask(type, params)
     }
 
-    fun setTaskParams(taskId: Int, params: String): Boolean = client.setTaskParams(taskId, params)
+    /** 允许在运行中的同步 TaskChainStart 回调内回写，不查询 running 或获取生命周期锁。 */
+    fun setTaskParams(taskId: Int, params: String): Boolean {
+        check(initialized) { "MaaCore session has not been initialized" }
+        if (taskId <= 0 || pendingConnect.get()?.result?.isCompleted == false) return false
+        return client.setTaskParams(taskId, params)
+    }
 
     fun startQueuedTasks(): Boolean {
         check(initialized) { "MaaCore session has not been initialized" }
-        return client.start()
+        return !isBusy && client.start()
     }
 
     fun initialize(): Initialization {
@@ -109,7 +122,7 @@ class MaaCoreSession(
     /** 所有任务都接受后才能启动；拒绝其中一条时清空整个队列，避免运行残缺计划。 */
     fun startTasks(tasks: List<Task>, onAppended: (index: Int, taskId: Int) -> Unit): StartResult {
         check(initialized) { "MaaCore session has not been initialized" }
-        if (client.running()) return StartResult.Busy
+        if (isBusy) return StartResult.Busy
         // 上游 Stop 在非运行状态也会清空队列，清理此前启动失败留下的任务。
         if (!client.stop() || tasks.isEmpty()) return StartResult.Failed
         try {
@@ -126,7 +139,7 @@ class MaaCoreSession(
             return StartResult.Failed
         } catch (e: Exception) {
             // 保留原始异常，清理失败作为 suppressed 交给宿主诊断。
-            runCatching { client.stop() }.exceptionOrNull()?.let(e::addSuppressed)
+            runCatching { client.stop() }.exceptionOrNull()?.takeIf { it !== e }?.let(e::addSuppressed)
             throw e
         }
     }

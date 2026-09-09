@@ -82,6 +82,7 @@ class HostEngineIsolationContractTest {
         // Temporary Arknights-only adapter to its existing resource loader; not generic host code.
         // Keep an exact file entry so EngineSession and other host orchestration stay checked.
         "engine/arknights/ArknightsResourcePreparation.kt",
+        "engine/arknights/ArknightsEngineProvider.kt",
     )
 
     /**
@@ -100,7 +101,7 @@ class HostEngineIsolationContractTest {
         "presentation/viewmodel" to 61,      // 方舟 ViewModel 尚未随面板迁出
         "domain/service" to 43,              // MaaCore 生命周期已委托给引擎模块
         "data/model" to 39,                  // 方舟任务配置与宿主模型混居
-        "koin" to 20,                        // 方舟类进宿主容器；改构造函数注入后可清零
+        "koin" to 22,                        // 含方舟资源准备实现及其契约绑定
         "presentation/view/background" to 10, // BackgroundTaskView 直连方舟 panel 符号
         "domain/usecase" to 9,               // AnalyzeTaskChainUseCase 独占多数
         "presentation/view/settings" to 8,   // 成就 UI
@@ -168,7 +169,7 @@ class HostEngineIsolationContractTest {
         "com.aliothmoon.maadroid.presentation.viewmodel." to 15,
         // → 随 TaskChainState 一起迁入方舟（P2）。MaaPathConfig 已解耦（10→9），
         // 剩下的主要是 ActivityManager 对 TaskChainState 的依赖
-        "com.aliothmoon.maadroid.data.preferences." to 7,
+        "com.aliothmoon.maadroid.data.preferences." to 9, // 含方舟 provider 的 prepare 选项快照
         "com.aliothmoon.maadroid.presentation.state." to 1,
         // 已为 0：一旦出现即是新增的反向依赖
         "com.aliothmoon.maadroid.koin." to 0,

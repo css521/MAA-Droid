@@ -88,6 +88,8 @@ import com.aliothmoon.maadroid.domain.service.WakeUnlockEngine
 import com.aliothmoon.maadroid.domain.service.update.UpdateService
 import com.aliothmoon.maadroid.domain.service.update.checker.AppVersionChecker
 import com.aliothmoon.maadroid.domain.service.update.checker.ResourceVersionChecker
+import com.aliothmoon.maadroid.engine.arknights.ArknightsResourcePreparation
+import com.aliothmoon.maadroid.engine.arknights.MaaResourcePreparation
 import com.aliothmoon.maadroid.maa.callback.ConnectionInfoHandler
 import com.aliothmoon.maadroid.maa.callback.CopilotRuntimeStateStore
 import com.aliothmoon.maadroid.maa.callback.MaaCallbackDispatcher
@@ -246,6 +248,7 @@ val appModule = module {
 
     singleOf(::ResourceInitService)
     singleOf(::MaaResourceLoader)
+    singleOf(::ArknightsResourcePreparation) { bind<MaaResourcePreparation>() }
     singleOf(::MaaSessionLogger)
 
     // 外部通知

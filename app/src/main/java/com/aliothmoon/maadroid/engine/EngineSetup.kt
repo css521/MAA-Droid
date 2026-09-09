@@ -1,6 +1,6 @@
 package com.aliothmoon.maadroid.engine
 
-import com.aliothmoon.maadroid.engine.arknights.ArknightsProfile
+import com.aliothmoon.maadroid.engine.arknights.ArknightsEngineProvider
 import com.aliothmoon.maadroid.engine.limbus.LimbusEngine
 import com.aliothmoon.maadroid.engine.limbus.LimbusProfile
 import com.aliothmoon.maadroid.engine.limbus.ui.LimbusUi
@@ -24,29 +24,10 @@ object EngineSetup {
     @Synchronized
     fun install() {
         if (done) return
-        EngineRegistry.register(ArknightsEngineProvider)
+        EngineRegistry.register(ArknightsEngineProvider())
         EngineRegistry.register(LimbusEngineProvider)
         done = true
         Timber.i("EngineSetup: engines=%s", EngineRegistry.profiles().map { it.id })
-    }
-}
-
-/**
- * 方舟引擎供给。
- *
- * [createEngine] 暂未实现 —— MaaCompositionService 已委托引擎模块的 MaaCoreSession
- * 管理核心生命周期，资源准备与业务回调仍走旧编排，尚未收拢成 AutomationEngine。
- * 但 profile 与资源包已可用，宿主的游戏列表与资源中心因此已能同时看到两个游戏。
- */
-private object ArknightsEngineProvider : EngineProvider {
-    override val profile: GameProfile = ArknightsProfile
-
-    override fun createEngine(): AutomationEngine =
-        TODO("方舟引擎待从 MaaCompositionService 收拢为 AutomationEngine 实现")
-
-    override val ui: EngineUi = object : EngineUi {
-        // 方舟现有任务面板仍挂在宿主导航里，随 presentation/view/panel 迁入时改为这里供给
-        override val taskPanels: List<TaskPanelSpec> = emptyList()
     }
 }
 

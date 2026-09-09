@@ -1,6 +1,6 @@
 # 新增一个游戏引擎
 
-本指南以当前边狱使用的通用任务页为入口。接入范围包括引擎模块、App 装配、资源来源、配置与设备生命周期；不要求复制方舟业务。方舟的实例、连接、任务队列与停止确认已下沉到 `MaaCoreSession`，但完整 `AutomationEngine` provider 和 UI 尚未统一，不能将它的旧入口当作已完成的通用示例。
+本指南以当前边狱使用的通用任务页为入口。接入范围包括引擎模块、App 装配、资源来源、配置与设备生命周期；不要求复制方舟业务。方舟已提供 `ArknightsEngine` 与 provider，但其现有任务页仍经 `MaaCompositionService` 运行，UI 和全部业务尚未统一，不能将它的旧入口当作已完成的通用示例。
 
 开始前先读[架构说明](ARCHITECTURE.md)。下文的 `newgame`、`NewGameProfile` 等是新模块的示例命名，不代表已有游戏实现。
 
@@ -82,6 +82,8 @@ object NewGameProvider : EngineProvider {
 
 `SettingsSection()` 和 `OnboardingSteps()` 虽已定义，当前尚无宿主调用点。重要的语言、渠道或授权前提应先放入已接通的 workspace；如需独立设置或引导流程，应单独完成宿主接线和验证。
 
+任务工作区应按需依赖 `:core:ui`，复用 `TaskPanelTabs`、`MaaSurfaceCard`、`TaskLogPanel` 等呈现组件，避免每个游戏复制一套颜色和布局。开始/停止、预览全屏与画中画仍由宿主任务页提供；引擎面板不应自行管理显示会话。
+
 ## 5. 实现资源包与更新
 
 参考 [ResourcePackSpec](../../../engine/api/src/main/java/com/aliothmoon/maadroid/engine/ResourcePackSpec.kt)、[UpstreamArchive](../../../engine/api/src/main/java/com/aliothmoon/maadroid/engine/UpstreamArchive.kt) 和 [LimbusResourcePack](../../../engine/limbus/src/main/java/com/aliothmoon/maadroid/engine/limbus/LimbusResourcePack.kt)。不要直接复用边狱的 pack ID、仓库或动作兼容表。
@@ -127,7 +129,7 @@ object NewGameProvider : EngineProvider {
 1. 在新模块持有专属 AIDL、服务实现和 App 侧 `AutomationEngine` 代理；保留 consumer rules 所需的 Binder/JNI 入口。
 2. 实现 [RemoteEngineFactory](../../../core/bridge/src/main/java/com/aliothmoon/maadroid/remote/RemoteEngineRegistry.kt) 的 `engineId`、`create`，及必要的 setup / close / version 回调。
 3. 只在 [MaaDroidRemoteService](../../../app/src/main/java/com/aliothmoon/maadroid/remote/MaaDroidRemoteService.kt) 注册工厂；通过游戏无关的 `getEngineService(id)` 获得 Binder。App 内执行的引擎无需此注册。
-4. 验证实际部署目录、native 库、进程死亡清理与远端停止语义。方舟的 JNA/AIDL 可作桥接参考，但其 TODO provider、旧任务页和专属资源投递不应复制为新引擎的完整启动模板。
+4. 验证实际部署目录、native 库、进程死亡清理与远端停止语义。方舟的 JNA/AIDL、`ArknightsEngine` 与会话测试可作桥接参考；其宿主资源适配、旧任务页和业务回调接线仍属方舟专用，不能直接复制为新引擎的完整启动模板。
 
 ## 7. 验证接入闭环
 
