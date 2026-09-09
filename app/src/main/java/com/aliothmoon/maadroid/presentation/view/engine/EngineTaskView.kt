@@ -120,53 +120,48 @@ fun EngineTaskContent(
 
         if ((hostTaskActive && !running) || (activeEngineId != null && activeEngineId != engineId)) {
             EngineTaskBlockedContent(modifier)
-            return@key
-        }
-
-        Column(modifier = modifier.fillMaxSize()) {
-            if (viewModel.panels.isEmpty()) {
-                // 方舟目前就是这条路径：它的面板仍挂在宿主导航里，taskPanels 为空
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(stringResource(R.string.engine_no_task_panels))
-                }
-                return@Column
+        } else if (viewModel.panels.isEmpty()) {
+            Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(stringResource(R.string.engine_no_task_panels))
             }
-
-            EngineTaskList(
-                panels = viewModel.panels,
-                enabledOf = { tasks.enabled[it.taskType] ?: it.enabledByDefault },
-                paramsOf = { tasks.params[it.taskType] ?: "" },
-                onEnabledChange = viewModel::onEnabledChange,
-                onParamsChange = viewModel::onParamsChange,
-                expandedTaskType = expanded,
-                onToggleExpand = viewModel::onToggleExpand,
-                modifier = Modifier.weight(1f),
-            )
-
-            status?.let {
-                Text(
-                    text = it.asString(),
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        } else {
+            Column(modifier = modifier.fillMaxSize()) {
+                EngineTaskList(
+                    panels = viewModel.panels,
+                    enabledOf = { tasks.enabled[it.taskType] ?: it.enabledByDefault },
+                    paramsOf = { tasks.params[it.taskType] ?: "" },
+                    onEnabledChange = viewModel::onEnabledChange,
+                    onParamsChange = viewModel::onParamsChange,
+                    expandedTaskType = expanded,
+                    onToggleExpand = viewModel::onToggleExpand,
+                    modifier = Modifier.weight(1f),
                 )
-            }
 
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Button(
-                    onClick = viewModel::start,
-                    enabled = !running,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text(stringResource(R.string.engine_start))
+                status?.let {
+                    Text(
+                        text = it.asString(),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
                 }
-                OutlinedButton(
-                    onClick = viewModel::stop,
-                    enabled = running && !stopping,
-                    modifier = Modifier.weight(1f),
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Text(stringResource(if (stopping) R.string.engine_stopping else R.string.engine_stop))
+                    Button(
+                        onClick = viewModel::start,
+                        enabled = !running,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(stringResource(R.string.engine_start))
+                    }
+                    OutlinedButton(
+                        onClick = viewModel::stop,
+                        enabled = running && !stopping,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(stringResource(if (stopping) R.string.engine_stopping else R.string.engine_stop))
+                    }
                 }
             }
         }
