@@ -7,7 +7,7 @@ Why this exists:
     weights are Android-only and ~50 MB, so they are NOT shipped in MAA's shared
     `resource/`. Instead we convert them here, at build time, straight from the
     `inference.onnx` that the MAA release tarball already deploys into
-    app/src/main/assets/MaaSync/MaaResource. Because the ncnn is generated from the
+    engine/arknights/src/main/assets/MaaSync/MaaResource. Because the ncnn is generated from the
     very same onnx in the very same step, it can never drift out of version with the
     onnx / keys.txt that ships alongside it.
 
@@ -24,7 +24,7 @@ Driven by glob: every `*/det/inference.onnx` -> det.ncnn.*, every `*/rec/inferen
 global languages, and any language MAA adds later.
 
 Usage:
-    python scripts/convert_ocr_ncnn.py --resource app/src/main/assets/MaaSync/MaaResource
+    python scripts/convert_ocr_ncnn.py --resource engine/arknights/src/main/assets/MaaSync/MaaResource
     # options: --cache .maa-cache/ncnn  --keep-onnx  --rec-fp16
 """
 

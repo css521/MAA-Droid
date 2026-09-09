@@ -24,7 +24,7 @@ mode=sve 是给本地验证准备的：在**不支持 SVE2** 的普通 arm64 真
 不动节表段表，ELF 结构与文件大小保持不变
 
 usage:
-    python scripts/patch_kleidicv_sve.py app/src/main/jniLibs/arm64-v8a/libopencv_world4.so
+    python scripts/patch_kleidicv_sve.py engine/arknights/src/main/jniLibs/arm64-v8a/libopencv_world4.so
     python scripts/patch_kleidicv_sve.py <so> --mode sve      # 造一个必崩的库用于复现
     python scripts/patch_kleidicv_sve.py <so> --mode runtime  # 还原
     python scripts/patch_kleidicv_sve.py <so> --verify        # 校验当前是否为目标模式

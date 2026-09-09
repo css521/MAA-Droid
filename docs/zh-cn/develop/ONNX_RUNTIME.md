@@ -1,6 +1,6 @@
 # MAA 与 LALC 共用 ONNX Runtime
 
-当前共用 `com.microsoft.onnxruntime:onnxruntime-android:1.19.2` 的完整 C 库与 Java/JNI 绑定。版本集中在 `gradle/libs.versions.toml`；边狱声明严格版本约束。APK 每个 ABI 只含一份 `libonnxruntime.so`，MaaCore 通过 C API 调用它，边狱通过同一 AAR 的 `libonnxruntime4j_jni.so` 调用它。
+当前共用 `com.microsoft.onnxruntime:onnxruntime-android:1.19.2` 的完整 C 库与 Java/JNI 绑定。版本集中在 `gradle/libs.versions.toml`；方舟和边狱均声明严格版本约束。APK 每个 ABI 只含一份 `libonnxruntime.so`，MaaCore 通过 C API 调用它，边狱通过同一 AAR 的 `libonnxruntime4j_jni.so` 调用它。
 
 ## 为什么需要同时检查原生符号
 
@@ -12,18 +12,18 @@
 
 `PrepareMaaNativeLibrariesTask` 对每个构建变体、每个选中的 ABI 执行：
 
-1. 从该 APK 实际解析出的 ONNX Android AAR 提取 C 库与 JNI 库，使用当前 NDK 的 `llvm-readelf` 检查 ELF 元数据。
+1. 从方舟模块该变体实际解析出的 ONNX Android AAR 提取 C 库与 JNI 库，使用当前 NDK 的 `llvm-readelf` 检查 ELF 元数据。严格版本约束同时传递给消费它的 APK。
 2. 核对 MaaCore、Java/JNI 及其他依赖 ONNX 的 Maa 原生库所需的全部 `Ort*` 符号、版本和架构。
-3. 校验通过后，把 Maa 原生库复制到 `build/generated/maa-native/<variant>/jniLibs`，省略重复的 `libonnxruntime.so`，由完整 Android AAR 提供唯一的 C/JNI 组合。
+3. 校验通过后，把 Maa 原生库复制到 `engine/arknights/build/generated/maa-native/<variant>/jniLibs`，省略重复的 `libonnxruntime.so`，由完整 Android AAR 提供唯一的 C/JNI 组合。
 
-下载目录 `app/src/main/jniLibs` 保持原样；不会修改任何 ELF 字节。Android 打包只读取生成目录。`libonnxruntime.so` 不再允许通过 `pickFirsts` 忽略冲突。
+下载目录位于 `engine/arknights/src/main/jniLibs`；不会修改任何 ELF 字节。Android 打包只读取生成目录。`libonnxruntime.so` 不再允许通过 `pickFirsts` 忽略冲突。
 
 MAA 上游更新到另一 ONNX ABI 时，构建会报告具体缺失符号并停止。维护者需选择与新 MaaCore 兼容的 Android AAR，同时验证 LALC 模型；两者匹配后仍共用一套库。游戏资源更新继续独立进行，原生运行时的变化需要新 APK。
 
 ## 验证
 
 ```sh
-sh gradlew :build-logic:test :app:prepareDebugMaaNativeLibraries -Pmaa.abi=all
+sh gradlew :build-logic:test :engine:arknights:prepareDebugMaaNativeLibraries -Pmaa.abi=all
 python3 scripts/verify_native_runtime.py path/to/app.apk --readelf /path/to/ndk/llvm-readelf
 ```
 

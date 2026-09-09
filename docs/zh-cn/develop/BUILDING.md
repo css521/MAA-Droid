@@ -17,7 +17,7 @@
   Gradle 会在生成资源清单前检查模型是否齐全。若此前用过 `--skip-ncnn`，无需重新下载内核，运行：
 
   ```bash
-  python scripts/convert_ocr_ncnn.py --resource app/src/main/assets/MaaSync/MaaResource --cache .maa-cache/ncnn
+  python scripts/convert_ocr_ncnn.py --resource engine/arknights/src/main/assets/MaaSync/MaaResource --cache .maa-cache/ncnn
   ```
 
   新 APK 首次启动会检查已解压的 OCR 模型，发现缺失或空文件时重新初始化资源。

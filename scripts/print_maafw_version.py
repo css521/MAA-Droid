@@ -10,7 +10,7 @@ import re
 import sys
 from pathlib import Path
 
-JNILIBS_DIR = Path(__file__).resolve().parent.parent / "app" / "src" / "main" / "jniLibs"
+JNILIBS_DIR = Path(__file__).resolve().parent.parent / "engine" / "arknights" / "src" / "main" / "jniLibs"
 CONTROL_UNIT_SO = "libMaaAndroidNativeControlUnit.so"
 VERSION_RE = re.compile(rb"v\d+\.\d+\.\d+(?:-[A-Za-z0-9.]+)?")
 

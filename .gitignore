@@ -34,9 +34,9 @@ __pycache__/
 .idea/
 
 # MaaResource
-/app/src/main/assets/MaaSync
-/app/src/main/jniLibs/*/*.so
-!/app/src/main/jniLibs/*/libjnidispatch.so
+/engine/arknights/src/main/assets/MaaSync
+/engine/arknights/src/main/jniLibs/*/*.so
+!/engine/arknights/src/main/jniLibs/*/libjnidispatch.so
 
 # MAA Core download cache
 .maa-cache/

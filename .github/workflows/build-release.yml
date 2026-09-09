@@ -98,7 +98,7 @@ jobs:
           fi
 
       - name: Print MAA Resource version
-        run: cat app/src/main/assets/MaaSync/MaaResource/version.json
+        run: cat engine/arknights/src/main/assets/MaaSync/MaaResource/version.json
 
       - name: Print MaaFramework control unit version
         run: python scripts/print_maafw_version.py
@@ -106,7 +106,7 @@ jobs:
       - name: Disable KleidiCV SVE2 dispatch
         if: matrix.nosve
         run: |
-          SO=app/src/main/jniLibs/arm64-v8a/libopencv_world4.so
+          SO=engine/arknights/src/main/jniLibs/arm64-v8a/libopencv_world4.so
           echo "before: $(shasum -a 256 "$SO" | cut -d' ' -f1)"
           # 显式写死 neon：sve 模式会产出必崩的库，不能靠默认值兜底
           python scripts/patch_kleidicv_sve.py "$SO" --mode neon

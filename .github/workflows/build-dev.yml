@@ -86,7 +86,7 @@ jobs:
           python scripts/setup_maa_core.py --clean $TAG_ARG $REPO_ARG $MAAFW_ARG
 
       - name: Print MAA Resource version
-        run: cat app/src/main/assets/MaaSync/MaaResource/version.json
+        run: cat engine/arknights/src/main/assets/MaaSync/MaaResource/version.json
 
       - name: Print MaaFramework control unit version
         run: python scripts/print_maafw_version.py

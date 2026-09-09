@@ -11,7 +11,7 @@ usage:
     python scripts/setup_maa_core.py --skip-download     # deploy from cache only
     python scripts/setup_maa_core.py --maafw-tag v5.13.0-beta.5  # override the MaaFramework control unit
 
-Note: target directories (assets/MaaSync/MaaResource and jniLibs/<abi>/<MAA *.so>)
+Note: target directories in engine/arknights (assets/MaaSync/MaaResource and jniLibs/<abi>/<MAA *.so>)
 are always cleaned before deploy to avoid stale files from previous versions.
 """
 
@@ -64,8 +64,8 @@ MAAFW_CONTROL_UNIT_SO = "libMaaAndroidNativeControlUnit.so"
 MAAFW_ASSET_ARCH = {"arm64-v8a": "aarch64", "x86_64": "x86_64"}
 
 # Target paths (relative to project root)
-ASSETS_RESOURCE_DIR = "app/src/main/assets/MaaSync/MaaResource"
-JNILIBS_DIR = "app/src/main/jniLibs"
+ASSETS_RESOURCE_DIR = "engine/arknights/src/main/assets/MaaSync/MaaResource"
+JNILIBS_DIR = "engine/arknights/src/main/jniLibs"
 CACHE_DIR = ".maa-cache"
 VERSION_FILE = ".maaversion"
 

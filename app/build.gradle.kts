@@ -2,8 +2,6 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.util.Properties
 import javax.xml.parsers.DocumentBuilderFactory
 import org.w3c.dom.Element
-import com.aliothmoon.maadroid.buildlogic.PrepareMaaNativeLibrariesTask
-import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 
 plugins {
     alias(libs.plugins.android.application)
@@ -11,7 +9,6 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.kotlin.parcelize)
     alias(libs.plugins.ksp)
-    id("com.aliothmoon.maadroid.asset-manifest")
     id("com.aliothmoon.maadroid.i18n-verify")
 }
 
@@ -113,10 +110,11 @@ android {
         ndkVersion = "29.0.13113456"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // setup_maa_core.py deploy 时写入 .maaversion；缺失时为空串，运行时检查宽松放行
-        val maaCoreVersion = rootProject.file(".maaversion")
-            .takeIf { it.isFile }?.readText()?.trim().orEmpty()
-        buildConfigField("String", "MAA_CORE_VERSION", "\"$maaCoreVersion\"")
+        // MaaCoreVersion 尚在宿主，保留兼容字段；版本由方舟模块从 .maaversion 导出。
+        buildConfigField(
+            "String", "MAA_CORE_VERSION",
+            "com.aliothmoon.maadroid.engine.arknights.BuildConfig.MAA_CORE_VERSION",
+        )
 
         buildConfigField("String", "APP_UPDATE_GITHUB_OWNER", buildConfigString(appUpdateProperty("maa.appUpdate.githubOwner")))
         buildConfigField("String", "APP_UPDATE_GITHUB_REPO", buildConfigString(appUpdateProperty("maa.appUpdate.githubRepo")))
@@ -185,17 +183,13 @@ android {
         compose = true
     }
 
-    // The build verifies the shared ORT ABI and omits MaaCore's duplicate runtime.
-    // Downloaded upstream libraries remain intact; only generated JNI files are packaged.
-    sourceSets.getByName("main").jniLibs.setSrcDirs(emptyList<String>())
-
     packaging {
         jniLibs {
             useLegacyPackaging = true
 
             // MaaCore and Limbus share the complete, version-matched ORT Android AAR pair.
-            // Do not pickFirst libonnxruntime.so: PrepareMaaNativeLibrariesTask checks the
-            // actual versioned symbols before removing the duplicate from the staged files.
+            // engine:arknights validates the versioned symbols before staging MaaCore JNI
+            // files without a duplicate libonnxruntime.so. Never pickFirst that runtime.
             //
             // libc++_shared.so —— core-bridge（NDK 29）与 OpenCV AAR 各带一份。
             //   取舍：以 NDK 提供的为准（setup_maa_core.py 的 EXCLUDE_SO 也是同一原则：
@@ -361,28 +355,6 @@ abstract class GenerateAchievementStringResTask : DefaultTask() {
 androidComponents {
     onVariants { variant ->
         val variantName = variant.name.replaceFirstChar { it.uppercaseChar() }
-        val prepareNative = tasks.register<PrepareMaaNativeLibrariesTask>("prepare${variantName}MaaNativeLibraries") {
-            sourceDir.set(layout.projectDirectory.dir("src/main/jniLibs"))
-            abis.set(nativeAbis)
-            // Inspect the AAR actually resolved for this APK, including dependency conflict resolution.
-            runtimeAar.from(variant.runtimeConfiguration.incoming.artifactView {
-                componentFilter {
-                    it is ModuleComponentIdentifier && it.group == "com.microsoft.onnxruntime" &&
-                        it.module == "onnxruntime-android"
-                }
-            }.files)
-            val host = when {
-                System.getProperty("os.name").startsWith("Mac") -> "darwin-x86_64"
-                System.getProperty("os.name").startsWith("Windows") -> "windows-x86_64"
-                else -> "linux-x86_64"
-            }
-            val suffix = if (host.startsWith("windows")) ".exe" else ""
-            readelf.set(sdkComponents.ndkDirectory.map {
-                it.file("toolchains/llvm/prebuilt/$host/bin/llvm-readelf$suffix")
-            })
-            outputDir.set(layout.buildDirectory.dir("generated/maa-native/${variant.name}/jniLibs"))
-        }
-        variant.sources.jniLibs?.addGeneratedSourceDirectory(prepareNative) { it.outputDir }
         val genTask = tasks.register(
             "generate${variantName}AchievementStringRes",
             GenerateAchievementStringResTask::class.java,
