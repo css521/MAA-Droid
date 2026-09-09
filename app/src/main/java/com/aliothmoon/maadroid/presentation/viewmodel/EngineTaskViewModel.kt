@@ -2,16 +2,27 @@ package com.aliothmoon.maadroid.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.aliothmoon.maadroid.R
+import com.aliothmoon.maadroid.common.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 import com.aliothmoon.maadroid.engine.EngineRegistry
 import com.aliothmoon.maadroid.engine.EngineSession
 import com.aliothmoon.maadroid.engine.EngineTaskStore
 import com.aliothmoon.maadroid.engine.LogLevel
 import com.aliothmoon.maadroid.engine.TaskPanelSpec
+import com.aliothmoon.maadroid.presentation.state.EngineTaskExecutionState
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -30,7 +41,10 @@ class EngineTaskViewModel(
     private val engineId: String,
     private val store: EngineTaskStore,
     private val sessionFactory: (String) -> EngineSession,
-) : ViewModel() {
+    private val executionState: EngineTaskExecutionState,
+    private val canStart: () -> Boolean = { true },
+    scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+) : ViewModel(scope) {
 
     /** 该引擎声明的面板；引擎未提供则为空表，UI 据此显示「该引擎暂无任务面板」 */
     val panels: List<TaskPanelSpec> =
@@ -45,11 +59,17 @@ class EngineTaskViewModel(
     private val _running = MutableStateFlow(false)
     val running: StateFlow<Boolean> = _running.asStateFlow()
 
+    private val _stopping = MutableStateFlow(false)
+    val stopping: StateFlow<Boolean> = _stopping.asStateFlow()
+
     /** 面向用户的最近一条状态；失败原因（含门闸的「请升级 App」）走这里 */
-    private val _status = MutableStateFlow<String?>(null)
-    val status: StateFlow<String?> = _status.asStateFlow()
+    private val _status = MutableStateFlow<UiText?>(null)
+    val status: StateFlow<UiText?> = _status.asStateFlow()
 
     private var session: EngineSession? = null
+    private var startJob: Job? = null
+    private var eventsJob: Job? = null
+    private var ownsDevice = false
 
     fun isEnabled(panel: TaskPanelSpec): Boolean =
         tasks.value.enabled[panel.taskType] ?: panel.enabledByDefault
@@ -76,48 +96,71 @@ class EngineTaskViewModel(
      * 然后崩在某个节点上。
      */
     fun start() {
-        if (_running.value) return
-        viewModelScope.launch {
-            _running.value = true
-            _status.value = null
-            val s = sessionFactory(engineId).also { session = it }
+        // 在 launch 之前占位，快速连点 / 同时从深链进入也只能准备一次。
+        if (_stopping.value || _running.value) return
+        if (!canStart() || !executionState.tryAcquire(engineId)) {
+            _status.value = uiTextOf(R.string.engine_other_game_running)
+            return
+        }
+        ownsDevice = true
+        _running.value = true
+        _status.value = null
+        startJob = viewModelScope.launch {
+            try {
+                val selected = store.selectedTasks(engineId)
+                if (selected.isEmpty()) {
+                    _status.value = uiTextOf(R.string.engine_no_tasks_selected)
+                    closeSession()
+                    _running.value = false
+                    return@launch
+                }
 
-            val failure = runCatching { s.prepare() }
-                .getOrElse { "准备失败：${it.message}" }
-            if (failure != null) {
-                _status.value = failure
-                _running.value = false
-                s.close()
-                session = null
-                return@launch
-            }
+                val s = sessionFactory(engineId).also { session = it }
+                val failure = s.prepare()
+                ensureActive()
+                if (failure != null) {
+                    _status.value = UiText.Dynamic(failure)
+                    closeSession()
+                    _running.value = false
+                    return@launch
+                }
+                selected.forEach { (type, params) -> s.appendTask(type, params) }
 
-            val selected = store.selectedTasks(engineId)
-            if (selected.isEmpty()) {
-                _status.value = "未勾选任何任务"
+                collectEvents(s)
+                if (!s.start()) {
+                    _status.value = uiTextOf(R.string.engine_start_rejected)
+                    closeSession()
+                    _running.value = false
+                }
+            } catch (cancelled: CancellationException) {
+                // stop() 先等启动协程退出，再释放它的会话，不能在取消后继续 append/start。
+                throw cancelled
+            } catch (error: Exception) {
+                _status.value = uiTextOf(R.string.engine_start_failed, error.message.orEmpty())
+                closeSession()
                 _running.value = false
-                s.close()
-                session = null
-                return@launch
-            }
-            selected.forEach { (type, params) -> s.appendTask(type, params) }
-
-            collectEvents(s)
-            if (!s.start()) {
-                _status.value = "引擎拒绝启动"
-                _running.value = false
-                s.close()
-                session = null
             }
         }
     }
 
     fun stop() {
+        if (!_running.value || !_stopping.compareAndSet(false, true)) return
         viewModelScope.launch {
-            session?.stop()
-            session?.close()
-            session = null
-            _running.value = false
+            try {
+                startJob?.cancelAndJoin()
+                if (session?.stop() == false) {
+                    _status.value = uiTextOf(R.string.engine_stop_rejected)
+                } else {
+                    closeSession()
+                    _running.value = false
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _status.value = uiTextOf(R.string.engine_stop_failed, error.message.orEmpty())
+            } finally {
+                _stopping.value = false
+            }
         }
     }
 
@@ -128,20 +171,27 @@ class EngineTaskViewModel(
      * 其余按级别写 Timber —— 识别循环的 Debug 日志很密，全塞进 UI 会刷爆界面。
      */
     private fun collectEvents(s: EngineSession) {
+        eventsJob?.cancel()
         val events = s.events() ?: return
-        viewModelScope.launch {
+        // SharedFlow 无重放：先订阅再 start，避免瞬间完成的任务丢掉结束事件。
+        eventsJob = viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
             events.collect { event ->
+                if (session !== s || _stopping.value) return@collect
                 when (event) {
                     is com.aliothmoon.maadroid.engine.EngineEvent.Log -> {
                         Timber.tag(engineId).log(event.level.toTimberPriority(), event.message)
-                        if (event.level >= LogLevel.Warn) _status.value = event.message
+                        if (event.level >= LogLevel.Warn) _status.value = UiText.Dynamic(event.message)
                     }
                     is com.aliothmoon.maadroid.engine.EngineEvent.Failure -> {
-                        _status.value = event.reason
+                        _status.value = UiText.Dynamic(event.reason)
                     }
                     is com.aliothmoon.maadroid.engine.EngineEvent.AllTasksFinished -> {
+                        _status.value = uiTextOf(
+                            if (event.success) R.string.engine_tasks_completed
+                            else R.string.engine_tasks_incomplete,
+                        )
+                        closeSession()
                         _running.value = false
-                        _status.value = if (event.success) "全部任务已完成" else "任务未全部完成"
                     }
                     else -> Unit
                 }
@@ -150,8 +200,18 @@ class EngineTaskViewModel(
     }
 
     override fun onCleared() {
+        closeSession()
+    }
+
+    private fun closeSession() {
+        eventsJob?.cancel()
+        eventsJob = null
         session?.close()
         session = null
+        if (ownsDevice) {
+            executionState.release(engineId)
+            ownsDevice = false
+        }
     }
 }
 

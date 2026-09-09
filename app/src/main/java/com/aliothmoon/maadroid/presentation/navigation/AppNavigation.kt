@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -34,6 +35,7 @@ import com.aliothmoon.maadroid.domain.launch.LaunchEffect
 import com.aliothmoon.maadroid.domain.models.RunMode
 import com.aliothmoon.maadroid.domain.service.AchievementReporter
 import com.aliothmoon.maadroid.domain.service.ExternalNotificationService
+import com.aliothmoon.maadroid.domain.service.MaaCompositionService
 import com.aliothmoon.maadroid.domain.service.ResourceInitService
 import com.aliothmoon.maadroid.domain.state.ResourceInitState
 import com.aliothmoon.maadroid.overlay.OverlayController
@@ -89,6 +91,13 @@ fun AppNavigation(
     mainTabNavigator: MainTabNavigator = koinInject(),
     appEventsViewModel: AppEventsViewModel = koinViewModel(),
 ) {
+    // 主 Tab 在 NavHost 外；深链也使用这个 owner，避免给同一引擎创建第二个运行会话。
+    val engineViewModelStoreOwner = checkNotNull(LocalViewModelStoreOwner.current)
+    val compositionService: MaaCompositionService = koinInject()
+    val hostTaskActive by remember(compositionService) {
+        compositionService.state.map { compositionService.isTaskActive }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = compositionService.isTaskActive)
+    val canStartEngineTask = remember(compositionService) { { !compositionService.isTaskActive } }
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentNavRoute = navBackStackEntry?.destination?.route
@@ -191,6 +200,8 @@ fun AppNavigation(
             MainScreen(
                 navController = navController,
                 backgroundTaskViewModel = backgroundTaskViewModel,
+                hostTaskActive = hostTaskActive,
+                canStartEngineTask = canStartEngineTask,
                 onViewAnnouncement = { forceShowAnnouncement = true },
                 onViewOnboarding = { onboardingState.start() },
                 visible = isOnMainTab,
@@ -212,7 +223,13 @@ fun AppNavigation(
                 composable(Routes.ENGINE_TASK) { backStackEntry ->
                     val engineId = backStackEntry.arguments?.getString("engineId")
                     if (engineId != null) {
-                        EngineTaskView(navController = navController, engineId = engineId)
+                        EngineTaskView(
+                            navController = navController,
+                            engineId = engineId,
+                            hostTaskActive = hostTaskActive,
+                            canStart = canStartEngineTask,
+                            viewModelStoreOwner = engineViewModelStoreOwner,
+                        )
                     }
                 }
                 composable(Routes.NOTIFICATION) {

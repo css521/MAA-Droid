@@ -80,6 +80,13 @@ class MaaCompositionService(
     private val _state = MutableStateFlow(MaaExecutionState.IDLE)
     val state: StateFlow<MaaExecutionState> = _state.asStateFlow()
 
+    /** 宿主任务页只需知道设备是否占用，无需依赖方舟的执行状态枚举。 */
+    val isTaskActive: Boolean
+        get() = when (_state.value) {
+            MaaExecutionState.STARTING, MaaExecutionState.RUNNING, MaaExecutionState.STOPPING -> true
+            MaaExecutionState.IDLE, MaaExecutionState.ERROR -> false
+        }
+
     /** 停止发起方：用户操作 / 回调侧（掉线等）中止 */
     enum class StopOrigin { USER, CALLBACK }
 

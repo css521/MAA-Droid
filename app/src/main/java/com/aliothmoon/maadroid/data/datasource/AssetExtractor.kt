@@ -87,6 +87,7 @@ class AssetExtractor(private val context: Context) {
             val manifest = loadAssetManifest()
                 ?: throw IllegalStateException("Assets 清单文件不存在，请重新构建项目")
             val allFiles = manifest.files.filter { it.startsWith("$assetDir/") }
+            check(allFiles.isNotEmpty()) { "Assets 清单不包含 $assetDir，无法初始化资源" }
             val totalFiles = allFiles.size
 
             Timber.d("待复制文件数: $totalFiles")

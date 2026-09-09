@@ -12,6 +12,7 @@ import com.aliothmoon.maadroid.constant.MaaFiles.SCREENSHOTS
 import com.aliothmoon.maadroid.constant.MaaFiles.VERSION_FILE
 import com.aliothmoon.maadroid.remote.CoreDataDir
 import com.aliothmoon.maadroid.remote.ResourceFiles
+import com.aliothmoon.maadroid.engine.arknights.resource.MaaOcrResources
 import timber.log.Timber
 import java.io.File
 
@@ -127,11 +128,14 @@ class MaaPathConfig(
         }
     }
 
-    /** 资源是否已就绪（资源存在 且 APP 版本匹配 且 内置资源不比磁盘新） */
+    /** 版本匹配且 Android OCR 模型齐全；修复旧 APK 只解压 ONNX 后留下的安装标记。 */
     val isResourceReady: Boolean
         get() = versionFile.exists()
                 && isAppVersionCurrent()
+                && missingOcrFiles().isEmpty()
 //                && !isBundledResourceNewer()
+
+    fun missingOcrFiles(): List<String> = MaaOcrResources.missingFiles(File(resourceDir))
 
     private fun isBundledResourceNewer(): Boolean {
         val bundled = bundledResourceVersion ?: return false

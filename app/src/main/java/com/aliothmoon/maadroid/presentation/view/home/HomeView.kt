@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -308,6 +309,7 @@ fun HomeView(
                         appVersion = appVersion,
                         serviceStatusColor = uiState.serviceStatusColor,
                         serviceStatusText = uiState.serviceStatusText,
+                        resourceFailureDetail = uiState.resourceFailureDetail,
                         serviceStatusLoading = uiState.serviceStatusLoading
                     )
                 }
@@ -391,6 +393,7 @@ private fun ScreenInfoCard(
     serviceStatusColor: StatusColorType,
     serviceStatusText: UiText,
     serviceStatusLoading: Boolean,
+    resourceFailureDetail: UiText?,
     modifier: Modifier = Modifier,
 ) {
     val serviceStatusLabel = serviceStatusText.asString()
@@ -504,6 +507,15 @@ private fun ScreenInfoCard(
                             color = statusColor
                         )
                     }
+                }
+            }
+            if (resourceFailureDetail != null) {
+                SelectionContainer {
+                    Text(
+                        text = resourceFailureDetail.asString(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 }
             }
         }

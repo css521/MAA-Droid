@@ -11,6 +11,7 @@ data class HomeUiState(
     val isLoading: Boolean = false,
     val resourceUpdateState: UpdateProcessState = UpdateProcessState.Idle,
     val serviceStatusText: UiText = UiText.Empty,
+    val resourceFailureDetail: UiText? = null,
     val serviceStatusColor: StatusColorType = StatusColorType.NEUTRAL,
     val serviceStatusLoading: Boolean = false,
     val remoteServiceActive: Boolean = false,

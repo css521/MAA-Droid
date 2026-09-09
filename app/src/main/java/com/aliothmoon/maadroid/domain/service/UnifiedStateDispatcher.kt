@@ -105,8 +105,11 @@ class UnifiedStateDispatcher(
                         && initState is ResourceInitState.Ready
                     ) {
                         val loaderState = resourceLoader.state.value
+                        // 重新初始化成功后允许重试曾因缺文件而失败的加载。
+                        // 存储权限错误仍由切换目录处理；仅在本 combine 收到新状态时重试。
                         val shouldLoad = loaderState is MaaResourceLoader.State.NotLoaded
-                                || (loaderState is MaaResourceLoader.State.Failed && !loaderState.permanent)
+                                || (loaderState is MaaResourceLoader.State.Failed &&
+                                (!loaderState.permanent || loaderState.reason == MaaResourceLoader.State.FailReason.GENERIC))
                         if (shouldLoad) {
                             Timber.i("Service connected and resource initialized, loading resources")
                             withContext(Dispatchers.IO) {

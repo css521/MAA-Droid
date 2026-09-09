@@ -383,7 +383,7 @@ def main():
                         help=f"Replace {MAAFW_CONTROL_UNIT_SO} with the one from this MaaFramework "
                              "release tag (e.g. v5.13.0-beta.5); default keeps MAA's bundled copy")
     parser.add_argument("--skip-ncnn", action="store_true",
-                        help="Skip OCR onnx->ncnn conversion (Android OCR needs ncnn; debug only)")
+                        help="Only stage upstream files; Gradle will reject APK builds until OCR ncnn conversion is completed")
     parser.add_argument("--keep-onnx", action="store_true",
                         help="Keep OCR inference.onnx after conversion (default: delete, ~72MB unused on Android)")
     parser.add_argument("--rec-fp16", action="store_true",

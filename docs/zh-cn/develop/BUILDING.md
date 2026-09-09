@@ -9,8 +9,18 @@
 - 下载 MAA Core 预编译产物（so 库 + 资源文件）
 
   ```bash
+  python -m pip install -r scripts/requirements.txt
   python scripts/setup_maa_core.py
   ```
+
+  Android MaaCore 使用 ncnn OCR。部署脚本会将上游 ONNX 模型转换为 ncnn；这一步不可跳过，
+  Gradle 会在生成资源清单前检查模型是否齐全。若此前用过 `--skip-ncnn`，无需重新下载内核，运行：
+
+  ```bash
+  python scripts/convert_ocr_ncnn.py --resource app/src/main/assets/MaaSync/MaaResource --cache .maa-cache/ncnn
+  ```
+
+  新 APK 首次启动会检查已解压的 OCR 模型，发现缺失或空文件时重新初始化资源。
 
   下载慢时装 `aria2c`（`brew install aria2`），脚本会自动改用它多连接下载。实测单个 ABI 约 176 MB：直连单流 321 KB/s，aria2c 8 连接约 920 KB/s。**不要找 GitHub 加速镜像** —— 实测 ghproxy.net 只有 29 KB/s，gh-proxy.com 与 ghfast.top 返回 403，hub.gitmirror.com 不可达，都比直连更差。想强制用内置下载器时设 `MAA_SETUP_DOWNLOADER=urllib`。
 

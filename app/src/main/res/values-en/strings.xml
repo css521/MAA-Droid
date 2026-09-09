@@ -1438,6 +1438,8 @@
     <string name="resource_init_reinitialize_confirm">Reinitialize</string>
     <string name="resource_init_preparing">Preparing…</string>
     <string name="resource_init_error_copy_failed">Copy failed</string>
+    <string name="resource_init_error_missing_ocr">Android OCR models are incomplete in this APK. Install a corrected APK. Missing files:\n%1$s</string>
+    <string name="resource_load_error_missing_ocr">Android OCR models are missing. Reinitialize resources:\n%1$s</string>
     <string name="resource_init_error_unknown">Unknown error</string>
     <string name="resource_extract_failed">File %1$s still failed after %2$d attempts</string>
 
@@ -2494,6 +2496,14 @@
     <string name="engine_start">Start</string>
     <string name="engine_stop">Stop</string>
     <string name="engine_no_task_panels">This engine has no task panels yet</string>
-    <string name="settings_section_engines">Other games</string>
-    <string name="settings_engine_task_desc">Configure and run this game\u2019s tasks</string>
+    <string name="engine_no_games">No games are available</string>
+    <string name="engine_other_game_running">Another game is running. Switch back to that game and stop its tasks first.</string>
+    <string name="engine_stopping">Stopping</string>
+    <string name="engine_no_tasks_selected">No tasks selected</string>
+    <string name="engine_start_rejected">The engine refused to start</string>
+    <string name="engine_start_failed">Failed to start: %1$s</string>
+    <string name="engine_stop_failed">Failed to stop: %1$s</string>
+    <string name="engine_stop_rejected">The engine has not stopped. Please try again.</string>
+    <string name="engine_tasks_completed">All tasks completed</string>
+    <string name="engine_tasks_incomplete">Some tasks did not complete</string>
 </resources>

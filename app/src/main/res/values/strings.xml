@@ -1494,6 +1494,8 @@
     <string name="resource_init_reinitialize_confirm">确认重新初始化</string>
     <string name="resource_init_preparing">准备中…</string>
     <string name="resource_init_error_copy_failed">复制失败</string>
+    <string name="resource_init_error_missing_ocr">安装包中的 Android OCR 模型不完整，请安装修复后的 APK。缺少文件：\n%1$s</string>
+    <string name="resource_load_error_missing_ocr">Android OCR 模型缺失，请重新初始化资源：\n%1$s</string>
     <string name="resource_init_error_unknown">未知错误</string>
     <string name="resource_extract_failed">文件 %1$s 在 %2$d 次尝试后仍失败</string>
 
@@ -2551,6 +2553,14 @@
     <string name="engine_start">开始</string>
     <string name="engine_stop">停止</string>
     <string name="engine_no_task_panels">该引擎的任务面板尚未接入</string>
-    <string name="settings_section_engines">其它游戏</string>
-    <string name="settings_engine_task_desc">配置并运行该游戏的任务</string>
+    <string name="engine_no_games">当前没有可用的游戏</string>
+    <string name="engine_other_game_running">其它游戏正在运行，请先切回该游戏并停止任务</string>
+    <string name="engine_stopping">正在停止</string>
+    <string name="engine_no_tasks_selected">未勾选任何任务</string>
+    <string name="engine_start_rejected">引擎拒绝启动</string>
+    <string name="engine_start_failed">启动失败：%1$s</string>
+    <string name="engine_stop_failed">停止失败：%1$s</string>
+    <string name="engine_stop_rejected">引擎尚未停止，请重试</string>
+    <string name="engine_tasks_completed">全部任务已完成</string>
+    <string name="engine_tasks_incomplete">任务未全部完成</string>
 </resources>

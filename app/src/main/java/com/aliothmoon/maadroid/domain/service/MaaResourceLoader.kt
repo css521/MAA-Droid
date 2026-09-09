@@ -1,6 +1,9 @@
 package com.aliothmoon.maadroid.domain.service
 
 import android.os.Process
+import com.aliothmoon.maadroid.R
+import com.aliothmoon.maadroid.common.i18n.UiText
+import com.aliothmoon.maadroid.common.i18n.uiTextOf
 import com.aliothmoon.maadroid.MaaCoreService
 import com.aliothmoon.maadroid.data.config.MaaPathConfig
 import com.aliothmoon.maadroid.data.preferences.AppSettingsManager
@@ -66,6 +69,7 @@ class MaaResourceLoader(
             val message: String,
             val permanent: Boolean = false,
             val reason: FailReason = FailReason.GENERIC,
+            val detail: UiText? = null,
         ) : State()
 
         enum class FailReason { GENERIC, STORAGE_INACCESSIBLE }
@@ -85,9 +89,17 @@ class MaaResourceLoader(
 
         _state.value = if (restartNeeded) State.Reloading() else State.Loading()
         if (!pathConfig.isResourceReady) {
-            Timber.e("MaaResourceLoader.load() aborted: resource not ready (version.json missing or app version mismatch)")
-            _state.value = State.Failed("资源未就绪，请重新初始化", permanent = true)
-            return Result.failure(Exception("Resource not ready"))
+            val missing = pathConfig.missingOcrFiles()
+            val message = if (missing.isEmpty()) "资源未就绪，请重新初始化"
+                else "Missing Android OCR models: ${missing.joinToString(", ")}"
+            Timber.e("MaaResourceLoader.load() aborted: %s", message)
+            _state.value = State.Failed(
+                message, permanent = true,
+                detail = if (missing.isEmpty()) null else uiTextOf(
+                    R.string.resource_load_error_missing_ocr, missing.joinToString("\n"),
+                ),
+            )
+            return Result.failure(Exception(message))
         }
         Timber.i("MaaCore resources loading, client type=$clientType")
         try {
@@ -152,9 +164,10 @@ class MaaResourceLoader(
                     }
 
                     if (!loadResIfExists(maa, pathConfig.rootDir)) {
-                        _state.value = State.Failed("Failed to load main resource")
+                        val message = "MaaCore LoadResource failed: ${pathConfig.toCorePath(pathConfig.rootDir)}"
+                        _state.value = State.Failed(message)
                         Timber.e("LoadResource failed: ${pathConfig.rootDir}")
-                        return@useRemoteService Result.failure(Exception("Failed to load main resource"))
+                        return@useRemoteService Result.failure(Exception(message))
                     }
 
                     val followUps = buildList {
@@ -165,10 +178,15 @@ class MaaResourceLoader(
                         }
                     }
 
-                    followUps.forEach { loadResIfExists(maa, it) }
-
-                    if (appSettings.tasksOverrideEnabled.value) {
-                        loadResIfExists(maa, pathConfig.overridesDir)
+                    val extraResources = followUps + if (appSettings.tasksOverrideEnabled.value) {
+                        listOf(pathConfig.overridesDir)
+                    } else emptyList()
+                    for (dir in extraResources) {
+                        if (!loadResIfExists(maa, dir)) {
+                            val message = "MaaCore LoadResource failed: ${pathConfig.toCorePath(dir)}"
+                            _state.value = State.Failed(message)
+                            return@useRemoteService Result.failure(Exception(message))
+                        }
                     }
 
                     _state.value = State.Ready

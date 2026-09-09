@@ -110,6 +110,25 @@ class MaaResourceLoaderTest {
     }
 
     @Test
+    fun load_doesNotReportReady_whenClientResourcesAreRejected() = runBlocking {
+        withEnv(rejectedPathSuffix = "resource/global/YoStarJP") { env ->
+            assertTrue(env.loader.load("YoStarJP").isFailure)
+            val failed = env.loader.state.value as MaaResourceLoader.State.Failed
+            assertTrue(failed.message.contains("resource/global/YoStarJP"))
+            assertFalse(env.loadedDirs.any { it.endsWith("cache/resource/global/YoStarJP") })
+        }
+    }
+
+    @Test
+    fun load_reportsTheMainDirectory_whenNativeLoadFails() = runBlocking {
+        withEnv(rejectedPathSuffix = "") { env ->
+            assertTrue(env.loader.load("Official").isFailure)
+            val failed = env.loader.state.value as MaaResourceLoader.State.Failed
+            assertTrue(failed.message.contains(env.loadedDirs.single()))
+        }
+    }
+
+    @Test
     fun resourceProfile_groupsBaseOnlyClientsTogether() {
         assertEquals("", MaaResourceLoader.resourceProfileOf(""))
         assertEquals("", MaaResourceLoader.resourceProfileOf("Official"))
@@ -271,6 +290,7 @@ class MaaResourceLoaderTest {
         appLanguage: AppSettingsManager.AppLanguage = AppSettingsManager.AppLanguage.ZH,
         setupCode: Int = SetupResult.OK,
         coreSeparated: Boolean = false,
+        rejectedPathSuffix: String? = null,
         block: suspend (Env) -> Unit,
     ) {
         val rootDir = Files.createTempDirectory("maa-resource-loader-test").toFile()
@@ -333,7 +353,7 @@ class MaaResourceLoaderTest {
             every { service.maaCoreService } returns maaCore
             every { maaCore.LoadResource(any()) } answers {
                 loadedDirs += firstArg<String>()
-                true
+                rejectedPathSuffix == null || !firstArg<String>().endsWith(rejectedPathSuffix)
             }
 
             // 解绑置 Disconnected，取到服务即视为 Connected

@@ -23,10 +23,11 @@ import com.aliothmoon.maadroid.data.preferences.AppSettingsManager
 import com.aliothmoon.maadroid.data.background.BackgroundImageStore
 import com.aliothmoon.maadroid.ui.components.consumeAllPointerEvents
 import com.aliothmoon.maadroid.presentation.pip.LocalIsInPip
-import com.aliothmoon.maadroid.presentation.view.background.BackgroundTaskView
+import com.aliothmoon.maadroid.presentation.view.background.BackgroundGamesView
 import com.aliothmoon.maadroid.presentation.view.home.HomeView
 import com.aliothmoon.maadroid.presentation.view.settings.SettingsView
 import com.aliothmoon.maadroid.presentation.viewmodel.BackgroundTaskViewModel
+import com.aliothmoon.maadroid.remote.EngineIds
 import com.aliothmoon.maadroid.schedule.ui.ScheduleListView
 import com.aliothmoon.maadroid.ui.theme.LocalReduceMotion
 import com.aliothmoon.maadroid.ui.theme.MaaBackgroundHost
@@ -44,6 +45,8 @@ fun MainScreen(
     modifier: Modifier = Modifier,
     navController: NavController,
     backgroundTaskViewModel: BackgroundTaskViewModel,
+    hostTaskActive: Boolean,
+    canStartEngineTask: () -> Boolean,
     onViewAnnouncement: () -> Unit = {},
     onViewOnboarding: () -> Unit = {},
     visible: Boolean = true,
@@ -53,6 +56,7 @@ fun MainScreen(
     val scope = rememberCoroutineScope()
     val reduceMotion = LocalReduceMotion.current
     val chromeHidden = fullscreen || LocalIsInPip.current
+    val appSettings: AppSettingsManager = koinInject()
 
     // targetPage：点击/滑动一旦确定目标即生效，停稳后等于 currentPage。
     // animateScrollToPage 内部走 MutatorMutex，连续调用时后者自动接管，无需手动取消。
@@ -90,6 +94,8 @@ fun MainScreen(
     val pendingNavigateRequestId by backgroundTaskViewModel.pendingNavigateRequestId.collectAsStateWithLifecycle()
     LaunchedEffect(pendingNavigateRequestId) {
         if (pendingNavigateRequestId != null) {
+            // 现有定时任务属于方舟，不能停留在上次浏览的其它游戏页。
+            appSettings.setCurrentGameId(EngineIds.ARKNIGHTS)
             surfaceToTab(BottomNavTab.BACKGROUND)
             backgroundTaskViewModel.onNavigateForScheduledLaunch()
         }
@@ -100,6 +106,10 @@ fun MainScreen(
     val mainTabRequest by mainTabNavigator.request.collectAsStateWithLifecycle()
     LaunchedEffect(mainTabRequest) {
         mainTabRequest?.let { request ->
+            // 当前程序化 BACKGROUND 入口来自方舟引导 / 任务修复；底栏点击保留游戏选择。
+            if (request.tab == BottomNavTab.BACKGROUND) {
+                appSettings.setCurrentGameId(EngineIds.ARKNIGHTS)
+            }
             surfaceToTab(request.tab, request.animate)
             mainTabNavigator.consume()
         }
@@ -107,7 +117,6 @@ fun MainScreen(
 
     // 自定义图片背景（仅四个主 Tab 生效）：启用时切换玻璃配色并在 Scaffold 之下绘制背景图。
     val backgroundStore: BackgroundImageStore = koinInject()
-    val appSettings: AppSettingsManager = koinInject()
     val backgroundImage by backgroundStore.imageBitmap.collectAsStateWithLifecycle()
     val backgroundImageAlpha by appSettings.customBackgroundImageAlpha.collectAsStateWithLifecycle()
     val backgroundScrim by appSettings.customBackgroundScrim.collectAsStateWithLifecycle()
@@ -142,9 +151,12 @@ fun MainScreen(
                 ) { page ->
                     when (BottomNavTab.all[page]) {
                         BottomNavTab.HOME -> HomeView(navController = navController)
-                        BottomNavTab.BACKGROUND -> BackgroundTaskView(
-                            viewModel = backgroundTaskViewModel,
+                        BottomNavTab.BACKGROUND -> BackgroundGamesView(
+                            backgroundTaskViewModel = backgroundTaskViewModel,
                             isActivePage = visible && pagerState.targetPage == page,
+                            fullscreen = fullscreen,
+                            hostTaskActive = hostTaskActive,
+                            canStartEngineTask = canStartEngineTask,
                         )
 
                         BottomNavTab.SCHEDULE -> ScheduleListView(navController = navController)

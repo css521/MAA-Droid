@@ -76,6 +76,9 @@ class HostEngineIsolationContractTest {
         "presentation/view/panel",
     )
 
+    // 混杂目录中的方舟单文件仍属于引擎；只按文件归类，不能豁免同目录宿主类。
+    private val arknightsOwnFiles = listOf("data/config/MaaPathConfig.kt")
+
     /**
      * 各宿主目录当前对方舟的 import 行数；0 表示已干净、不得回退。
      *
@@ -218,16 +221,15 @@ class HostEngineIsolationContractTest {
 
     private fun countArknightsToHost(srcRoot: File): Map<String, Int> {
         val counts = linkedMapOf<String, Int>()
-        for (dir in arknightsOwnDirs) {
-            val d = File(srcRoot, dir)
-            if (!d.isDirectory) continue
-            for (file in sourceFiles(d)) {
-                file.readLines().forEach { line ->
-                    val t = line.trim()
-                    if (!t.startsWith("import ")) return@forEach
-                    arknightsToHost.keys.firstOrNull { t.contains(it) }?.let { pkg ->
-                        counts[pkg] = (counts[pkg] ?: 0) + 1
-                    }
+        val files = arknightsOwnDirs.asSequence().map { File(srcRoot, it) }
+            .filter { it.isDirectory }.flatMap(::sourceFiles) +
+            arknightsOwnFiles.asSequence().map { File(srcRoot, it) }.filter { it.isFile }
+        for (file in files) {
+            file.readLines().forEach { line ->
+                val t = line.trim()
+                if (!t.startsWith("import ")) return@forEach
+                arknightsToHost.keys.firstOrNull { t.contains(it) }?.let { pkg ->
+                    counts[pkg] = (counts[pkg] ?: 0) + 1
                 }
             }
         }
@@ -242,6 +244,7 @@ class HostEngineIsolationContractTest {
      * 这样新增子目录会落进其父项而不是凭空多出一个键。
      */
     private fun hostDirectoryKeyOf(relativePath: String): String? {
+        if (relativePath in arknightsOwnFiles) return null
         val dir = relativePath.substringBeforeLast('/', "")
         if (dir.isEmpty()) return ROOT_FILES_KEY
         if (arknightsOwnDirs.any { dir == it || dir.startsWith("$it/") }) return null

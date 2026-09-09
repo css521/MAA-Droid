@@ -1,5 +1,5 @@
 <resources>
-    <string name="limbus_game_name">边狱公司</string>
+    <string name="limbus_game_name">边狱巴士</string>
 
     <!-- 任务名。与 LimbusTask 一一对应，顺序即任务页呈现顺序 -->
     <string name="limbus_task_mail">领取邮件</string>

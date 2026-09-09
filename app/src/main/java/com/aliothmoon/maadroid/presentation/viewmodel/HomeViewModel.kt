@@ -30,6 +30,7 @@ import com.aliothmoon.maadroid.schedule.service.ScheduleAlarmManager
 import com.aliothmoon.maadroid.utils.Misc
 import com.aliothmoon.maadroid.utils.i18n.remoteBackendPermissionLabel
 import com.aliothmoon.maadroid.common.i18n.uiTextOf
+import com.aliothmoon.maadroid.common.i18n.UiText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -164,12 +165,16 @@ class HomeViewModel(
                         false
                     )
                 }
-                Pair(status, remoteServiceActive)
-            }.collect { (status, remoteServiceActive) ->
+                val failureDetail = (resourceState as? MaaResourceLoader.State.Failed)
+                    ?.takeIf { serviceState is RemoteServiceManager.ServiceState.Connected }
+                    ?.let { it.detail ?: UiText.Dynamic(it.message) }
+                Triple(status, remoteServiceActive, failureDetail)
+            }.collect { (status, remoteServiceActive, failureDetail) ->
                 val (text, color, loading) = status
                 _uiState.update {
                     it.copy(
                         serviceStatusText = text,
+                        resourceFailureDetail = failureDetail,
                         serviceStatusColor = color,
                         serviceStatusLoading = loading,
                         remoteServiceActive = remoteServiceActive
