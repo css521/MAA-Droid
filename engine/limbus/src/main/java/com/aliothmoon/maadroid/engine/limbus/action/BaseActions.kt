@@ -47,6 +47,10 @@ private object ClickAction : ActionBackend {
      */
     override suspend fun execute(ctx: ActionContext): ActionOutcome {
         val node = ctx.node
+        if (node.str("android_mail_flow") == "true") {
+            if (ctx.nodeName == "check_and_get_mails") return MailActions.openMailbox(ctx)
+            if (ctx.nodeName == "claim_mail") MailActions.exitIfEmpty(ctx)?.let { return it }
+        }
         val offset = node.ints("target_offset") ?: listOf(0, 0)
         val ox = offset.getOrElse(0) { 0 }
         val oy = offset.getOrElse(1) { 0 }
@@ -85,6 +89,9 @@ private const val SWIPE_COST_SEC = 0.5
 private object KeyAction : ActionBackend {
     override suspend fun execute(ctx: ActionContext): ActionOutcome {
         val keyName = ctx.node.str("key") ?: return ActionOutcome.Continue
+        if (ctx.nodeName == "confirm_reward" && ctx.node.str("android_mail_flow") == "true" && keyName == "esc") {
+            return MailActions.confirmReward(ctx)
+        }
         val repeat = ctx.node.num("repeat")?.toInt() ?: 1
         val interval = ctx.node.num("repeat_interval") ?: 0.3
 

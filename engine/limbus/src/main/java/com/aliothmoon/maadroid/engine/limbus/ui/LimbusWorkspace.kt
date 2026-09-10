@@ -20,7 +20,9 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.aliothmoon.maadroid.engine.EngineResources
 import com.aliothmoon.maadroid.engine.EngineWorkspace
+import com.aliothmoon.maadroid.engine.limbus.LimbusResourcePack
 import com.aliothmoon.maadroid.ui.components.MaaSurfaceCard
 import com.aliothmoon.maadroid.ui.components.TaskListDetailScaffold
 import com.aliothmoon.maadroid.ui.components.TaskSelectionRow
@@ -41,13 +43,13 @@ object LimbusWorkspace : EngineWorkspace {
         .getOrElse { "无法读取边狱配置：${it.message}" }
 
     @Composable
-    override fun Content(configJson: String, onConfigChange: (String) -> Unit, editable: Boolean, logs: List<String>, resourceDir: File?) {
+    override fun Content(configJson: String, onConfigChange: (String) -> Unit, editable: Boolean, logs: List<String>, resources: EngineResources) {
         val result = remember(configJson) { runCatching { LimbusWorkspaceConfig.decode(configJson) } }
         val config = result.getOrNull()
         if (config == null) {
             Text("配置读取失败，请检查导入文件：${result.exceptionOrNull()?.message}", Modifier.padding(16.dp))
         } else {
-            WorkspaceContent(config, { if (editable) onConfigChange(it.encode()) }, editable, logs, resourceDir)
+            WorkspaceContent(config, { if (editable) onConfigChange(it.encode()) }, editable, logs, resources.directory(LimbusResourcePack))
         }
     }
 }

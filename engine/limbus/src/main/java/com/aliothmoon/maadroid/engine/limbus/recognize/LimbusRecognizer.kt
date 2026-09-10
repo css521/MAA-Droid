@@ -3,6 +3,8 @@ package com.aliothmoon.maadroid.engine.limbus.recognize
 import com.aliothmoon.maadroid.engine.Frame
 import com.aliothmoon.maadroid.engine.FrameSource
 import com.aliothmoon.maadroid.engine.limbus.recognize.ocr.OcrImageOps
+import com.aliothmoon.maadroid.engine.limbus.recognize.ocr.OcrTextQuery
+import com.aliothmoon.maadroid.engine.limbus.recognize.ocr.TextBox
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import org.opencv.core.CvType
@@ -34,6 +36,7 @@ class LimbusRecognizer(
     private val titleAnchorFiles: List<File> = emptyList(),
     private val gameLanguage: String = "zh",
     private val onInfo: (String) -> Unit = {},
+    private val onDiagnostic: (String, String) -> Unit = { _, _ -> },
 ) : Recognizer {
 
     private val templateCache = HashMap<Pair<String, Boolean>, Mat?>()
@@ -137,28 +140,48 @@ class LimbusRecognizer(
      * 裁成窄图会被检测模型的短边规则过度放大，也会改变文字的识别尺寸。
      * OCR 不可用时返回空表（等价于「识别不中」），依赖文字的步骤会走兜底分支。
      */
-    override suspend fun detectText(crop: Crop?, threshold: Double): List<TextMatch> {
+    override suspend fun detectText(crop: Crop?, threshold: Double): List<TextMatch> =
+        readText(crop, threshold, query = null)
+
+    private suspend fun readText(crop: Crop?, threshold: Double, query: OcrTextQuery?): List<TextMatch> {
         val engine = ocr ?: run {
             warnOnce("OCR", "OCR 不可用，依赖文字识别的步骤将走兜底分支")
             return emptyList()
         }
-        val frame = frames.grab() ?: return emptyList()
+        val frame = frames.grab() ?: run {
+            if (query?.isNumber == true) onDiagnostic("ocr.find", "target=${query.target.take(32)} frame=unavailable crop=$crop")
+            return emptyList()
+        }
         val screen = frame.toMat()
         try {
             val region = crop?.clampTo(screen.cols(), screen.rows())
             if (crop != null && region == null) return emptyList()
             val work = if (region == null) screen else OcrImageOps.maskedFrame(screen, region.toRect())
             try {
-                return engine.detect(work)
-                    .filter { it.confidence >= threshold }
-                    .map {
-                        TextMatch(
-                            text = it.text,
-                            x = it.centerX,
-                            y = it.centerY,
-                            score = it.confidence.toDouble(),
-                        )
+                fun matching(boxes: List<TextBox>) = boxes.filter {
+                    it.confidence >= threshold && (query == null || query.matches(it.text))
+                }.map { TextMatch(it.text, it.centerX, it.centerY, it.confidence.toDouble()) }
+
+                val primary = engine.detect(work)
+                var matches = matching(primary)
+                var color: List<TextBox>? = null
+                if (matches.isEmpty() && query?.isNumber == true) {
+                    currentCoroutineContext().ensureActive()
+                    // 手机上的金色窄数字经 CLAHE 后有时会丢失前导零。保持同一帧、同一掩码
+                    // 和置信度，再以原色识别一次；不把 9 猜成 09，也不改变名称 OCR。
+                    color = engine.detect(work, enhanceContrast = false)
+                    matches = matching(color)
+                }
+                if (query?.isNumber == true) {
+                    fun describe(boxes: List<TextBox>) = boxes.take(10).joinToString("; ") {
+                        "${it.text.take(36).replace('\n', ' ')}@${it.centerX},${it.centerY}:${(it.confidence * 100).toInt()}%"
                     }
+                    onDiagnostic("ocr.find", "target=${query.target.take(32)} frame=${frame.seq} " +
+                        "size=${frame.width}x${frame.height} stride=${frame.stride} crop=$crop threshold=$threshold " +
+                        "enhanced=[${describe(primary)}]" + (color?.let { " color=[${describe(it)}]" } ?: "") +
+                        " hits=${matches.size}")
+                }
+                return matches
             } finally {
                 if (work !== screen) work.release()
             }
@@ -170,12 +193,11 @@ class LimbusRecognizer(
     /**
      * 在检测结果里找目标文本，对应上游 `find_text_in_image`。
      *
-     * 用**包含**而非相等：OCR 常把周围的标点或临近文字一起框进来，
-     * 要求相等会让绝大多数查找失败。[threshold] 是置信度下限，不是相似度。
+     * 名称用包含匹配；纯数字保留前导零并检查数字边界。[threshold] 是置信度下限。
      */
     override suspend fun findText(target: String, crop: Crop?, threshold: Double): List<TextMatch> {
         if (target.isEmpty()) return emptyList()
-        return detectText(crop, threshold).filter { target in it.text }
+        return readText(crop, threshold, OcrTextQuery(target))
     }
 
     /**

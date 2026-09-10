@@ -1,7 +1,6 @@
 package com.aliothmoon.maadroid.engine
 
 import kotlinx.coroutines.flow.SharedFlow
-import java.io.File
 
 /**
  * 自动化引擎的生命周期契约，宿主只通过它驱动任务。
@@ -27,10 +26,10 @@ interface AutomationEngine {
     fun setDiagnosticSink(sink: EngineDiagnosticSink?) {}
 
     /**
-     * 装载资源（模板图 / 流水线 / 模型）。资源目录由宿主按 [ResourcePackSpec] 准备好。
-     * 装载前宿主已做过兼容门闸（`requiredActions` / `minEngineVersion`）。
+     * 装载资源（模板图 / 流水线 / 模型）。按 [ResourcePackSpec] 从集合取得各包路径。
+     * [EngineResources] 只表达路径；资源内容与兼容性校验由装载流程负责。
      */
-    suspend fun prepare(resourceDir: File): Result<Unit>
+    suspend fun prepare(resources: EngineResources): Result<Unit>
 
     /** 连接到设备。方舟走 MaaCore 的 AsyncConnect，边狱则是打开帧通道与输入通道 */
     suspend fun connect(device: DeviceHandle): Result<Unit>

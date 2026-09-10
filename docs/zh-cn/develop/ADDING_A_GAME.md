@@ -10,10 +10,7 @@
 
 当前最直接的路线是在 App 进程执行业务，通过 [DeviceHandle](../../../engine/api/src/main/java/com/aliothmoon/maadroid/engine/AutomationEngine.kt) 使用提权服务提供的帧、输入和应用控制。OpenCV / ONNX Runtime 等 Android Java/JNI 库采用此路线。只有确需自有提权引擎服务时，才增加本模块 AIDL、代理与 `RemoteEngineFactory`，见第 6 步。
 
-当前通用会话有两个前提：
-
-- `EngineDeviceSession.open` 只接受后台运行模式。不要给尚无适配的新引擎承诺前台运行。
-- `EngineSession.prepare` 要求至少一个资源包；它验证所有声明的包，但只把列表中的第一个包目录传给 `AutomationEngine.prepare`。无资源引擎或需要多个独立根目录的引擎需先补充适配，不能靠空列表或猜测路径运行。
+`EngineDeviceSession.open` 当前只接受后台运行模式，不要给尚无适配的新引擎承诺前台运行。资源包可以是零个、一个或多个；宿主把全部目录按包 ID 传入 `EngineResources`，引擎按自己声明的包读取，无需猜测主目录或把不同包合并到一个目录。
 
 ## 2. 建立模块与宿主依赖
 
@@ -43,7 +40,7 @@ implementation(project(":engine:newgame"))
 | `displayNameRes` / `iconRes` | 指向本模块实际存在的资源，并提供项目需要的语言版本 |
 | `gamePackages` | 已确认的 Android 包名候选；宿主选择第一个已安装包并在本次显示会话内启动它 |
 | `display` | 实测的 `DisplaySpec(width, height, dpi)`，与模板和输入坐标一致 |
-| `resourcePacks` | 至少一个包，第一个是 `prepare` 和 workspace 的主资源目录 |
+| `resourcePacks` | 声明全部所需资源包；纯输入等不需要外部资源的引擎可为空，多个包使用独立目录和包 ID |
 | `capabilities` | 只声明已实现能力；这些值不会自动生成定时、作业、前台设备或设置页接线 |
 
 模块直接暴露 provider，将构造保持为轻量操作。可参考 [LimbusEngineProvider](../../../engine/limbus/src/main/java/com/aliothmoon/maadroid/engine/limbus/LimbusEngineProvider.kt)，UI 与工厂的装配均在引擎模块内：
@@ -77,6 +74,8 @@ object NewGameProvider : EngineProvider {
 - `validate(configJson)`：在启动前报告配置错误；不要依赖运行阶段才发现必填项缺失。
 - `selectedTasks(configJson)`：从同一配置快照生成有序的 `(type, paramsJson)` 列表。
 - `Content(...)`：通过 `onConfigChange` 回交完整新配置；`editable == false` 时禁止修改，包括已经打开的导入/复制对话框。
+
+`Content` 的 `resources: EngineResources` 包含当前游戏声明的资源路径，不是“资源已安装”的标志。用 `resources.directory(MyCatalogPack)` 选择对应包，缺目录/缺版本时提供下载引导；多资源包的界面可分别读取模型说明、图鉴等内容，不再依赖 `resourcePacks.first()`。
 
 [EngineTaskStore](../../../app/src/main/java/com/aliothmoon/maadroid/engine/EngineTaskStore.kt) 在 DataStore 的 `engine.<id>.tasks` 下保存参数与 workspace JSON；资源目录不是配置存储目录。升级配置结构应保留原 ID 和字段语义，并提供迁移测试。
 
@@ -116,7 +115,7 @@ object NewGameProvider : EngineProvider {
 
 | 方法/事件 | 必须完成的行为 |
 |---|---|
-| `prepare(resourceDir)` | 从传入目录加载并验证本轮资源，失败返回原因并清理部分初始化资源 |
+| `prepare(resources)` | 用 `resources.requireDirectory(MyPack)` 按包获取目录；宿主已完成所有声明包的安装/校验并持锁，引擎加载自己的资源及检查跨包约束，失败时清理部分初始化 |
 | `connect(device)` | 保存传入句柄，验证实际需要的识别/模型能力；显示创建、包选择和首帧等待已经由宿主完成 |
 | `appendTask` / `setTaskParams` | 解析本引擎的 type 与 JSON；拒绝非法任务，不把参数交给宿主业务类型解释 |
 | `start()` | 成功启动本轮任务，维护 `isRunning`；事件流在此之前已由宿主订阅 |
@@ -125,6 +124,8 @@ object NewGameProvider : EngineProvider {
 | `EngineEvent` | 用 `Log`、`Task`、`Failure` 报告过程。任务终止需发 `AllTasksFinished(success)`，包括失败终态；仅发 `Failure` 不会触发当前宿主自动结束会话 |
 
 [DeviceIo](../../../engine/api/src/main/java/com/aliothmoon/maadroid/engine/DeviceIo.kt) 的帧为 BGR 三通道，按 `stride` 读取。共享缓冲只在本次 `grab` 到下次 `grab` 之间有效，需要跨帧保留时复制。耗时识别和循环应支持协程取消；手势和按键在 `finally` 中成对释放。不要自行创建另一个虚拟显示器或重启提权服务。
+
+`EngineResources` 只冻结包 ID 到路径的映射，不冻结磁盘内容；运行时的全部资源锁由会话持续持有，直到确认停止并释放引擎。各包仍独立安装/更新，多包版本间若有依赖，需要引擎在 `prepare` 中验证，不能假设多个上游会同步发布。无资源引擎仍需实现 `prepare`，可完成自身初始化后返回成功，不要伪造一个空目录来满足接口。
 
 通用运行使用 `EngineSession`，已参与 `EngineExecutionCoordinator` 的准入与资源锁。以后增加调度、深链或其他启动入口时，需复用这条会话与收尾路径；只查看当前可见页面或方舟的 running 状态不能阻止跨入口冲突。预览脱离、切换 tab 不代表结束任务。
 
@@ -145,6 +146,7 @@ object NewGameProvider : EngineProvider {
 | 配置重载、旧数据迁移、任务顺序 | [EngineTaskSelectionTest](../../../app/src/test/java/com/aliothmoon/maadroid/engine/EngineTaskSelectionTest.kt)、本引擎的 workspace 测试 |
 | 缺文件、未知动作、坏 ZIP、取消与旧资源恢复 | [EngineResourceInstallTest](../../../app/src/test/java/com/aliothmoon/maadroid/engine/resource/EngineResourceInstallTest.kt)、本引擎 manifest 测试 |
 | 重复启动、失败/停止收尾、设备归属 | [EngineTaskViewModelTest](../../../app/src/test/java/com/aliothmoon/maadroid/presentation/viewmodel/EngineTaskViewModelTest.kt)、[EngineDeviceSessionTest](../../../app/src/test/java/com/aliothmoon/maadroid/engine/EngineDeviceSessionTest.kt)、[EngineExecutionCoordinatorTest](../../../engine/api/src/test/java/com/aliothmoon/maadroid/engine/EngineExecutionCoordinatorTest.kt) |
+| 多包目录传递、部分失败/取消、无资源任务 | [EngineSessionLifecycleTest](../../../app/src/test/java/com/aliothmoon/maadroid/engine/EngineSessionLifecycleTest.kt)、[EngineResourcesTest](../../../engine/api/src/test/java/com/aliothmoon/maadroid/engine/EngineResourcesTest.kt) |
 
 在 Android 上再完成：无资源时配置并下载 → 首次启动取到正确帧 → 运行最小真实任务 → 停止并再次启动 → 切换页面/预览 → 检查更新并确认同路径的新图鉴生效。覆盖两种权限后端中实际支持的一种或两种，记录 ABI 与设备条件。检查另一游戏正在运行或准备资源时，新的启动/资源操作是否按既有准入规则拒绝，且没有影响原会话。
 

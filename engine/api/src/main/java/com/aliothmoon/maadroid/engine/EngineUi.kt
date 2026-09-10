@@ -29,7 +29,7 @@ interface EngineUi {
     }
 }
 
-/** 引擎自己解释配置；宿主只负责持久化、运行和提供日志/资源目录。 */
+/** 引擎自己解释配置；宿主只负责持久化、运行和提供日志/各资源包目录。 */
 interface EngineWorkspace {
     fun initialConfig(enabled: Map<String, Boolean>, taskParams: Map<String, String>): String
     fun selectedTasks(configJson: String): List<Pair<String, String>>
@@ -41,7 +41,7 @@ interface EngineWorkspace {
         onConfigChange: (String) -> Unit,
         editable: Boolean,
         logs: List<String>,
-        resourceDir: java.io.File?,
+        resources: EngineResources,
     )
 }
 

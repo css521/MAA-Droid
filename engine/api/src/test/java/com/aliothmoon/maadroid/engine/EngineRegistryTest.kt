@@ -319,7 +319,7 @@ class EngineRegistryTest {
         override val events = MutableSharedFlow<EngineEvent>()
         override val isRunning = false
         var releaseCount = 0
-        override suspend fun prepare(resourceDir: File) = Result.success(Unit)
+        override suspend fun prepare(resources: EngineResources) = Result.success(Unit)
         override suspend fun connect(device: DeviceHandle) = Result.success(Unit)
         override fun appendTask(type: String, paramsJson: String) = 1
         override fun setTaskParams(taskId: Int, paramsJson: String) = true

@@ -22,6 +22,8 @@ import java.io.File
 import java.io.IOException
 
 class ArknightsEngineProviderTest {
+    private fun resourcePaths(directory: File) = ArknightsEngine.resourcePaths(directory)
+
     @Test fun setupCanRegisterAndCreateIndependentEnginesBeforeKoinStarts() {
         assertNull(GlobalContext.getOrNull())
         EngineSetup.install()
@@ -88,7 +90,7 @@ class ArknightsEngineProviderTest {
                 client = "YoStarJP"
                 pause.value = true
                 val firstDir = File("first-resources")
-                val pending = async(start = CoroutineStart.UNDISPATCHED) { first.prepare(firstDir) }
+                val pending = async(start = CoroutineStart.UNDISPATCHED) { first.prepare(resourcePaths(firstDir)) }
                 entered.await()
                 client = "Bilibili"
                 pause.value = false
@@ -98,7 +100,7 @@ class ArknightsEngineProviderTest {
                 verify(exactly = 1) { chain.clientType; settings.deployWithPause }
 
                 val laterDir = File("later-resources")
-                assertTrue(later.prepare(laterDir).isSuccess)
+                assertTrue(later.prepare(resourcePaths(laterDir)).isSuccess)
                 assertEquals(laterDir to MaaRunOptions("Bilibili", false), received.last())
                 verify(exactly = 2) { chain.clientType; settings.deployWithPause }
                 assertFalse(first.isRunning)
@@ -127,7 +129,7 @@ class ArknightsEngineProviderTest {
         try {
             val engine = ArknightsEngineProvider { dependencies.koin }.createEngine()
             try {
-                assertSame(failure, engine.prepare(File("unavailable-resources")).exceptionOrNull())
+                assertSame(failure, engine.prepare(resourcePaths(File("unavailable-resources"))).exceptionOrNull())
                 assertFalse(engine.isRunning)
             } finally {
                 engine.release()

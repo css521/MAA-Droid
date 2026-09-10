@@ -22,7 +22,7 @@ class OcrPostProcessorTest {
     }
 
     @Test fun `英文单词长数字和未声明的小写混淆不改写`() {
-        for (text in listOf("", "GO", "BIG", "EGO", "G000", "G0 Gift", "Lv. G0", "g0", "o9", "07", "12/12")) {
+        for (text in listOf("GO", "BIG", "EGO", "G000", "G0 Gift", "Lv. G0", "g0", "o9", "07", "12/12")) {
             assertEquals(text, text, OcrPostProcessor.process(listOf(box(text))).single().text)
         }
     }
@@ -44,5 +44,19 @@ class OcrPostProcessorTest {
 
     @Test fun `空检测没有输出`() {
         assertEquals(emptyList<TextBox>(), OcrPostProcessor.process(emptyList()))
+    }
+
+    @Test fun `上游先过滤空白与低分单框避免合并后抹掉正确关卡`() {
+        val stage = box("09").copy(confidence = .97f)
+        val noise = box("P", 50).copy(confidence = .28f)
+        assertEquals(listOf(stage), OcrPostProcessor.process(listOf(noise, stage)))
+        assertEquals(emptyList<TextBox>(), OcrPostProcessor.process(listOf(box(""), box("  "), noise)))
+    }
+
+    @Test fun `上游全局阈值含等号且纵向干扰也先过滤`() {
+        val stage = box("09").copy(confidence = .5f)
+        val label = box("STAGE", y = 180).copy(confidence = .499f)
+        assertEquals(listOf(stage), OcrPostProcessor.process(listOf(label, stage)))
+        assertEquals(listOf(stage), OcrPostProcessor.process(listOf(label, stage), false, false))
     }
 }

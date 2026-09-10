@@ -6,12 +6,14 @@ import com.aliothmoon.maadroid.engine.ConnectionState
 import com.aliothmoon.maadroid.engine.DeviceHandle
 import com.aliothmoon.maadroid.engine.EngineDiagnosticSink
 import com.aliothmoon.maadroid.engine.EngineEvent
+import com.aliothmoon.maadroid.engine.EngineResources
 import com.aliothmoon.maadroid.engine.RemoteEngineDevice
 import com.aliothmoon.maadroid.engine.TaskPhase
 import com.aliothmoon.maadroid.engine.arknights.core.AidlMaaCoreClient
 import com.aliothmoon.maadroid.engine.arknights.core.AsstMsg
 import com.aliothmoon.maadroid.engine.arknights.core.MaaCoreClient
 import com.aliothmoon.maadroid.engine.arknights.core.MaaCoreSession
+import com.aliothmoon.maadroid.engine.arknights.resource.MaaResourcePack
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -89,13 +91,14 @@ class ArknightsEngine internal constructor(
 
     override fun setDiagnosticSink(sink: EngineDiagnosticSink?) { diagnosticSink = sink }
 
-    override suspend fun prepare(resourceDir: File): Result<Unit> = lifecycle.withLock {
+    override suspend fun prepare(resources: EngineResources): Result<Unit> = lifecycle.withLock {
         attempt {
             check(!released && !invalidated && !stopRequested && session == null) { "方舟会话不可重新准备，请创建新引擎" }
             prepared = null
+            val resourceDir = resources.requireDirectory(MaaResourcePack)
             val snapshot = options()
             require(ArknightsPackages[snapshot.clientType] != null) { "未知方舟客户端：${snapshot.clientType}" }
-            resources.prepare(resourceDir, snapshot).getOrThrow()
+            this@ArknightsEngine.resources.prepare(resourceDir, snapshot).getOrThrow()
             currentCoroutineContext().ensureActive()
             check(!invalidated) { "方舟远程服务已断开" }
             prepared = snapshot
@@ -398,6 +401,12 @@ class ArknightsEngine internal constructor(
     private fun isObject(json: String) = runCatching { Json.parseToJsonElement(json) is JsonObject }.getOrDefault(false)
     private data class QueuedTask(val type: String, var phase: TaskPhase? = null)
     private class Run(var failed: Boolean = false, var finished: Boolean = false)
+
+    companion object {
+        fun resourcePaths(resourceDir: File): EngineResources = EngineResources(
+            ArknightsProfile, mapOf(MaaResourcePack.packId to resourceDir),
+        )
+    }
 }
 
 class MaaInitializationException(val phase: MaaCoreSession.Initialization) :

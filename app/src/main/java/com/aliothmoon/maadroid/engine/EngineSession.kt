@@ -82,6 +82,7 @@ class EngineSession(
                 }
             }
             trace("prepare.begin", "mode=$runMode")
+            val directories = linkedMapOf<String, File>()
             for (pack in profile.resourcePacks.sortedBy { it.packId }) {
                 trace("resources.ensure", pack.packId)
                 if (pack.upstreamArchive != null) resources.ensureInstalled(pack).getOrThrow()
@@ -91,13 +92,13 @@ class EngineSession(
                 val manifest = File(dir, "manifest.json").takeIf { it.isFile }?.readText()
                 pack.checkCompatibility(manifest)?.let { error(it) }
                 pack.verifyInstalledFiles(dir)?.let { error(it) }
+                directories[pack.packId] = dir
                 trace("resources.verified", "${pack.packId} version=${pack.readInstalledVersion(dir)}")
             }
-            val mainPack = profile.resourcePacks.firstOrNull() ?: error("引擎未声明资源包")
             val activeEngine = getOrCreateEngine() ?: error("无法创建引擎 $engineId")
             activeEngine.setDiagnosticSink { phase, detail -> trace(phase, detail) }
             trace("engine.prepare")
-            activeEngine.prepare(EngineDataRoot.forPack(context, mainPack)).getOrThrow()
+            activeEngine.prepare(EngineResources(profile, directories)).getOrThrow()
             var connected = false
             trace("remote.acquire")
             serviceProvider { service ->

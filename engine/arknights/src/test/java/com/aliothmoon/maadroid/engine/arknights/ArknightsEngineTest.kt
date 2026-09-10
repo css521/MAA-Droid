@@ -7,14 +7,18 @@ import com.aliothmoon.maadroid.engine.DeviceControl
 import com.aliothmoon.maadroid.engine.DeviceHandle
 import com.aliothmoon.maadroid.engine.DisplaySpec
 import com.aliothmoon.maadroid.engine.EngineEvent
+import com.aliothmoon.maadroid.engine.EngineResources
 import com.aliothmoon.maadroid.engine.FrameSource
+import com.aliothmoon.maadroid.engine.GameProfile
 import com.aliothmoon.maadroid.engine.InputSink
 import com.aliothmoon.maadroid.engine.RemoteEngineDevice
+import com.aliothmoon.maadroid.engine.ResourcePackSpec
 import com.aliothmoon.maadroid.engine.TaskPhase
 import com.aliothmoon.maadroid.engine.arknights.core.AsstMsg
 import com.aliothmoon.maadroid.engine.arknights.core.MaaCoreClient
 import com.aliothmoon.maadroid.engine.arknights.core.MaaCoreSession
 import com.aliothmoon.maadroid.engine.arknights.core.MaaInstanceOptions
+import com.aliothmoon.maadroid.engine.arknights.resource.MaaResourcePack
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
@@ -153,8 +157,10 @@ class ArknightsEngineTest {
         factory: (RemoteEngineDevice) -> MaaCoreClient = { core },
     ) = ArknightsEngine(resources, options, onRawEvent, factory, backgroundScope, 500, 1_000)
 
+    private fun resourcePaths(directory: File = File("resources")) = ArknightsEngine.resourcePaths(directory)
+
     private suspend fun ArknightsEngine.ready(device: DeviceHandle = FakeDevice()) {
-        assertTrue(prepare(File("resources")).isSuccess)
+        assertTrue(prepare(resourcePaths()).isSuccess)
         assertTrue(connect(device).isSuccess)
     }
 
@@ -217,7 +223,7 @@ class ArknightsEngineTest {
         val events = observe(engine)
         assertTrue(engine.connect(device).isFailure)
         assertTrue(calls.isEmpty())
-        val preparation = async { engine.prepare(directory) }
+        val preparation = async { engine.prepare(resourcePaths(directory)) }
         entered.await()
         settings = MaaRunOptions("Bilibili", false)
         val connection = async { engine.connect(device) }
@@ -247,6 +253,50 @@ class ArknightsEngineTest {
         engine.release()
     }
 
+    @Test fun missingResourcePackNeverReachesHostPreparation() = runTest {
+        assertResourcePathsRejected(EngineResources(ArknightsProfile, emptyMap()))
+    }
+
+    @Test fun anotherGamesResourcePackWithTheSameIdNeverReachesHostPreparation() = runTest {
+        val foreignPack = object : ResourcePackSpec by MaaResourcePack {
+            override val engineId = "other-game"
+        }
+        val foreignProfile = object : GameProfile by ArknightsProfile {
+            override val id = foreignPack.engineId
+            override val resourcePacks = listOf(foreignPack)
+        }
+        assertResourcePathsRejected(EngineResources(
+            foreignProfile, mapOf(foreignPack.packId to File("other-game-resources")),
+        ))
+    }
+
+    private suspend fun TestScope.assertResourcePathsRejected(invalidPaths: EngineResources) {
+        val core = FakeCore()
+        var preparations = 0
+        var optionReads = 0
+        var factories = 0
+        val engine = newEngine(core, MaaResourcePreparation { _, _ ->
+            preparations++
+            Result.success(Unit)
+        }, options = { optionReads++; MaaRunOptions("Official", false) }, factory = { factories++; core })
+        try {
+            assertTrue(engine.prepare(invalidPaths).isFailure)
+            assertEquals(0, preparations)
+            assertEquals(0, optionReads)
+            assertTrue(engine.connect(FakeDevice()).isFailure)
+            assertEquals(0, factories)
+
+            assertTrue(engine.prepare(resourcePaths()).isSuccess)
+            assertTrue(engine.prepare(invalidPaths).isFailure)
+            assertEquals(1, preparations)
+            assertEquals(1, optionReads)
+            assertTrue(engine.connect(FakeDevice()).isFailure)
+            assertEquals(0, factories)
+        } finally {
+            engine.release()
+        }
+    }
+
     @Test fun failedAndCancelledPreparationsCannotConnectUsingAnEarlierSnapshot() = runTest {
         val core = FakeCore()
         val failure = IOException("resource delivery failed")
@@ -260,12 +310,12 @@ class ArknightsEngineTest {
                 else -> { suspended.await(); Result.success(Unit) }
             }
         }, factory = { factories++; core })
-        assertTrue(engine.prepare(File("first")).isSuccess)
-        val actualFailure = engine.prepare(File("failed")).exceptionOrNull()
+        assertTrue(engine.prepare(resourcePaths(File("first"))).isSuccess)
+        val actualFailure = engine.prepare(resourcePaths(File("failed"))).exceptionOrNull()
         assertEquals(failure.javaClass, actualFailure?.javaClass)
         assertEquals(failure.message, actualFailure?.message)
         assertTrue(engine.connect(FakeDevice()).isFailure)
-        val cancelled = async { engine.prepare(File("cancelled")) }
+        val cancelled = async { engine.prepare(resourcePaths(File("cancelled"))) }
         runCurrent()
         cancelled.cancelAndJoin()
         assertTrue(cancelled.isCancelled)
@@ -284,7 +334,7 @@ class ArknightsEngineTest {
                 if (throws) throw IOException("settings unavailable")
                 MaaRunOptions("unknown", false)
             }, factory = { error("No client may be created") })
-            assertTrue(engine.prepare(File("resources")).isFailure)
+            assertTrue(engine.prepare(resourcePaths()).isFailure)
             assertTrue(engine.connect(FakeDevice()).isFailure)
             assertEquals(0, preparations)
             engine.release()
@@ -300,7 +350,7 @@ class ArknightsEngineTest {
         val device = FakeDevice()
         assertTrue(engine.connect(device).isFailure)
         assertTrue(device.lookups.isEmpty())
-        assertTrue(engine.prepare(File("resources")).isSuccess)
+        assertTrue(engine.prepare(resourcePaths()).isSuccess)
         assertTrue(prepared)
         assertTrue(engine.connect(device).isFailure) // No engine binder in this device.
         assertEquals(listOf(ArknightsProfile.id), device.lookups)
@@ -315,7 +365,7 @@ class ArknightsEngineTest {
             override val control: DeviceControl get() = remote.control
         }
         val engine = newEngine(FakeCore(), factory = { error("Device capability must be validated first") })
-        assertTrue(engine.prepare(File("resources")).isSuccess)
+        assertTrue(engine.prepare(resourcePaths()).isSuccess)
         assertTrue(engine.connect(local).isFailure)
         engine.release()
     }
@@ -332,7 +382,7 @@ class ArknightsEngineTest {
                     return DisplaySpec(1920, 1080, 240)
                 }
         }
-        assertTrue(engine.prepare(File("resources")).isSuccess)
+        assertTrue(engine.prepare(resourcePaths()).isSuccess)
         assertTrue(engine.connect(device).exceptionOrNull() is IllegalArgumentException)
         assertEquals(1, core.creates)
         assertEquals(1, core.stops)
@@ -366,7 +416,7 @@ class ArknightsEngineTest {
                 }
         }
         val engine = newEngine(core)
-        assertTrue(engine.prepare(File("resources")).isSuccess)
+        assertTrue(engine.prepare(resourcePaths()).isSuccess)
         val failure = engine.connect(device).exceptionOrNull()
         assertTrue(failure is MaaInitializationException)
         assertEquals(MaaCoreSession.Initialization.BUSY, (failure as MaaInitializationException).phase)
@@ -392,7 +442,7 @@ class ArknightsEngineTest {
                 if (phase == MaaCoreSession.Initialization.TOUCH_MODE_FAILED) optionAccepted = false
             }
             val engine = newEngine(core)
-            assertTrue(engine.prepare(File("resources")).isSuccess)
+            assertTrue(engine.prepare(resourcePaths()).isSuccess)
             val failure = engine.connect(FakeDevice()).exceptionOrNull()
             assertTrue(failure is MaaInitializationException)
             assertEquals(phase, (failure as MaaInitializationException).phase)
@@ -407,7 +457,7 @@ class ArknightsEngineTest {
     @Test fun queueClearFailurePreventsConnectAndCannotReleaseOwnership() = runTest {
         val core = FakeCore().apply { stopAccepted = false }
         val engine = newEngine(core)
-        assertTrue(engine.prepare(File("resources")).isSuccess)
+        assertTrue(engine.prepare(resourcePaths()).isSuccess)
         assertTrue(engine.connect(FakeDevice()).isFailure)
         assertTrue(core.configs.isEmpty())
         assertFalse(engine.stop())
@@ -420,7 +470,7 @@ class ArknightsEngineTest {
     @Test fun timedOutConnectRetainsDeviceUntilNativeCompletionAndConfirmedStop() = runTest {
         val core = FakeCore().apply { autoConnect = false }
         val engine = newEngine(core)
-        assertTrue(engine.prepare(File("resources")).isSuccess)
+        assertTrue(engine.prepare(resourcePaths()).isSuccess)
         assertTrue(engine.connect(FakeDevice()).isFailure)
         assertTrue(engine.isRunning)
         assertEquals(0, engine.appendTask("Fight", "{}"))
@@ -439,7 +489,7 @@ class ArknightsEngineTest {
     @Test fun cancelledConnectAndStopWaitersRetainThePendingNativeCall() = runTest {
         val core = FakeCore().apply { autoConnect = false }
         val engine = newEngine(core)
-        assertTrue(engine.prepare(File("resources")).isSuccess)
+        assertTrue(engine.prepare(resourcePaths()).isSuccess)
         val connecting = async { engine.connect(FakeDevice()) }
         runCurrent()
         connecting.cancelAndJoin()
@@ -460,7 +510,7 @@ class ArknightsEngineTest {
     @Test fun ambiguousConnectExceptionDoesNotAllowReleaseOrReconnect() = runTest {
         val core = FakeCore().apply { onConnect = { throw IOException("ambiguous transport failure") } }
         val engine = newEngine(core)
-        assertTrue(engine.prepare(File("resources")).isSuccess)
+        assertTrue(engine.prepare(resourcePaths()).isSuccess)
         assertTrue(engine.connect(FakeDevice()).isFailure)
         assertTrue(engine.isRunning)
         assertFalse(engine.stop())

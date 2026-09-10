@@ -26,6 +26,7 @@ class EngineSessionLifecycleTest {
     private val device = mockk<EngineDeviceSession>(relaxed = true)
     private val pack = mockk<ResourcePackSpec> {
         every { packId } returns "session-lifecycle-pack"
+        every { engineId } returns ENGINE_ID
         every { relativeRoot } returns "engines/session-lifecycle"
         every { upstreamArchive } returns null
         every { checkCompatibility(any()) } returns null
@@ -80,6 +81,121 @@ class EngineSessionLifecycleTest {
         context, ENGINE_ID, resources, RunMode.BACKGROUND,
         serviceProvider = { block -> block(remote) },
     ).also { sessions += it }
+
+    private fun secondPack() = mockk<ResourcePackSpec> {
+        every { packId } returns "zz-session-lifecycle-models"
+        every { engineId } returns ENGINE_ID
+        every { relativeRoot } returns "engines/session-models"
+        every { upstreamArchive } returns null
+        every { checkCompatibility(any()) } returns null
+        every { verifyInstalledFiles(any()) } returns null
+        every { readInstalledVersion(any()) } returns "model-version"
+        every { requiresPrivilegedDelivery } returns false
+    }.also {
+        check(EngineDataRoot.forPack(context, it).mkdirs())
+        // Deliberately declare in a different order from lock acquisition.
+        every { profile.resourcePacks } returns listOf(it, pack)
+    }
+
+    private fun assertLocked(vararg packs: ResourcePackSpec) {
+        for (item in packs) {
+            val unexpected = ResourcePackLocks.tryAcquire(item.packId)
+            try { assertNull("Resource still in use: ${item.packId}", unexpected) }
+            finally { unexpected?.close() }
+        }
+    }
+
+    private fun assertUnlocked(vararg packs: ResourcePackSpec) {
+        for (item in packs) checkNotNull(ResourcePackLocks.tryAcquire(item.packId)) {
+            "Resource lease leaked: ${item.packId}"
+        }.close()
+    }
+
+    @Test fun allDeclaredDirectoriesReachTheEngineByIdAndRemainLockedUntilStopped() = runBlocking {
+        val models = secondPack()
+        val taskRoot = EngineDataRoot.forPack(context, pack)
+        val modelRoot = EngineDataRoot.forPack(context, models)
+        taskRoot.resolve("payload").writeText("pipeline")
+        modelRoot.resolve("payload").writeText("model")
+        val session = session()
+        session.events()
+        val engine = engines.single()
+        coEvery { engine.prepare(any()) } coAnswers {
+            val paths = firstArg<EngineResources>()
+            assertEquals(ENGINE_ID, paths.engineId)
+            assertEquals(setOf(pack.packId, models.packId), paths.directories.keys)
+            assertEquals("pipeline", paths.requireDirectory(pack).resolve("payload").readText())
+            assertEquals("model", paths.requireDirectory(models).resolve("payload").readText())
+            assertLocked(pack, models)
+            Result.success(Unit)
+        }
+        assertNull(session.prepare())
+        assertEquals(1, session.appendTask("third-game-task", "{}"))
+        assertTrue(session.start())
+        assertLocked(pack, models)
+        coEvery { engine.stop() } returns false
+        assertFalse(session.finishTask())
+        assertLocked(pack, models)
+        coEvery { engine.stop() } returns true
+        assertTrue(session.finishTask())
+        assertUnlocked(pack, models)
+        verify(exactly = 1) { engine.release() }
+        verify(exactly = 0) { device.close() }
+    }
+
+    @Test fun aResourceFreeEngineCanPrepareConnectAndRunWithoutInstallingAnything() = runBlocking {
+        every { profile.resourcePacks } returns emptyList()
+        val session = session()
+        session.events()
+        val engine = engines.single()
+        coEvery { engine.prepare(any()) } coAnswers {
+            val paths = firstArg<EngineResources>()
+            assertEquals(ENGINE_ID, paths.engineId)
+            assertTrue(paths.directories.isEmpty())
+            Result.success(Unit)
+        }
+        assertNull(session.prepare())
+        assertEquals(1, session.appendTask("input-only-task", "{}"))
+        assertTrue(session.start())
+        assertTrue(session.finishTask())
+        coVerify(exactly = 1) { engine.prepare(any()); device.connect(engine); engine.start() }
+        coVerify(exactly = 0) { resources.ensureInstalled(any()) }
+        verify(exactly = 0) { pack.verifyInstalledFiles(any()) }
+        assertNull(EngineExecutionCoordinator.shared.activeEngineId.value)
+    }
+
+    @Test fun failedSecondPackNeverPreparesAPartialResourceSetAndReleasesEveryLease() = runBlocking {
+        val models = secondPack()
+        every { models.verifyInstalledFiles(any()) } returns "broken second model pack"
+        val session = session()
+        session.events()
+        assertTrue(session.prepare()!!.contains("broken second model pack"))
+        coVerify(exactly = 0) { engines.single().prepare(any()); device.connect(any()) }
+        verify(exactly = 1) { engines.single().release() }
+        assertUnlocked(pack, models)
+        assertNull(EngineExecutionCoordinator.shared.activeEngineId.value)
+    }
+
+    @Test fun cancellingWhileWaitingForSecondPackReleasesTheFirstPack() = runBlocking {
+        val models = secondPack()
+        val heldModels = ResourcePackLocks.acquire(models.packId)
+        val firstValidated = CompletableDeferred<Unit>()
+        every { pack.verifyInstalledFiles(any()) } answers { firstValidated.complete(Unit); null }
+        val session = session()
+        session.events()
+        try {
+            val job = launch { session.prepare() }
+            withTimeout(5_000) { firstValidated.await() }
+            assertLocked(pack)
+            job.cancelAndJoin()
+            assertTrue(job.isCancelled)
+            coVerify(exactly = 0) { engines.single().prepare(any()); device.connect(any()) }
+            assertUnlocked(pack)
+            assertLocked(models) // The external operation still owns its lease.
+            assertNull(EngineExecutionCoordinator.shared.activeEngineId.value)
+        } finally { heldModels.close() }
+        assertUnlocked(models)
+    }
 
     @Test fun subscriberBeforePrepareReceivesEventsFromTheOneOwnedEngine() = runBlocking {
         val session = session()

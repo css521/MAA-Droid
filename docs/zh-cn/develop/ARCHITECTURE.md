@@ -34,7 +34,9 @@ Gradle 路径与目录对应，例如 `:engine:limbus`、`:core:bridge`。`app` 
 
 `EngineRegistry.createEngine(id)` 只调用 provider 工厂，不缓存运行实例。每个 `EngineSession` 独立持有自己的实例和事件流；订阅事件与后续 `prepare` 必须使用该会话的同一实例，新会话重新创建。资源、模型、native 库的加载放在 `prepare` / `connect`，停止后由会话调用 `release`，不能把可变引擎实例做成跨会话单例。
 
-两个引擎都在各自模块提供 provider；`EngineSetup` 只负责装配。注册时检查游戏 ID、全局资源包 ID、资源归属及目录：不同资源包不能指向相同目录或彼此的父/子目录，`./` 与重复分隔符的别名也不能绕过检查。任何检查失败都保留已有注册内容；同一个 provider 实例重复注册是无操作。注册表允许空资源列表，但通用运行会话当前仍要求主资源包。
+两个引擎都在各自模块提供 provider；`EngineSetup` 只负责装配。注册时检查游戏 ID、全局资源包 ID、资源归属及目录：不同资源包不能指向相同目录或彼此的父/子目录，`./` 与重复分隔符的别名也不能绕过检查。任何检查失败都保留已有注册内容；同一个 provider 实例重复注册是无操作。注册表和通用会话都允许无资源包的游戏，也允许一个游戏声明多个独立资源包。
+
+`EngineResources` 将目录按 `packId` 关联到当前游戏，保留不可变的路径映射；它本身不读取或验证文件。引擎的 `prepare(resources)` 和工作区的 `Content(..., resources)` 使用同一类型，各自通过 `requireDirectory(pack)` / `directory(pack)` 取需要的包。不存在按列表首项推断主资源的约定，也不能查询另一游戏的包。运行前的内容校验和持锁由宿主负责；配置页提供的是路径，必须允许尚未安装资源的状态。
 
 两种执行位置各有装配要求：
 
@@ -53,7 +55,7 @@ Gradle 路径与目录对应，例如 `:engine:limbus`、`:core:bridge`。`app` 
 
 [EngineTaskStore](../../../app/src/main/java/com/aliothmoon/maadroid/engine/EngineTaskStore.kt) 使用 `engine.<id>.tasks` 隔离任务开关、参数 JSON 和 workspace 配置。引擎自己解释配置；宿主负责保存和传递。简单面板按声明顺序选择任务；workspace 通过 `initialConfig`、`validate`、`selectedTasks` 处理迁移、校验和执行列表。
 
-边狱工作区保留 LALC 的 `taskConfigs`、`teamConfigs`、`themePackWeights`，再转换为执行分节。图鉴由已下载资源生成，资源更新不会改写用户队伍、权重或饰品允许/排除配置。`EngineWorkspace.Content` 当前只收到资源目录 `File?`；边狱在页面存活时检查 manifest revision，更新图鉴与图片，避免同路径替换后继续显示旧内容。
+边狱工作区保留 LALC 的 `taskConfigs`、`teamConfigs`、`themePackWeights`，再转换为执行分节。图鉴由已下载资源生成，资源更新不会改写用户队伍、权重或饰品允许/排除配置。`EngineWorkspace.Content` 收到当前游戏所有资源路径，边狱明确选择 `LimbusResourcePack`；在页面存活时检查其 manifest revision，更新图鉴与图片，避免同路径替换后继续显示旧内容。
 
 预览外框、FPS、紧凑标签、左右任务/配置布局、任务选择行、日志面板与行样式、主/次操作按钮在 `core/ui`，方舟和边狱使用同一套组件。首页的两种资源更新卡片也共用 `MaaSurfaceCard`。这些组件只负责呈现；预览 Surface 与设备租约、任务开关、日志详情和执行行为仍由各调用方提供。
 
@@ -66,8 +68,8 @@ Gradle 路径与目录对应，例如 `:engine:limbus`、`:core:bridge`。`app` 
 入口代码为 [EngineTaskViewModel](../../../app/src/main/java/com/aliothmoon/maadroid/presentation/viewmodel/EngineTaskViewModel.kt)、[EngineSession](../../../app/src/main/java/com/aliothmoon/maadroid/engine/EngineSession.kt) 和 [EngineDeviceSession](../../../app/src/main/java/com/aliothmoon/maadroid/engine/EngineDeviceSession.kt)。
 
 1. 启动时取得准入、等待配置保存，验证 workspace，并固定本次执行配置。任务列表为空或配置无效时不启动。
-2. 先订阅引擎事件，再准备资源；源码归档包缺失时安装，随后持有资源包锁并重新验证版本与兼容性。
-3. `AutomationEngine.prepare` 接收主资源目录。首次启动时，宿主按 profile 选择已安装包、创建后台显示会话、启动游戏并等待尺寸正确的首帧，然后调用 `connect`。同游戏再次执行时，优先接管保留的设备会话。
+2. 先订阅引擎事件，再按包 ID 的稳定顺序准备每个资源包；源码归档包缺失时安装，随后持有其锁并重新验证版本与兼容性。全部成功后才向引擎交付完整目录集合。任何包失败或等待被取消都进入统一收尾流程，确认引擎停止后释放已经取得的锁；停止未确认时保留占用。
+3. `AutomationEngine.prepare` 接收 `EngineResources`。无资源包的引擎收到空集合，跳过下载/校验而继续正常生命周期。首次启动时，宿主按 profile 选择已安装包、创建后台显示会话、启动游戏并等待尺寸正确的首帧，然后调用 `connect`。同游戏再次执行时，优先接管保留的设备会话。
 4. 依次 `appendTask(type, paramsJson)`，拒绝无效任务 ID，再调用 `start`。引擎通过 `EngineEvent` 报告状态；`AllTasksFinished` 是宿主自动收尾的终态，`Failure` 本身只是错误报告。
 5. 完成或手动停止时，先确认引擎停止并等待任务退出，再释放引擎模型、资源锁及执行准入，保留设备、帧通道、预览和手动输入。关闭游戏或退出会话才关闭设备。未确认停止时继续持有占用，允许重试停止。
 6. 复用需要同一游戏、运行模式、远程服务 Binder、显示规格和仍有效的设备租约。接管前释放旧页面触点并撤销旧页面对设备的引用；旧回调不能关闭新任务。确认游戏进程仍在或状态未知时不发送启动 Intent；仅确认进程退出才重新打开。准备新引擎失败且尚未转移时恢复原预览。跨游戏或需要重启提权服务的资源准备会先关闭不兼容的旧设备。

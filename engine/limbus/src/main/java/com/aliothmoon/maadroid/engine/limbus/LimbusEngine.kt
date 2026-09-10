@@ -5,6 +5,7 @@ import com.aliothmoon.maadroid.engine.ConnectionState
 import com.aliothmoon.maadroid.engine.DeviceHandle
 import com.aliothmoon.maadroid.engine.EngineEvent
 import com.aliothmoon.maadroid.engine.EngineDiagnosticSink
+import com.aliothmoon.maadroid.engine.EngineResources
 import com.aliothmoon.maadroid.engine.GameProfile
 import com.aliothmoon.maadroid.engine.LogLevel
 import com.aliothmoon.maadroid.engine.TaskPhase
@@ -106,7 +107,8 @@ class LimbusEngine(
      * 见 [LimbusResourcePack.checkCompatibility] —— 那道闸的意义就是**装载前**拒绝，
      * 而不是跑到一半崩在某个未实现的动作上。
      */
-    override suspend fun prepare(resourceDir: File): Result<Unit> = runCatching {
+    override suspend fun prepare(resources: EngineResources): Result<Unit> = runCatching {
+        val resourceDir = resources.requireDirectory(LimbusResourcePack)
         // 动作注册必须先于流水线装配：装配会校验每个 action 名有无实现体
         LimbusActions.install()
 
@@ -172,6 +174,7 @@ class LimbusEngine(
                 titleAnchorFiles = index.titleAnchors,
                 gameLanguage = loadedLanguage,
                 onInfo = { info(it) },
+                onDiagnostic = ::trace,
             )
         } catch (failure: Throwable) {
             runCatching { classifier.release() }.exceptionOrNull()?.let(failure::addSuppressed)
@@ -272,7 +275,7 @@ class LimbusEngine(
         val mergedConfig = mergeConfigs(tasks)
         val language = mergedConfig.str("other_task", "language", loadedLanguage)
         val config = mergedConfig.withLanguage(requireNotNull(resourceDir), language)
-        val effectiveRegistry = reg.withEnabled(enableOverrides).withTargetCounts(
+        val effectiveRegistry = reg.withEnabled(enableOverrides).withAndroidMailEntry().withTargetCounts(
             listOf("exp", "thread", "mirror").associate { "${it}_check" to config.int(it, "check_node_target_count", 1) },
         )
         if (language != loadedLanguage) {

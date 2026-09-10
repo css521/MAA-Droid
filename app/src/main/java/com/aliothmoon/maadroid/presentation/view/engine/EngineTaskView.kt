@@ -46,8 +46,10 @@ import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.constant.DefaultDisplayConfig
 import com.aliothmoon.maadroid.engine.DisplaySpec
 import com.aliothmoon.maadroid.engine.EngineRegistry
+import com.aliothmoon.maadroid.engine.EngineResources
 import com.aliothmoon.maadroid.engine.EngineSession
 import com.aliothmoon.maadroid.engine.EngineTaskStore
+import com.aliothmoon.maadroid.engine.ResourcePackSpec
 import com.aliothmoon.maadroid.manager.RemoteServiceManager
 import com.aliothmoon.maadroid.presentation.viewmodel.EngineTaskViewModel
 import com.aliothmoon.maadroid.presentation.viewmodel.EngineTaskQuickActions
@@ -66,6 +68,7 @@ import com.aliothmoon.maadroid.ui.components.TaskPrimaryButton
 import com.aliothmoon.maadroid.ui.components.TaskSecondaryButton
 import org.koin.compose.koinInject
 import kotlinx.coroutines.launch
+import java.io.File
 
 /**
  * 按引擎声明渲染的任务页。
@@ -199,7 +202,7 @@ fun EngineTaskContent(
         ) { preview, enterFullscreen ->
             if ((hostTaskActive && !running) || (activeEngineId != null && activeEngineId != engineId)) {
                 EngineTaskBlockedContent()
-            } else if (viewModel.panels.isEmpty()) {
+            } else if (profile == null || (workspace == null && viewModel.panels.isEmpty())) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(stringResource(R.string.engine_no_task_panels))
                 }
@@ -234,12 +237,13 @@ fun EngineTaskContent(
                             }
                             if (workspace != null) {
                                 Box(Modifier.fillMaxWidth().weight(5f)) {
-                                    workspace.Content(
+                                    EngineTaskWorkspaceContent(
+                                        engineId = engineId,
                                         configJson = workspaceDraft ?: tasks.workspaceConfig ?: workspace.initialConfig(tasks.enabled, tasks.params),
                                         onConfigChange = viewModel::onWorkspaceChange,
                                         editable = !running,
                                         logs = logs,
-                                        resourceDir = profile?.resourcePacks?.firstOrNull()?.let { EngineDataRoot.forPack(context, it) },
+                                        directoryForPack = { EngineDataRoot.forPack(context, it) },
                                     )
                                 }
                             } else EngineTaskList(
@@ -319,6 +323,30 @@ fun EngineTaskContent(
             }
         }
     }
+}
+
+/** Resolve every declared pack without checking installation or blocking editable workspace content. */
+@Composable
+internal fun EngineTaskWorkspaceContent(
+    engineId: String,
+    configJson: String,
+    onConfigChange: (String) -> Unit,
+    editable: Boolean,
+    logs: List<String>,
+    directoryForPack: (ResourcePackSpec) -> File,
+) {
+    val provider = EngineRegistry.provider(engineId) ?: return
+    val workspace = provider.ui.workspace ?: return
+    val profile = provider.profile
+    workspace.Content(
+        configJson = configJson,
+        onConfigChange = onConfigChange,
+        editable = editable,
+        logs = logs,
+        resources = EngineResources(profile, profile.resourcePacks.associate { pack ->
+            pack.packId to directoryForPack(pack)
+        }),
+    )
 }
 
 @Composable

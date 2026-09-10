@@ -19,8 +19,8 @@ import java.io.File
 
 internal val LocalLimbusResourceRevision = staticCompositionLocalOf<String?> { null }
 
-/** The host currently exposes only a File. Watch its manifest while this page is
- * composed so an atomic install at the same path also refreshes the catalog.
+/** Watch the selected pack's manifest while this page is composed so an atomic
+ * install at the same path also refreshes the catalog.
  * A future host revision key can restart this producer immediately. */
 @Composable
 internal fun rememberLimbusCatalog(root: File?, updateKey: Any? = null): State<LimbusCatalogState> =

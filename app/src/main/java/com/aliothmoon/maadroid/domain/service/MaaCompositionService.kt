@@ -219,7 +219,7 @@ class MaaCompositionService(
             }
         }
         val prepared = try {
-            engine.prepare(File(pathConfig.cacheResourceDir))
+            engine.prepare(ArknightsEngine.resourcePaths(File(pathConfig.cacheResourceDir)))
         } catch (cancelled: CancellationException) {
             engine.release()
             throw cancelled

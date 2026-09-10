@@ -55,6 +55,79 @@ class PipelineRegistry private constructor(
         return PipelineRegistry(patched, interrupts)
     }
 
+    /**
+     * v5.0.0 routes task_center straight to the notification dot, bypassing mail_entry.
+     * On Android an explicitly selected Mail task must inspect the mailbox even without
+     * that desktop-sized dot. Use the existing one-shot entry/check pair for this run.
+     * The public task selection still addresses the upstream check_and_get_mails node.
+     */
+    internal fun withAndroidMailEntry(): PipelineRegistry {
+        fun changed(name: String): Nothing = error(
+            "邮件流水线节点 $name 已变化，当前 Android 邮件适配仅支持 LALC v5.0.0 的邮件流程，请升级 App 后重试",
+        )
+        fun mailNode(name: String): PipelineNode = nodes[name] ?: changed(name)
+        val open = mailNode("check_and_get_mails")
+        if (!open.enable) {
+            // Mail is not part of this run. Disable both legacy and wrapped entry paths
+            // without imposing the Android mail shape on another selected task.
+            return PipelineRegistry(nodes.mapValues { (name, node) ->
+                if (name == "mail_entry") node.copy(enable = false) else node
+            }, interrupts)
+        }
+        fun route(
+            name: String, action: String, recognition: String, next: List<String>,
+            inverse: Boolean = false, type: String = PipelineNode.TYPE_NORMAL,
+        ) {
+            val node = mailNode(name)
+            if (node.action != action || node.recognition != recognition || node.next != next ||
+                node.inverse != inverse || node.type != type) changed(name)
+        }
+        // Only fields whose meaning this adapter relies on are checked. Descriptions,
+        // timing, thresholds and unrelated extension fields remain owned by the resource.
+        route("mail_entry", "empty", "direct", listOf("mail_enter_main_window"))
+        route("mail_enter_main_window", "main_window_confirm", "template_match", listOf("check_and_get_mails", "check_mail"))
+        route("check_and_get_mails", "click", "template_match", listOf("claim_mail"))
+        route("claim_mail", "click", "template_match", listOf("wait_mailbox_connecting_disappear"), inverse = true)
+        route("wait_mailbox_connecting_disappear", "wait_connecting_disappear", "direct", listOf("confirm_reward", "exit_mailbox"))
+        route("confirm_reward", "key", "direct", listOf("claim_mail", "exit_mailbox"))
+        route("exit_mailbox", "key", "direct", listOf("check_mail"))
+        route("check_mail", "check_out_update", "direct", listOf("main_circle_center"), type = PipelineNode.TYPE_CHECK)
+        val center = require("task_center")
+        if (center.next.count { it == "check_and_get_mails" } != 1 || "mail_entry" in center.next) changed("task_center")
+        if (mailNode("mail_enter_main_window").str("template") != "main_window_no_text") changed("mail_enter_main_window")
+        if (open.str("template") != "red_exclaimation" || open.ints("mask") != listOf(1080, 60, 70, 80) ||
+            open.ints("target_offset") != listOf(-10, 10) || "target" in open.params) changed("check_and_get_mails")
+        val claim = mailNode("claim_mail")
+        if (claim.str("template") != "no_mail_in_storage" || claim.ints("target") != listOf(950, 270) ||
+            (claim.ints("target_offset") ?: listOf(0, 0)) != listOf(0, 0)) changed("claim_mail")
+        if (mailNode("confirm_reward").str("key") != "esc") changed("confirm_reward")
+        if (mailNode("exit_mailbox").str("key") != "esc") changed("exit_mailbox")
+        for (name in listOf("check_and_get_mails", "claim_mail", "confirm_reward", "exit_mailbox")) {
+            if ((mailNode(name).num("repeat") ?: 1.0) != 1.0) changed(name)
+        }
+        val check = mailNode("check_mail")
+        if (check.str("disable_node") != "mail_entry" || check.num("target_count") != 1.0) changed("check_mail")
+
+        fun adapted(node: PipelineNode) = node.copy(
+            params = JsonObject(node.params + ("android_mail_flow" to JsonPrimitive(true))),
+        )
+        val patched = nodes + mapOf(
+            "task_center" to center.copy(next = center.next.map {
+                if (it == "check_and_get_mails") "mail_entry" else it
+            }),
+            "mail_entry" to mailNode("mail_entry").copy(enable = open.enable),
+            "check_and_get_mails" to adapted(open).copy(
+                recognition = PipelineNode.RECOGNITION_DIRECT,
+                inverse = false,
+                // An already empty mailbox must exit instead of looping in error_handler.
+                next = (open.next + "exit_mailbox").distinct(),
+            ),
+            "claim_mail" to adapted(claim),
+            "confirm_reward" to adapted(mailNode("confirm_reward")),
+        )
+        return PipelineRegistry(patched, interrupts)
+    }
+
     fun withTargetCounts(counts: Map<String, Int>): PipelineRegistry {
         val disabled = counts.filterValues { it == 0 }.keys.mapNotNull { nodes[it]?.str("disable_node") }.toSet()
         return PipelineRegistry(nodes.mapValues { (name, node) ->
