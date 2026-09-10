@@ -57,7 +57,16 @@ object MailboxDetector {
             } finally { crop.release() }
         }
         read(region, enhanceContrast = true)
-        fromText(words)?.takeIf { it.empty && it.close != null }?.let { return it }
+        var seen = fromText(words)
+        if (seen == null) {
+            // fromText 返回 null 意味着既无标题也无"暂无邮件"，即**根本不在邮箱页**。
+            // 此时后面那两遍 960x520 的 OCR 纯属浪费 —— 真机日志实测一次观察跑满 4 遍、
+            // 耗时约 4 秒，而结果是 mailbox=false，任务在主页轮询时反复付这个代价。
+            // 但标题也可能只是漏读，所以先用小得多的 titleRegion 确认一次再放弃。
+            read(titleRegion, enhanceContrast = true)
+            seen = fromText(words) ?: return null
+        }
+        seen.takeIf { it.empty && it.close != null }?.let { return it }
         // The phone preview reads Close as Clese in a whole-frame pass. Re-reading the
         // actual button row recovers Close without fuzzy spelling or a lower threshold.
         read(titleRegion, enhanceContrast = true)

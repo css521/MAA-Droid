@@ -49,6 +49,14 @@ private const val MAX_SCROLL = 3
 private const val LAST_PAGE_FIRST_TEAM = 18
 private const val LAST_PAGE_OFFSET = 14
 
+/**
+ * 队伍列表滑动后的静置时间。上游是 0.5 秒（PC 量），安卓上列表有惯性动画，不够。
+ */
+private const val LIST_SETTLE = 1.2
+
+/** 点选队伍后等阵容载入的时间；ready_to_battle 要读"已选/总数"，读到旧值会误判 */
+private const val TEAM_LOAD = 1.5
+
 private object BattleWinrateAction : ActionBackend {
     override suspend fun execute(ctx: ActionContext): ActionOutcome {
         ctx.ensureActive()
@@ -193,16 +201,19 @@ private object ChooseTeamAction : ActionBackend {
         val teamNo = (ctx.config.intAt(cfgType, "team_indexes", cfgIndex, 1) - 1)
             .coerceIn(0, MAX_TEAM_NO)
 
-        // 先划到顶部重置，否则续跑时列表停在上次位置，下面的滚动次数就对不上
+        // 先划到顶部重置，否则续跑时列表停在上次位置，下面的滚动次数就对不上。
+        // 每次滑动后必须等列表**惯性滑动停下**：上游给 0.5 秒是 PC 的量，安卓上不够——
+        // 真机实测 "选择队伍→完成选择队伍" 只花 2 秒就点完了格子并交给 ready_to_battle，
+        // 游戏还没稳定就被点，表现为进不了战斗。
         repeat(2) {
             swipe(ctx.input, 130, 320, 130, 720)
-            ctx.delay(0.5)
+            ctx.delay(LIST_SETTLE)
         }
 
         val scrollCount = (teamNo / TEAMS_PER_PAGE).coerceIn(0, MAX_SCROLL)
         repeat(scrollCount) {
             swipe(ctx.input, 130, 500, 130, 280)
-            ctx.delay(0.5)
+            ctx.delay(LIST_SETTLE)
         }
 
         // 最后一页只剩两格可点（18→4、19→5），不能再按整页取模
@@ -211,6 +222,9 @@ private object ChooseTeamAction : ActionBackend {
             else teamNo - LAST_PAGE_OFFSET
 
         click(ctx.input, TEAM_CLICK_POSITIONS[clickIndex].first, TEAM_CLICK_POSITIONS[clickIndex].second)
+        // 点完队伍要等罪人阵容真的载入：上游点完即返回，后续 ready_to_battle 会读
+        // "已选/总数"（Crop(1130,500,100,50)），读到旧值就会做出错误判断。
+        ctx.delay(TEAM_LOAD)
         ctx.log("完成选择队伍")
 
         if (cfgType == "mirror") {
