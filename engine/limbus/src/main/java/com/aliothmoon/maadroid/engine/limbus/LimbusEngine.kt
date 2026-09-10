@@ -10,7 +10,9 @@ import com.aliothmoon.maadroid.engine.GameProfile
 import com.aliothmoon.maadroid.engine.LogLevel
 import com.aliothmoon.maadroid.engine.limbus.action.LimbusActions
 import com.aliothmoon.maadroid.engine.limbus.config.JsonLimbusConfig
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import com.aliothmoon.maadroid.engine.limbus.pipeline.NodeRecognizer
 import com.aliothmoon.maadroid.engine.limbus.pipeline.PipelineRegistry
 import com.aliothmoon.maadroid.engine.limbus.pipeline.PipelineRunner
@@ -118,7 +120,17 @@ class LimbusEngine(
             ?: throw IllegalStateException("资源包缺少 $PIPELINE_DIR 目录")
         require(files.isNotEmpty()) { "$PIPELINE_DIR 下没有流水线 JSON" }
 
-        val loaded = PipelineRegistry.load(files)
+        // 平台补丁：把部分文字判据从 template_match 改成 ocr。上游素材来自 Steam 客户端，
+        // 在安卓上大面积失配（实测 details.png 在真实按钮处只有 0.485），而两个客户端显示的是
+        // 同一串文字 —— OCR 读字不读像素，不受字体渲染与 UI 缩放差异影响。
+        // 补丁文件由覆盖层随资源安装写入，只覆盖具名字段，上游流程更新仍照常生效。
+        val patchFile = File(resourceDir, PIPELINE_PATCH)
+        val patches = if (!patchFile.isFile) emptyMap() else runCatching {
+            Json.parseToJsonElement(patchFile.readText()).jsonObject.mapValues { it.value.jsonObject }
+        }.onFailure { warn("流水线补丁解析失败，按纯上游运行: ${it.message}") }.getOrDefault(emptyMap())
+        if (patches.isNotEmpty()) info("已应用流水线补丁 ${patches.size} 个节点")
+
+        val loaded = PipelineRegistry.load(files, patches)
 
         val index = ResourcePackTemplateIndex.load(
             resourceDir = resourceDir,
@@ -488,6 +500,9 @@ class LimbusEngine(
         const val CAPTURE_MARKER = ".capture"
 
         const val PIPELINE_DIR = "config/task"
+
+        /** 平台补丁文件，由覆盖层写入资源目录；缺失即纯上游行为 */
+        const val PIPELINE_PATCH = "config/task-patch.json"
         const val LANGUAGE_MARKER = "config/language/current"
         const val DEFAULT_LANGUAGE = "zh"
 

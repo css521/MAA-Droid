@@ -1,0 +1,8 @@
+{
+  "exp_choose_team":        { "recognition": "ocr", "params": { "text": "Details", "mask": [880, 100, 120, 50] } },
+  "thread_choose_team":     { "recognition": "ocr", "params": { "text": "Details", "mask": [880, 100, 120, 50] } },
+  "mirror_choose_team":     { "recognition": "ocr", "params": { "text": "Details", "mask": [880, 100, 120, 50] } },
+  "mirror_ready_to_battle": { "recognition": "ocr", "params": { "text": "Details", "mask": [880, 100, 120, 50] } },
+  "touch_to_start":         { "recognition": "ocr", "params": { "text": "Clear all caches", "mask": [170, 630, 190, 55] } },
+  "mirror_enter_resume":    { "recognition": "ocr", "params": { "text": "Resume", "mask": [570, 370, 150, 60] } }
+}

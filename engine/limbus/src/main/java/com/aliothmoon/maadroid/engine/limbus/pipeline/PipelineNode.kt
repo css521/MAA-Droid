@@ -91,9 +91,16 @@ data class PipelineNode(
         }
         if (recognition == RECOGNITION_DIRECT) return null
 
+        if (recognition == RECOGNITION_OCR) {
+            // 文字判据靠 params.text，不需要 template；期望串为空会让节点恒命中，必须拒绝
+            val text = params["text"]
+            val valid = text is JsonPrimitive && text.isString && text.content.isNotBlank()
+            if (!valid) return "recognition 'ocr' 的 params.text 必须为非空字符串"
+        }
+
         // TaskNode.get_param requires a template for all three matching modes. Empty or
         // malformed templates must not become a MISS that inverse can turn into success.
-        val template = params["template"]
+        val template = if (recognition == RECOGNITION_OCR) null else params["template"]
         val validTemplates = when (template) {
             is JsonPrimitive -> template.isString && template.content.isNotBlank()
             is JsonArray -> template.isNotEmpty() && template.all {
@@ -101,7 +108,10 @@ data class PipelineNode(
             }
             else -> false
         }
-        if (!validTemplates) return "recognition '$recognition' 的 params.template 必须为非空字符串或非空字符串数组"
+        // ocr 判据用 params.text，上面已校验；其余识别都必须有可用的 template
+        if (recognition != RECOGNITION_OCR && !validTemplates) {
+            return "recognition '$recognition' 的 params.template 必须为非空字符串或非空字符串数组"
+        }
 
         if ("threshold" in params) {
             val threshold = num("threshold")
@@ -142,11 +152,25 @@ data class PipelineNode(
         const val RECOGNITION_COLOR_TEMPLATE_MATCH = "color_template_match"
         const val RECOGNITION_FEATURE_MATCH = "feature_match"
 
+        /**
+         * 文字判据：用 OCR 读区域内的文字并与期望串比对，**不需要任何素材**。
+         *
+         * 存在的理由：上游 LALC 只自动化 Steam 客户端，其素材在安卓上大面积失配
+         * （实测 details.png 在安卓真帧的真实按钮处只有 0.485）。而两个客户端显示的是
+         * **同一串文字**——OCR 读字不读像素，字体渲染、按钮底纹、UI 缩放的差异都不影响。
+         * 真帧实测同一按钮 OCR 读出 "Details"、"Clear all caches" 均精确。
+         *
+         * 流水线里 50 个判据约 35 个是文字，改走 OCR 后这些节点不再依赖素材，
+         * 上游更新素材也不会影响它们。剩下的图标判据才需要模板。
+         */
+        const val RECOGNITION_OCR = "ocr"
+
         // Recognizer has other methods for actions; TaskNode.do_recognize and NodeRecognizer
         // expose only these four modes to pipeline JSON.
         val SUPPORTED_RECOGNITIONS = setOf(
             RECOGNITION_DIRECT, RECOGNITION_TEMPLATE_MATCH,
             RECOGNITION_COLOR_TEMPLATE_MATCH, RECOGNITION_FEATURE_MATCH,
+            RECOGNITION_OCR,
         )
 
         /** 上游 `create_task_node` 里 interrupt 的缺省值 */

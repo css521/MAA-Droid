@@ -5,6 +5,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import org.junit.Test
 
 /**
@@ -98,9 +100,67 @@ class PipelineRegistryTest {
         return message
     }
 
+    /**
+     * 文字判据不需要 template，但**必须**有非空 text ——
+     * 空串会让 findText 恒返回命中，节点变成无条件通过，比识别不中更危险。
+     */
+    @Test fun `ocr 判据要求非空 text 而不要求 template`() {
+        val ok = loadGate("""{"recognition":"ocr","params":{"text":"Details","mask":[850,100,200,60]}}""")
+        assertEquals("ocr", ok.require("gate").recognition)
+        for (bad in listOf(
+            """{"recognition":"ocr","params":{}}""",
+            """{"recognition":"ocr","params":{"text":""}}""",
+            """{"recognition":"ocr","params":{"text":"  "}}""",
+            """{"recognition":"ocr","params":{"text":123}}""",
+        )) {
+            assertTrue(bad, rejectsGate(bad, "params.text").contains("非空字符串"))
+        }
+    }
+
+    /**
+     * 补丁是**字段级合并**而不是整节点替换：只覆盖具名字段，`params` 深合并，
+     * 其余（next / pre_delay / action…）仍跟上游走。这样上游后续改流程依然生效。
+     */
+    @Test fun `补丁只覆盖具名字段并深合并 params`() {
+        val reg = PipelineRegistry.load(
+            mapOf("main.json" to """{
+                "empty": {"action":"empty"},
+                "error_handler": {"interrupt": []},
+                "gate": {"action":"empty","recognition":"template_match",
+                         "params":{"template":"details","pre_delay":2,"post_delay":3},
+                         "next":["empty"]}
+            }"""),
+            patches = mapOf(
+                "gate" to Json.parseToJsonElement(
+                    """{"recognition":"ocr","params":{"text":"Details","mask":[880,100,120,50]}}"""
+                ).jsonObject
+            ),
+        )
+        val gate = reg.require("gate")
+        assertEquals("ocr", gate.recognition)
+        assertEquals("Details", gate.str("text"))
+        assertEquals(listOf(880, 100, 120, 50), gate.ints("mask"))
+        // 上游的这些字段必须原样保留，否则补丁会悄悄改掉流程时序
+        assertEquals(2.0, gate.num("pre_delay"))
+        assertEquals(3.0, gate.num("post_delay"))
+        assertEquals(listOf("empty"), gate.next)
+    }
+
+    /** 补丁名打错会静默失效（节点照旧走上游识别），必须在装载时就拒绝 */
+    @Test fun `补丁引用不存在的节点时拒绝装载`() {
+        val error = assertThrows(IllegalStateException::class.java) {
+            PipelineRegistry.load(
+                mapOf("main.json" to """{"empty":{"action":"empty"},"error_handler":{"interrupt":[]}}"""),
+                patches = mapOf("typo_node" to Json.parseToJsonElement("{}").jsonObject),
+            )
+        }
+        assertTrue(error.message.orEmpty(), error.message.orEmpty().contains("typo_node"))
+    }
+
     @Test fun unsupportedRecognitionIsRejectedEvenWhenDisabledOrInverse() {
         // Recognizer methods used by actions do not automatically become pipeline modes.
-        for (recognition in listOf("future_match", "pyramid_template_match", "precise_template_match", "ocr", "")) {
+        // "ocr" 已成为受支持的文字判据（见 PipelineNode.RECOGNITION_OCR），故从这里移出
+        for (recognition in listOf("future_match", "pyramid_template_match", "precise_template_match", "")) {
             for (enabled in listOf(false, true)) {
                 for (inverse in listOf(false, true)) {
                     val message = rejectsGate("""{

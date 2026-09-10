@@ -2,6 +2,7 @@ package com.aliothmoon.maadroid.engine.limbus.pipeline
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.JsonPrimitive
 
 /**
@@ -165,13 +166,46 @@ class PipelineRegistry private constructor(
          *
          * @throws IllegalStateException 节点不兼容、参数无效、存在重名节点或断引用时抛出
          */
-        fun load(files: Map<String, String>): PipelineRegistry {
+        /**
+         * 合并一个节点补丁：顶层字段直接覆盖，`params` 深合并。
+         *
+         * 为什么是"补丁"而不是"替换整个 JSON 文件"：流水线来自上游、要跟着上游更新，
+         * 而平台修正只涉及个别字段（把文字判据从 template_match 改成 ocr）。
+         * 整文件替换会把上游后续的流程改动一起挡掉；只覆盖具名字段则两者共存。
+         */
+        internal fun mergeNode(upstream: JsonObject, patch: JsonObject): JsonObject {
+            val merged = upstream.toMutableMap()
+            for ((key, value) in patch) {
+                merged[key] = if (key == "params" && value is JsonObject) {
+                    val base = (upstream["params"] as? JsonObject)?.toMutableMap() ?: mutableMapOf()
+                    base.putAll(value)
+                    JsonObject(base)
+                } else value
+            }
+            return JsonObject(merged)
+        }
+
+        /**
+         * @param patches 节点名 → 字段补丁。来自资源包里的平台补丁文件，
+         *   由覆盖层提供（见 ResourcePackSpec.overlayAssetPrefix）。缺省为空即纯上游行为。
+         */
+        fun load(files: Map<String, String>, patches: Map<String, JsonObject> = emptyMap()): PipelineRegistry {
             val nodes = LinkedHashMap<String, PipelineNode>()
             val fromErrorFile = HashSet<String>()
+            val appliedPatches = HashSet<String>()
 
+            require(patches.keys.all { it.isNotBlank() }) { "补丁的节点名不能为空" }
             // 1. 加载
             for ((fileName, text) in files.entries.sortedBy { it.key }) {
-                val parsed = json.decodeFromString<Map<String, PipelineNode>>(text)
+                val raw = json.decodeFromString<Map<String, JsonObject>>(text)
+                val parsed = raw.mapValues { (name, rawNode) ->
+                    val patch = patches[name]
+                    if (patch == null) json.decodeFromJsonElement<PipelineNode>(rawNode)
+                    else {
+                        appliedPatches += name
+                        json.decodeFromJsonElement<PipelineNode>(mergeNode(rawNode, patch))
+                    }
+                }
                 for ((name, node) in parsed) {
                     check(name !in nodes) { "流水线节点重名: $name（见 $fileName）" }
                     node.compatibilityError()?.let { reason ->
@@ -182,6 +216,12 @@ class PipelineRegistry private constructor(
                 }
             }
             check(nodes.isNotEmpty()) { "未加载到任何流水线节点" }
+
+            val unmatched = patches.keys - appliedPatches
+            check(unmatched.isEmpty()) {
+                // 补丁名打错会静默失效：节点照旧走上游识别，症状是"改了没用"，极难查。
+                "流水线补丁引用了不存在的节点: ${unmatched.sorted().joinToString("、")}"
+            }
 
             // 2. error 节点的 interrupt 清空；其余节点缺省为 ["error_handler"]
             val interrupts = nodes.mapValues { (name, node) ->

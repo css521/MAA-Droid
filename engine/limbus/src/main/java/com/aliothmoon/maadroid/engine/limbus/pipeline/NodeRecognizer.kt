@@ -98,6 +98,20 @@ class NodeRecognizer(
                     recognizer.featureMatch(t, th, crop)
                 }
 
+            // 文字判据：读区域内文字与期望串比对，不需要素材。
+            // mask 在这里是 OCR 的取字区域（对应上游 fill_mask_screenshot 语义），
+            // 强烈建议每个 ocr 节点都给 mask —— 全屏 OCR 既慢又容易撞上别处的同名文字。
+            PipelineNode.RECOGNITION_OCR -> {
+                val target = node.str("text").orEmpty()
+                val threshold = node.num("threshold") ?: DEFAULT_OCR_THRESHOLD
+                val crop = node.ints("mask")?.let { Crop(it[0], it[1], it[2], it[3]) }
+                val found = recognizer.findText(target, crop, threshold)
+                RecognizeOutcome(
+                    hit = found.isNotEmpty(),
+                    matches = found.map { Match(it.x, it.y, it.score) },
+                )
+            }
+
             else -> error("不支持的 recognition '${node.recognition}'，请升级 App 后重新加载资源包")
         }
 
@@ -145,6 +159,9 @@ class NodeRecognizer(
     private companion object {
         /** 上游 get_recognition_params 里 template_match 的默认阈值 */
         const val DEFAULT_TEMPLATE_THRESHOLD = 0.85
+
+        /** ocr 判据的默认置信度门槛，与上游 find_text_in_image 一致 */
+        const val DEFAULT_OCR_THRESHOLD = 0.5
 
         /** color_template_match 与 feature_match 的默认阈值 */
         const val DEFAULT_COLOR_FEATURE_THRESHOLD = 0.7
