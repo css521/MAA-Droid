@@ -101,6 +101,16 @@ class LimbusRecognizer(
         }
     }
 
+    override suspend fun dumpFrame(tag: String) {
+        val frame = frames.grab() ?: return
+        val screen = frame.toMat()
+        try {
+            captureFrame(screen, frame.seq, tag)
+        } finally {
+            screen.release()
+        }
+    }
+
     override suspend fun observeTeamSelection(): Match? {
         if (gameLanguage != "en") return null
         val frame = frames.grab() ?: return null

@@ -60,6 +60,14 @@ private fun WorkspaceContent(config: LimbusWorkspaceConfig, change: (LimbusWorks
     val resources by rememberLimbusCatalog(root)
     var transfer by rememberSaveable { mutableStateOf(false) }
     var more by remember { mutableStateOf(false) }
+    var clearToast by remember { mutableStateOf<String?>(null) }
+    clearToast?.let { msg ->
+        val context = androidx.compose.ui.platform.LocalContext.current
+        LaunchedEffect(msg) {
+            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+            clearToast = null
+        }
+    }
     Column(Modifier.fillMaxSize()) {
         TaskPanelTabs(
             labels = listOf("任务", "队伍", "卡包", "日志"),
@@ -71,6 +79,14 @@ private fun WorkspaceContent(config: LimbusWorkspaceConfig, change: (LimbusWorks
                 TextButton(onClick = { more = true }, modifier = Modifier.width(48.dp), contentPadding = PaddingValues(0.dp)) { Text("更多") }
                 DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
                     DropdownMenuItem(text = { Text("导入 / 导出配置") }, onClick = { more = false; transfer = true })
+                    DropdownMenuItem(text = { Text("清理采集帧") }, onClick = {
+                        more = false
+                        // 采集帧存在 Maa/debug/limbus/frames/，清掉后下次运行会重新采集全部界面
+                        val frames = root?.let { java.io.File(it, "debug/limbus/frames") }
+                        val count = frames?.listFiles()?.count { it.isFile && it.extension == "png" } ?: 0
+                        frames?.listFiles()?.forEach { if (it.isFile && it.extension == "png") it.delete() }
+                        clearToast = "已清理 $count 张采集帧"
+                    })
                 }
             }
         }

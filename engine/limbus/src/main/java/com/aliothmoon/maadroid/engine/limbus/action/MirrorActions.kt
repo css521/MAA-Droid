@@ -905,6 +905,9 @@ private object SelectInitialEgoGiftAction : ActionBackend {
 private object ChooseStarAction : ActionBackend {
     override suspend fun execute(ctx: ActionContext): ActionOutcome {
         ctx.log("选择镜牢星光")
+        // 采集九宫格界面的帧——这是修坐标的前置输入，采集点在 templateMatch 里触发不到
+        // （该界面的判据不走流水线的 template_match，而是由上游的动作代码直接取帧）。
+        ctx.recognize.dumpFrame("mirror_star_grid")
         val cfgType = ctx.node.str("cfg_type") ?: "mirror"
         val stars = ctx.config.listAt(
             cfgType, "mirror_team_stars", resolveCfgIndex(ctx, cfgType)

@@ -95,6 +95,12 @@ interface Recognizer {
     suspend fun findThreadStage(stage: String): List<TextMatch> =
         findText(stage, crop = ThreadStageQuery.REGION)
 
+    /**
+     * 主动采集当前帧。用于动作代码里那些不走 templateMatch 的界面（例如九宫格选星光），
+     * 采集点在 templateMatch 里触发不到它们。[tag] 用作文件名，便于识别界面。
+     */
+    suspend fun dumpFrame(tag: String) {}
+
     /** 邮箱专用观察；未知结果不能作为空邮箱或领取完成的证据。 */
     suspend fun observeMailbox(): MailboxObservation? =
         MailboxDetector.fromText(detectText(MailboxDetector.region, .7))
