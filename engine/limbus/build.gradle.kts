@@ -16,6 +16,8 @@ android {
 
     buildFeatures {
         compose = true
+        // 开发模式采集底片要判断当前是否 debug 构建，见 LimbusEngine.captureDirOrNull
+        buildConfig = true
     }
 
     compileOptions {

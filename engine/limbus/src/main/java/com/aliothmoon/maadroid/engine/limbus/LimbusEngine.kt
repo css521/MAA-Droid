@@ -456,7 +456,10 @@ class LimbusEngine(
     /**
      * 开发模式采集目录；未开启返回 null。
      *
-     * 用标记文件而不是编译期开关：真机现场建/删一个文件就能切换，不用重新打包。
+     * **debug 构建默认开启**，不需要任何手动操作——安卓上没有方便的建文件手段，
+     * 而适配期就是靠这些真帧裁素材，默认开着才用得上。
+     * release 构建则要求显式放一个 [CAPTURE_MARKER] 标记文件，避免给普通用户白写盘。
+     *
      * 位置放在 MAA 侧的 debug 树下——日志导出器已在收集它，采到的帧才能随日志一起拿到。
      * 找不到名为 Maa 的祖先目录时退到资源目录同级的 debug。
      */
@@ -471,8 +474,8 @@ class LimbusEngine(
             cursor = cursor.parentFile
         }
         val root = debugRoot ?: File(resourceDir.parentFile ?: resourceDir, "debug/limbus")
-        val marker = File(root, CAPTURE_MARKER)
-        if (!marker.isFile) return null
+        val enabled = BuildConfig.DEBUG || File(root, CAPTURE_MARKER).isFile
+        if (!enabled) return null
         val frames = File(root, "frames")
         info("开发模式：采集素材底片到 ${frames.absolutePath}")
         return frames
