@@ -104,5 +104,15 @@
     "params": {
       "post_delay": 2.5
     }
+  },
+  "event_entry_dark": {
+    "params": {
+      "post_delay": 2.5
+    }
+  },
+  "event_entry": {
+    "params": {
+      "post_delay": 2.5
+    }
   }
 }

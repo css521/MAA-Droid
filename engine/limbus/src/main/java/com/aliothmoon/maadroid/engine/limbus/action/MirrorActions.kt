@@ -50,9 +50,16 @@ private val INITIAL_EGO_STYLES = mapOf(
     "Pierce" to (200 to 450), "Blunt" to (350 to 450),
 )
 
+/**
+ * 星光九宫格 5×2 布局的卡片中心坐标。
+ *
+ * 上游 PC 坐标是 (200,190)…(1000,410)，安卓上系统性偏移 dx≈+25, dy≈+80~90
+ * （安卓客户端 UI 的顶栏更高、左边距不同）。
+ * 从真帧 mirror_star_grid.png 实测。
+ */
 private val STAR_POSITIONS = listOf(
-    200 to 190, 400 to 190, 600 to 190, 800 to 190, 1000 to 190,
-    200 to 410, 400 to 410, 600 to 410, 800 to 410, 1000 to 410,
+    225 to 270, 425 to 270, 625 to 270, 825 to 270, 1020 to 270,
+    225 to 500, 425 to 500, 625 to 500, 825 to 500, 1020 to 500,
 )
 
 private val REPLACE_SKILL_MAP = mapOf(
@@ -922,21 +929,25 @@ private object ChooseStarAction : ActionBackend {
             click(ctx.input, origin.first, origin.second)
             ctx.delay(0.5)
 
+            // + 按钮在卡片中心 x-40, y+85；++ 在 x+40, y+85
+            // （上游 PC 是 y+150 和 x+80,y+150，安卓上偏移不同）
             when (starStr.length) {
                 1 -> Unit
                 2 -> {
-                    click(ctx.input, origin.first, origin.second + 150)
+                    click(ctx.input, origin.first - 40, origin.second + 85)
                     ctx.delay(0.5)
                 }
                 3 -> {
-                    click(ctx.input, origin.first + 80, origin.second + 150)
+                    click(ctx.input, origin.first + 40, origin.second + 85)
                     ctx.delay(0.5)
                 }
             }
         }
 
-        click(ctx.input, 1190, 670)
+        // Enter 按钮（真帧实测右下角）
+        click(ctx.input, 1190, 650)
         ctx.delay(2.0)
+        // Confirm 弹窗（上游 735,535 是 PC 坐标，安卓上确认按钮可能偏移）
         click(ctx.input, 735, 535)
         return ActionOutcome.Continue
     }
