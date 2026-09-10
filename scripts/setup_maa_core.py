@@ -313,6 +313,105 @@ def override_maafw_control_unit(tag: str, target_abis: list, cache_dir: Path, pr
         print(f"  [OVERRIDE] {abi}/{MAAFW_CONTROL_UNIT_SO} <- {name} ({len(data) / (1024 * 1024):.1f} MB)")
 
 
+def probe_maafw_release(tag: str, abi_choice: str, cache_dir: Path, skip_download: bool):
+    """只做分析：列出 MaaFramework release 的 bin/，与已部署的 MAA 组件包逐名对比。
+
+    要回答的问题：**引入完整 MaaFramework 之后，它能不能和 MaaCore 共用同一套 native 库？**
+
+    此前（包括上游的 MAAFRAMEWORK_EVALUATION.md）把这件事判为「两套独立栈撞名，
+    可能要从源码重建改 SONAME」。但 APK 里现有的 `libMaaAndroidNativeControlUnit.so`
+    和 `libMaaUtils.so` **本来就是 MaaFramework 的产物**，只是搭 MAA 发布包的车进来的
+    （见 override_maafw_control_unit：项目已经在从 MaaFramework release 取 .so）。
+    所以真正的约束是**版本对齐**，而不是名字冲突——从同一个 release zip 多取几个 .so
+    就天然一致。
+
+    唯一剩下的未知是 OpenCV / onnxruntime：MaaFramework 的发布包是否自带、版本是否
+    与 MAA 组件包一致。三种结果对应三条路：
+
+      * 不自带（动态依赖外部）→ 直接复用 MAA 那份，仍是一份 OpenCV，体积还会降
+      * 自带且版本一致        → 直接替换，仍是一份
+      * 自带且版本不同        → 才需要考虑统一构建或隔离命名
+
+    纯分析，不下载 MAA 组件包、不改 jniLibs、不碰构建。
+    """
+    abis = list(MAAFW_ASSET_ARCH) if abi_choice == "all" else [abi_choice]
+    print("=" * 60)
+    print(f"==> MaaFramework 共存探针  tag={tag}  abi={', '.join(abis)}")
+    print("=" * 60)
+
+    assets = {}
+    if not skip_download:
+        _, release_assets = get_release_assets(tag, repo=MAAFW_REPO)
+        assets = {a["name"]: a for a in release_assets}
+
+    for abi in abis:
+        name = f"MAA-android-{MAAFW_ASSET_ARCH[abi]}-{tag}.zip"
+        archive = cache_dir / name
+        info = assets.get(name)
+        if not skip_download and info is None:
+            print(f"[ERROR] {MAAFW_REPO} release {tag} 里没有 {name}")
+            print(f"        该 release 的资产: {', '.join(sorted(assets)) or '(空)'}")
+            sys.exit(1)
+        if archive.exists() and (info is None or archive.stat().st_size == info["size"]):
+            print(f"\n[CACHE] 复用 {name}")
+        elif skip_download:
+            print(f"[ERROR] {name} 不在缓存里，且给了 --skip-download")
+            sys.exit(1)
+        else:
+            download_file(info["browser_download_url"], archive)
+
+        with zipfile.ZipFile(archive) as zf:
+            entries = [(i.filename, i.file_size) for i in zf.infolist() if not i.is_dir()]
+        maafw_so = {Path(n).name: s for n, s in entries if n.endswith(".so")}
+
+        print(f"\n--- MaaFramework {tag} / {abi}：bin/ 下的 .so（{len(maafw_so)} 个）---")
+        for n, s in sorted(maafw_so.items()):
+            print(f"  {s / 1048576:8.1f} MB  {n}")
+        others = [n for n, _ in entries if not n.endswith(".so")]
+        if others:
+            print(f"  其余 {len(others)} 个非 .so 条目，例如: {', '.join(others[:4])}")
+
+        # 与已缓存的 MAA 组件包对比。找不到就只报 MaaFramework 侧，不视为失败——
+        # 探针的价值在于列清单，不该因为没跑过 setup 就退出。
+        pattern = f"MAAComponent-*-android-{'arm64' if abi == 'arm64-v8a' else 'x64'}.tar.gz"
+        component = next(iter(sorted(cache_dir.glob(pattern))), None)
+        if component is None:
+            print(f"\n[跳过对比] 缓存里没有 {pattern}；先跑一次不带 --maafw-probe 的部署")
+            continue
+        with tarfile.open(component) as tf:
+            maa_so = {Path(m.name).name: m.size for m in tf.getmembers()
+                      if m.isfile() and m.name.endswith(".so")}
+        print(f"\n--- 已部署的 {component.name}：.so（{len(maa_so)} 个）---")
+        for n, s in sorted(maa_so.items()):
+            print(f"  {s / 1048576:8.1f} MB  {n}")
+
+        shared = sorted(set(maafw_so) & set(maa_so))
+        print(f"\n--- 同名（需要版本对齐，不能两份共存）{len(shared)} 个 ---")
+        for n in shared:
+            a, b = maafw_so[n], maa_so[n]
+            same = "大小相同" if a == b else f"大小不同 {a / 1048576:.1f}MB vs {b / 1048576:.1f}MB"
+            print(f"  {n:44s} {same}")
+        only_fw = sorted(set(maafw_so) - set(maa_so))
+        print(f"\n--- 仅 MaaFramework 有（需新增进包）{len(only_fw)} 个 ---")
+        for n in only_fw:
+            print(f"  {maafw_so[n] / 1048576:8.1f} MB  {n}")
+        print(f"\n--- 仅 MAA 有（保持不动）{len(sorted(set(maa_so) - set(maafw_so)))} 个 ---")
+        for n in sorted(set(maa_so) - set(maafw_so)):
+            print(f"  {maa_so[n] / 1048576:8.1f} MB  {n}")
+
+        cv = [n for n in maafw_so if "opencv" in n.lower()]
+        ort = [n for n in maafw_so if "onnxruntime" in n.lower()]
+        print("\n--- 判读 ---")
+        print(f"  MaaFramework 自带 OpenCV: {cv or '否（依赖外部）'}")
+        print(f"  MaaFramework 自带 ORT   : {ort or '否（依赖外部）'}")
+        if not cv and not ort:
+            print("  → 可复用 MAA 那份，一份 OpenCV/ORT，共存无阻碍")
+        elif all(maafw_so.get(n) == maa_so.get(n) for n in (cv + ort) if n in maa_so):
+            print("  → 同名者大小一致，很可能同源同版本，直接替换即可")
+        else:
+            print("  → 存在版本差异，需用 llvm-readelf 核对 SONAME/符号版本后再决定")
+
+
 def _version_sort_key(version: str):
     """Order tags like v6.17.0-beta.9 < v6.17.0-beta.10 < v6.17.0."""
     m = re.match(r"v(\d+)\.(\d+)\.(\d+)(?:-(.+))?$", version)
@@ -382,6 +481,10 @@ def main():
     parser.add_argument("--maafw-tag",
                         help=f"Replace {MAAFW_CONTROL_UNIT_SO} with the one from this MaaFramework "
                              "release tag (e.g. v5.13.0-beta.5); default keeps MAA's bundled copy")
+    parser.add_argument("--maafw-probe", metavar="TAG",
+                        help="Analysis only: list the MaaFramework release's bin/ and diff its .so "
+                             "set against the deployed MAA component, then exit. Answers whether the "
+                             "full framework can share one native lib set with MaaCore.")
     parser.add_argument("--skip-ncnn", action="store_true",
                         help="Only stage upstream files; Gradle will reject APK builds until OCR ncnn conversion is completed")
     parser.add_argument("--keep-onnx", action="store_true",
@@ -395,6 +498,10 @@ def main():
 
     project_root = get_project_root()
     cache_dir = project_root / CACHE_DIR
+
+    if args.maafw_probe:
+        probe_maafw_release(args.maafw_probe, args.abi, cache_dir, args.skip_download)
+        return
 
     print("=" * 55)
     print("==> MAA Core Download & Deploy")
