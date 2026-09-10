@@ -1,0 +1,80 @@
+{
+    "mail_entry":{
+        "next":[
+            "mail_enter_main_window"
+        ]
+    },
+    "mail_enter_main_window":{
+        "recognition":"template_match",
+        "action":"main_window_confirm",
+        "params":{
+            "template":"main_window_no_text"
+        },
+        "next":[
+            "check_and_get_mails",
+            "check_mail"
+        ]
+    },
+    "check_and_get_mails":{
+        "recognition":"template_match",
+        "action":"click",
+        "params":{
+            "template":"red_exclaimation",
+            "mask":[1080, 60, 70, 80],
+            "target_offset":[-10, 10]
+        },
+        "next":[
+            "claim_mail"
+        ]
+    },
+    "claim_mail":{
+        "recognition":"template_match",
+        "action":"click",
+        "inverse": true,
+        "params":{
+            "template":"no_mail_in_storage",
+            "target":[950, 270]
+        },
+        "next":[
+            "wait_mailbox_connecting_disappear"
+        ]
+    },
+    "wait_mailbox_connecting_disappear":{
+        "action":"wait_connecting_disappear",
+        "next":[
+            "confirm_reward",
+            "exit_mailbox"
+        ]
+    },
+    "confirm_reward":{
+        "action":"key",
+        "params":{
+            "key":"esc"
+        },
+        "next":[
+            "claim_mail",
+            "exit_mailbox"
+        ]
+    },
+    "exit_mailbox":{
+        "action":"key",
+        "params":{
+            "key":"esc"
+        },
+        "next":[
+            "check_mail"
+        ]
+    },
+    "check_mail":{
+        "type":"check",
+        "action": "check_out_update",
+        "params":{
+            "disable_node":"mail_entry",
+            "execute_count": 0,
+            "target_count": 1
+        },
+        "next":[
+            "main_circle_center"
+        ]
+    }
+}

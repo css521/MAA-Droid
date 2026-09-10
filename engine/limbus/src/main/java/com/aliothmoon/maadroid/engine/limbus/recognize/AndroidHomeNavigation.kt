@@ -58,7 +58,9 @@ internal object AndroidHomeNavigation {
         val region = Rect(640, 400, 640, 320)
         val work = Mat(screen, region)
         return try {
-            reader.detect(work, mergeX = false, mergeY = false).map {
+            // 手机导航标签过小，CLAHE 会损坏抗锯齿边缘；保留已验证的原色适配。
+            // 业务 OCR 仍按上游走整帧掩码和灰度增强。
+            reader.detect(work, mergeX = false, mergeY = false, enhanceContrast = false).map {
                 TextMatch(it.text, it.centerX + region.x, it.centerY + region.y, it.confidence.toDouble())
             }
         } finally { work.release() }

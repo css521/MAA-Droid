@@ -34,18 +34,29 @@ class PpOcrEngine private constructor(
      * 检测并识别画面中的文本。
      *
      * @param screenBgr 整屏或已裁剪的 BGR 图
+     * @param enhanceContrast 上游业务 OCR 使用灰度增强；Android 导航的小字保留原色。
      * @return 合并后的文本块，坐标相对传入图像的左上角
      */
-    fun detect(screenBgr: Mat, mergeX: Boolean = true, mergeY: Boolean = true): List<TextBox> {
-        val probMap = runDetection(screenBgr) ?: return emptyList()
+    fun detect(
+        screenBgr: Mat,
+        mergeX: Boolean = true,
+        mergeY: Boolean = true,
+        enhanceContrast: Boolean = true,
+    ): List<TextBox> {
+        val prepared = if (enhanceContrast) OcrImageOps.prepare(screenBgr) else screenBgr
         try {
-            val boxes = DbDetector.boxesFrom(probMap, screenBgr.cols(), screenBgr.rows())
-            if (boxes.isEmpty()) return emptyList()
+            val probMap = runDetection(prepared) ?: return emptyList()
+            try {
+                val boxes = DbDetector.boxesFrom(probMap, prepared.cols(), prepared.rows())
+                if (boxes.isEmpty()) return emptyList()
 
-            val recognized = recognize(screenBgr, boxes)
-            return TextMerge.merge(recognized, mergeX, mergeY)
+                val recognized = recognize(prepared, boxes)
+                return OcrPostProcessor.process(recognized, mergeX, mergeY)
+            } finally {
+                probMap.release()
+            }
         } finally {
-            probMap.release()
+            if (prepared !== screenBgr) prepared.release()
         }
     }
 
@@ -82,29 +93,33 @@ class PpOcrEngine private constructor(
         }
     }
 
-    /** 逐框裁图识别。上游按批推理，这里逐个跑 —— 框数通常个位数，简单优先 */
+    /** 沿用上游每六框一批的宽度，逐框推理控制峰值内存，最后还原检测顺序。 */
     private fun recognize(screenBgr: Mat, boxes: List<DetBox>): List<TextBox> {
-        val result = ArrayList<TextBox>(boxes.size)
-        val batchWidth = OcrGeometry.recBatchWidth(boxes.map { it.width to it.height })
+        val result = arrayOfNulls<TextBox>(boxes.size)
+        val batches = boxes.withIndex().filter { it.value.width > 0 && it.value.height > 0 }
+            .sortedBy { it.value.width.toDouble() / it.value.height }
+            .chunked(OcrGeometry.REC_BATCH_SIZE)
 
-        for (b in boxes) {
-            if (b.width <= 0 || b.height <= 0) continue
-            val roi = runCatching {
-                Mat(screenBgr, Rect(b.left, b.top, b.width, b.height))
-            }.getOrNull() ?: continue
-            try {
-                val text = recognizeOne(roi, batchWidth) ?: continue
-                if (text.text.isEmpty()) continue
-                result += TextBox(
-                    text = text.text,
-                    left = b.left, top = b.top, right = b.right, bottom = b.bottom,
-                    confidence = text.confidence,
-                )
-            } finally {
-                roi.release()
+        for (batch in batches) {
+            val batchWidth = OcrGeometry.recBatchWidth(batch.map { it.value.width to it.value.height })
+            for ((index, b) in batch) {
+                val roi = runCatching {
+                    Mat(screenBgr, Rect(b.left, b.top, b.width, b.height))
+                }.getOrNull() ?: continue
+                try {
+                    val text = recognizeOne(roi, batchWidth) ?: continue
+                    if (text.text.isEmpty()) continue
+                    result[index] = TextBox(
+                        text = text.text,
+                        left = b.left, top = b.top, right = b.right, bottom = b.bottom,
+                        confidence = text.confidence,
+                    )
+                } finally {
+                    roi.release()
+                }
             }
         }
-        return result
+        return result.filterNotNull()
     }
 
     private fun recognizeOne(roiBgr: Mat, batchWidth: Int): OcrText? {

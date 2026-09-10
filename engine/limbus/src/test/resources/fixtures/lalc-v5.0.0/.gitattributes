@@ -1,0 +1,7 @@
+# Preserve upstream bytes, including CRLF/trailing spaces, for SHA-256 verification.
+config/task/*.json -text whitespace=-blank-at-eol,cr-at-eol
+LICENSE -text whitespace=cr-at-eol
+template-names.txt text eol=lf
+SHA256SUMS text eol=lf
+README.md text eol=lf
+.gitattributes text eol=lf

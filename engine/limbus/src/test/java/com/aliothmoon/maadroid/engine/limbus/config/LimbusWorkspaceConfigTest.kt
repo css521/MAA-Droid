@@ -71,4 +71,103 @@ class LimbusWorkspaceConfigTest {
         cfg = cfg.withTask("EXP", cfg.task("EXP").with("luxcavationMode", JsonPrimitive("Skip Battle")))
         assertNull(cfg.validationError())
     }
+
+    @Test fun enabledLuxcavationsRejectUnknownAndMalformedModes() {
+        val invalid = listOf<JsonElement>(JsonPrimitive(""), JsonPrimitive(" "), JsonPrimitive("skip"),
+            JsonPrimitive("SkipBattle"), JsonPrimitive("unexpected"), JsonPrimitive(true), JsonPrimitive(1),
+            JsonNull, JsonObject(emptyMap()), JsonArray(emptyList()))
+        for (key in listOf("EXP", "Thread")) for (mode in invalid) {
+            val cfg = luxcavation(key).let { it.withTask(key, it.task(key).with("luxcavationMode", mode)) }
+            val error = cfg.validationError().orEmpty()
+            assertTrue("$key mode=$mode: $error", key in error && "模式" in error)
+        }
+    }
+
+    @Test fun stageValidationRunsForBothEnterAndSkipBattle() {
+        val invalid = listOf<JsonElement>(JsonPrimitive(""), JsonPrimitive(" "), JsonPrimitive("\t"),
+            JsonPrimitive("09 "), JsonPrimitive("-1"), JsonPrimitive("+1"), JsonPrimitive("1.5"),
+            JsonPrimitive("1e2"), JsonPrimitive("abc"), JsonPrimitive("１２"), JsonPrimitive(false),
+            JsonNull, JsonObject(emptyMap()), JsonArray(emptyList()))
+        for (key in listOf("EXP", "Thread")) for (mode in listOf("Enter", "Skip Battle")) for (stage in invalid) {
+            val cfg = luxcavation(key, mode).let { it.withTask(key, it.task(key).with(stageKey(key), stage)) }
+            val error = cfg.validationError().orEmpty()
+            assertTrue("$key mode=$mode stage=$stage: $error", key in error && "关卡" in error)
+        }
+    }
+
+    @Test fun validStageStringsRoundTripUnchangedWithoutAnUpperBound() {
+        for (key in listOf("EXP", "Thread")) for (mode in listOf("Enter", "Skip Battle")) {
+            for (stage in listOf("0", "09", "60", "123456789012345678901234567890")) {
+                val cfg = luxcavation(key, mode).let { it.withTask(key, it.task(key).with(stageKey(key), JsonPrimitive(stage))) }
+                val saved = LimbusWorkspaceConfig.decode(cfg.encode())
+                assertNull("$key mode=$mode stage=$stage", saved.validationError())
+                val section = saved.backendSections().getValue(key.lowercase()).jsonObject
+                assertEquals(stage, section.getValue("${key.lowercase()}_stage").jsonPrimitive.content)
+                assertEquals(mode.lowercase(), section.getValue("luxcavation_mode").jsonPrimitive.content)
+            }
+        }
+    }
+
+    @Test fun missingLegacyFieldsKeepDefaultsAndNumericStagesRemainSupported() {
+        for (key in listOf("EXP", "Thread")) {
+            val cfg = luxcavation(key).let { it.withTask(key, it.task(key).copy(params = JsonObject(emptyMap()))) }
+            assertNull(cfg.validationError())
+            val section = cfg.backendSections().getValue(key.lowercase()).jsonObject
+            assertEquals("enter", section.getValue("luxcavation_mode").jsonPrimitive.content)
+            assertEquals(if (key == "EXP") "09" else "60", section.getValue("${key.lowercase()}_stage").jsonPrimitive.content)
+            val numericStage = cfg.withTask(key, cfg.task(key).with(stageKey(key), JsonPrimitive(120)))
+            assertNull(numericStage.validationError())
+        }
+    }
+
+    @Test fun disabledLuxcavationsDoNotBlockOtherTasksWithUnusedInvalidFields() {
+        var cfg = luxcavation("EXP")
+        for (key in listOf("EXP", "Thread")) {
+            cfg = cfg.withTask(key, cfg.task(key).copy(enabled = false)
+                .with("luxcavationMode", JsonPrimitive("unknown"))
+                .with(stageKey(key), JsonPrimitive("")))
+        }
+        cfg = cfg.withTask("Mail", cfg.task("Mail").copy(enabled = true))
+        assertNull(cfg.validationError())
+    }
+
+    @Test fun legacyModesAndStagesMigrateWithoutHidingInvalidValues() {
+        for (key in listOf("EXP", "Thread")) {
+            val section = key.lowercase()
+            for ((legacy, current) in listOf("enter" to "Enter", "skip battle" to "Skip Battle")) {
+                val cfg = migratedLuxcavation(key, JsonPrimitive(legacy), JsonPrimitive("007"))
+                assertEquals(current, cfg.task(key).string("luxcavationMode", ""))
+                assertNull(cfg.validationError())
+                assertEquals("007", cfg.backendSections().getValue(section).jsonObject
+                    .getValue("${section}_stage").jsonPrimitive.content)
+            }
+            for (mode in listOf(JsonPrimitive("invalid"), JsonPrimitive(""), JsonNull, JsonObject(emptyMap()))) {
+                val cfg = migratedLuxcavation(key, mode, JsonPrimitive("09"))
+                assertEquals(mode, cfg.task(key).params["luxcavationMode"])
+                assertTrue(cfg.validationError().orEmpty().contains("模式"))
+            }
+            val emptyStage = migratedLuxcavation(key, JsonPrimitive("skip battle"), JsonPrimitive(""))
+            assertTrue(emptyStage.validationError().orEmpty().contains("关卡"))
+        }
+    }
+
+    private fun luxcavation(key: String, mode: String = "Enter"): LimbusWorkspaceConfig {
+        val cfg = LimbusWorkspaceConfig(taskConfigs = LimbusWorkspaceConfig.defaultTasks()
+            .mapValues { (_, task) -> task.copy(enabled = false) })
+            .withTeam(0, LimbusTeamConfig(selectedMembers = listOf("Faust")))
+        return cfg.withTask(key, cfg.task(key).copy(enabled = true, teams = if (mode == "Skip Battle") emptyList() else listOf(1))
+            .with("luxcavationMode", JsonPrimitive(mode)))
+    }
+
+    private fun migratedLuxcavation(key: String, mode: JsonElement, stage: JsonElement): LimbusWorkspaceConfig {
+        val section = key.lowercase()
+        val raw = buildJsonObject { put(section, buildJsonObject { put("luxcavation_mode", mode); put("${section}_stage", stage) }) }
+        val cfg = LimbusWorkspaceConfig.migrate(
+            mapOf("exp" to (key == "EXP"), "thread" to (key == "Thread"), "mirror" to false),
+            mapOf(section to raw.toString()),
+        ).withTeam(0, LimbusTeamConfig(selectedMembers = listOf("Faust")))
+        return cfg.withTask(key, cfg.task(key).copy(teams = listOf(1)))
+    }
+
+    private fun stageKey(key: String) = if (key == "EXP") "expStage" else "threadStage"
 }

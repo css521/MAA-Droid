@@ -23,7 +23,8 @@ private object ExpSelectStageAction : ActionBackend {
     override suspend fun execute(ctx: ActionContext): ActionOutcome {
         ctx.log("选择经验副本关卡")
         val targetStage = ctx.config.str("exp", "exp_stage", "")
-        if (targetStage.isEmpty()) return ActionOutcome.Continue
+        val mode = ctx.config.str("exp", "luxcavation_mode", "enter")
+        validateSelection("经验", targetStage, mode)?.let { return it }
 
         var pos = ctx.recognize.findText(targetStage, crop = Crop(250, 180, 1000, 50))
         var cnt = 0
@@ -39,11 +40,9 @@ private object ExpSelectStageAction : ActionBackend {
         }
 
         val enterX = pos[0].x + 10
-        val mode = ctx.config.str("exp", "luxcavation_mode", "enter")
         when (mode) {
             "enter" -> click(ctx.input, enterX, 480)
             "skip battle" -> click(ctx.input, enterX, 515)
-            else -> ctx.log("未知的 exp mode: $mode")
         }
         return ActionOutcome.Continue
     }
@@ -52,19 +51,18 @@ private object ExpSelectStageAction : ActionBackend {
 private object ThreadSelectStageAction : ActionBackend {
     override suspend fun execute(ctx: ActionContext): ActionOutcome {
         ctx.log("选择 Thread 副本关卡")
+        val targetStage = ctx.config.str("thread", "thread_stage", "")
+        val mode = ctx.config.str("thread", "luxcavation_mode", "enter")
+        validateSelection("纺锤", targetStage, mode)?.let { return it }
+
         click(ctx.input, 140, 330)
         ctx.delay(1.0)
 
-        val mode = ctx.config.str("thread", "luxcavation_mode", "enter")
         when (mode) {
             "enter" -> click(ctx.input, 370, 480)
             "skip battle" -> click(ctx.input, 370, 515)
-            else -> ctx.log("未知的 thread mode: $mode")
         }
         ctx.delay(1.0)
-
-        val targetStage = ctx.config.str("thread", "thread_stage", "")
-        if (targetStage.isEmpty()) return ActionOutcome.Continue
 
         var pos = ctx.recognize.findText(targetStage, crop = Crop(610, 170, 90, 400))
         var cnt = 0
@@ -82,4 +80,15 @@ private object ThreadSelectStageAction : ActionBackend {
         click(ctx.input, pos[0].x, pos[0].y)
         return ActionOutcome.Continue
     }
+}
+
+/** 直接调用动作或导入旧配置也必须在触控前校验，不能依赖页面校验。 */
+private fun validateSelection(label: String, stage: String, mode: String): ActionOutcome.Finish? {
+    if (stage.isEmpty() || stage.any { it !in '0'..'9' }) {
+        return ActionOutcome.Finish(false, "${label}副本关卡必须为非空数字，请检查任务配置")
+    }
+    if (mode != "enter" && mode != "skip battle") {
+        return ActionOutcome.Finish(false, "未知的${label}副本模式：$mode，请检查任务配置")
+    }
+    return null
 }

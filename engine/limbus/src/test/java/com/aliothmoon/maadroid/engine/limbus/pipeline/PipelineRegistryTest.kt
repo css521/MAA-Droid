@@ -1,10 +1,9 @@
 package com.aliothmoon.maadroid.engine.limbus.pipeline
 
-import java.io.File
+import com.aliothmoon.maadroid.engine.limbus.fixtures.LalcV500Fixtures
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Test
 
 /**
@@ -13,8 +12,8 @@ import org.junit.Test
  * 分两类：
  * - 合成用例：不依赖外部仓库，保证装配规则（重名、断引用、error 节点 interrupt 清空、
  *   默认 interrupt）在 CI 上始终被校验。
- * - 真实上游用例：本地存在 LALC 克隆时，直接吃它 config/task 下的 JSON，
- *   证明骨架能吃下真实数据而不是只对得上我们自己造的样本。
+ * - 真实上游用例：读取测试资源里固定的 LALC v5.0.0 config/task JSON，
+ *   验证装配与真实数据的契约；缺文件或 hash 不符直接失败。
  */
 class PipelineRegistryTest {
 
@@ -86,10 +85,7 @@ class PipelineRegistryTest {
 
     @Test
     fun loadsRealUpstreamPipeline() {
-        val dir = upstreamTaskDir()
-        assumeTrue("未找到本地 LALC 克隆，跳过真实上游用例", dir != null)
-        val files = dir!!.listFiles { f -> f.extension == "json" }!!
-            .associate { it.name to it.readText() }
+        val files = LalcV500Fixtures.taskFiles()
 
         val reg = PipelineRegistry.load(files)
 
@@ -108,22 +104,10 @@ class PipelineRegistryTest {
             recognitions,
         )
 
-        // 模板引用必须都能在素材里找到
-        val imgRoot = File(dir.parentFile.parentFile, "img")
-        if (imgRoot.isDirectory) {
-            val have = imgRoot.walkTopDown()
-                .filter { it.isFile && it.extension.lowercase() == "png" }
-                .map { it.nameWithoutExtension }
-                .toSet()
-            val missing = reg.referencedTemplates() - have
-            assertTrue("流水线引用了不存在的模板: $missing", missing.isEmpty())
-        }
+        // 清单来自同一 commit 的 img Git 树；这里只校验引用，不验证图片像素。
+        val referenced = reg.referencedTemplates()
+        assertEquals(50, referenced.size)
+        val missing = referenced - LalcV500Fixtures.templateNames()
+        assertTrue("流水线引用了固定上游版本不存在的模板: $missing", missing.isEmpty())
     }
-
-    /** 本地 LALC 克隆的 config/task 目录；找不到则返回 null（CI 上跳过） */
-    private fun upstreamTaskDir(): File? = listOf(
-        "../../LixAssistantLimbusCompany/lalc_backend/config/task",
-        "../LixAssistantLimbusCompany/lalc_backend/config/task",
-        System.getProperty("user.home") + "/project/java/LixAssistantLimbusCompany/lalc_backend/config/task",
-    ).map(::File).firstOrNull { it.isDirectory }
 }

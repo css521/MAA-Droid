@@ -1,5 +1,6 @@
 package com.aliothmoon.maadroid.engine.limbus.pipeline
 
+import android.view.KeyEvent
 import com.aliothmoon.maadroid.engine.limbus.action.ActionRegistry
 import com.aliothmoon.maadroid.engine.limbus.action.ActionBackend
 import com.aliothmoon.maadroid.engine.limbus.action.ActionContext
@@ -10,18 +11,18 @@ import com.aliothmoon.maadroid.engine.limbus.action.FakeRecognizer
 import com.aliothmoon.maadroid.engine.limbus.action.FakeTemplateIndex
 import com.aliothmoon.maadroid.engine.limbus.action.LimbusActions
 import com.aliothmoon.maadroid.engine.limbus.action.TestActionContext
+import com.aliothmoon.maadroid.engine.limbus.fixtures.LalcV500Fixtures
 import com.aliothmoon.maadroid.engine.limbus.recognize.Match
 import com.aliothmoon.maadroid.engine.limbus.recognize.GameLanguageObservation
 import com.aliothmoon.maadroid.engine.limbus.recognize.Recognizer
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
-import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -32,31 +33,34 @@ import java.util.concurrent.ConcurrentHashMap
  * 这是「引擎能跑」与「引擎能编译」之间的差别。
  *
  * 识别用可编程替身而非真 OpenCV：目的是验证**调度与动作**，不是验证匹配算法
- * （那由 TemplateMatcherTest 与真机负责）。上游 clone 不在时跳过。
+ * （那由 TemplateMatcherTest 与真机负责）。上游 JSON 随测试提交，缺失即失败。
  */
 class UpstreamPipelineRunTest {
-
-    private val upstreamTaskDir =
-        File("/Users/css521/project/java/LixAssistantLimbusCompany/lalc_backend/config/task")
 
     private lateinit var registry: PipelineRegistry
 
     @Before
     fun setUp() {
-        assumeTrue("未找到上游 clone，跳过", upstreamTaskDir.isDirectory)
         ActionRegistry.clearForTest()
         LimbusActions.resetForTest()
         LimbusActions.install()
 
-        val files = upstreamTaskDir.listFiles { f -> f.extension == "json" }!!
-            .associate { it.name to it.readText() }
-        registry = PipelineRegistry.load(files)
+        // LimbusEngine supplies these run options; upstream JSON leaves the three targets unset.
+        registry = PipelineRegistry.load(LalcV500Fixtures.taskFiles()).withTargetCounts(
+            mapOf("exp_check" to 1, "thread_check" to 1, "mirror_check" to 1),
+        )
     }
+
+    private fun pipelineConfig() = FakeConfig()
+        .put("exp", "exp_stage", "09")
+        .put("exp", "luxcavation_mode", "enter")
+        .put("thread", "thread_stage", "60")
+        .put("thread", "luxcavation_mode", "enter")
 
     private fun runnerFor(
         recognizer: Recognizer,
         input: FakeInput,
-        config: FakeConfig = FakeConfig(),
+        config: FakeConfig = pipelineConfig(),
         onLog: (String) -> Unit = {},
     ): PipelineRunner {
         val counters = ConcurrentHashMap<String, Int>()
@@ -64,7 +68,7 @@ class UpstreamPipelineRunTest {
         return PipelineRunner(
             registry = registry,
             contextFactory = { name, node, matches ->
-                TestActionContext(
+                object : ActionContext by TestActionContext(
                     node = node,
                     nodeName = name,
                     input = input,
@@ -72,14 +76,46 @@ class UpstreamPipelineRunTest {
                     config = config,
                     templates = FakeTemplateIndex(),
                     recognizeResult = matches,
-                ).also { ctx ->
-                    // 让计数在节点之间共享，复刻引擎里的行为
-                    counters[name]?.let { c -> repeat(c) { ctx.incrementCounter(name) } }
+                ) {
+                    // Action and Route create separate contexts, including for the same node.
+                    // Both must read/write this run's map; team rotation also reads other nodes.
+                    override fun counterOf(nodeName: String): Int = counters[nodeName] ?: 0
+                    override fun incrementCounter(nodeName: String): Int =
+                        counters.merge(nodeName, 1) { previous, increment -> previous + increment }!!
                 }
             },
             recognizeGate = { nodeRecognizer.recognize(it) },
             onLog = onLog,
         )
+    }
+
+    @Test fun realCheckNodeRepeatsUntilTargetCountThenTakesItsExit() = runTest {
+        registry = registry.withTargetCounts(mapOf("exp_check" to 3))
+        val repeatedAt = mutableListOf<Int>()
+        val exitedAt = mutableListOf<Int>()
+        // Only the battle/UI boundary is replaced. exp_check, its check_out_update action,
+        // origin/next routing, and target_count handling all come from the real pipeline.
+        ActionRegistry.register("exp_select_stage", object : ActionBackend {
+            override suspend fun execute(ctx: ActionContext): ActionOutcome {
+                repeatedAt += ctx.counterOf("exp_check")
+                return ActionOutcome.Goto("exp_check")
+            }
+        })
+        ActionRegistry.register("key", object : ActionBackend {
+            override suspend fun execute(ctx: ActionContext): ActionOutcome {
+                assertEquals("exp_quit", ctx.nodeName)
+                exitedAt += ctx.counterOf("exp_check")
+                return ActionOutcome.Finish(true)
+            }
+        })
+        val logs = mutableListOf<String>()
+        val runner = runnerFor(FakeRecognizer(), FakeInput(), onLog = logs::add).also { it.delayer = {} }
+
+        assertNull(runner.run("exp_check"))
+        assertEquals(listOf(1, 2), repeatedAt)
+        assertEquals(listOf(3), exitedAt)
+        assertEquals(3, logs.count { it == "节点 exp_check 执行动作 check_out_update" })
+        assertTrue(logs.none { "死循环" in it || "节点 error_handler 执行动作" in it })
     }
 
     @Test fun confirmedLanguageReturnsToRealLuxcavationRouteWithoutErrorHandlerLoop() = runTest {
@@ -148,31 +184,46 @@ class UpstreamPipelineRunTest {
     }
 
     @Test
-    fun `唯一入口 main 能起跑且不抛异常`() = runTest {
-        // 先前这条用例名叫「所有入口节点都能起跑」，列了 main/mirror/exp/thread/mail/reward
-        // 六个名字再 filter 掉不存在的 —— 而实测只有 main 是节点，另外五个压根不存在，
-        // 于是它其实只测了一个入口，名字却在暗示测了六个。任务选择靠 enable 而非换入口，
-        // 见 LimbusTaskContractTest。
+    fun `主页可识别且未启用任务时 main 正常走到 end`() = runTest {
         assertNotNull("上游流水线的入口应当是 main", registry["main"])
-
-        // 注意「什么都不命中」**不是**静止态：上游有 7 个 inverse 节点
-        // （back_to_init_page 等），识别不中时它们反而命中，于是
-        // main_circle_center 与 back_to_init_page 会互相路由。真实运行中
-        // back_to_init_page 的动作会改变画面从而跳出，喂静态假识别则会一直转。
-        // 所以断言的是「不抛异常、且要么正常结束要么被步数保险兜住」。
-        val reason = runnerFor(FakeRecognizer(), FakeInput()).run("main")
-        if (reason != null) {
-            assertTrue("main 只应因步数保险而中止，实际: $reason", reason.contains("死循环"))
+        // Task selection changes enable flags, not the entry node. A recognized home page
+        // bypasses back_to_init_page; with no task branch enabled, task_center selects end.
+        registry = registry.withEnabled(
+            registry.require("task_center").next.filterNot { it == "end" }.associateWith { false },
+        )
+        val recognizer = FakeRecognizer().apply {
+            onTemplate("main_drive_no_text", Match(978, 649, .95))
         }
+        val input = FakeInput()
+        val logs = mutableListOf<String>()
+        val runner = runnerFor(recognizer, input, onLog = logs::add).also { it.delayer = {} }
+
+        assertNull(runner.run("main"))
+        assertEquals(1, logs.count { it == "节点 main 执行动作 init_limbus_window" })
+        assertEquals(1, logs.count { it == "节点 end 执行动作 empty" })
+        assertTrue(logs.none { it == "节点 back_to_init_page 执行动作 back_to_init_page" })
+        assertTrue(input.events.isEmpty())
+        assertFalse(runner.isRunning)
     }
 
     @Test
-    fun `静态假识别下的自环由步数保险兜住而非挂死`() = runTest {
-        // 上游没有这道保险，遇到识别持续不中会无限空转、用户只能干等。
-        // 这条用例把它钉住：保险是有意为之的行为差异，不是实现瑕疵。
-        val reason = runnerFor(FakeRecognizer(), FakeInput()).run("main")
-        assertNotNull("应当被步数保险中止", reason)
-        assertTrue(reason!!.contains("死循环"))
+    fun `持续无法识别主页时第21次恢复明确失败且只发送17次Esc`() = runTest {
+        // Shared counters preserve the recovery budget across newly created node contexts.
+        // Attempts 1..3 wait, 4..20 send Esc, and 21 fails before sending further input.
+        // The generic MAX_STEPS guard is covered separately by PipelineRunnerTest.
+        val input = FakeInput()
+        val logs = mutableListOf<String>()
+        val runner = runnerFor(FakeRecognizer(), input, onLog = logs::add).also { it.delayer = {} }
+
+        assertEquals(
+            "持续无法识别登录或主页，请检查游戏语言设置，放大画面处理弹窗后重试，并导出日志",
+            runner.run("main"),
+        )
+        assertEquals(21, logs.count { it == "节点 back_to_init_page 执行动作 back_to_init_page" })
+        assertEquals(List(17) { KeyEvent.KEYCODE_ESCAPE }, input.keyPresses())
+        assertTrue(input.clicks().isEmpty())
+        assertTrue(logs.none { it == "节点 end 执行动作 empty" })
+        assertFalse(runner.isRunning)
     }
 
     @Test

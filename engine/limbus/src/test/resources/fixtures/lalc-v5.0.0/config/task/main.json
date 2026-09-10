@@ -1,0 +1,66 @@
+{
+    "main":{
+        "action":"init_limbus_window",
+        "next":[
+            "main_circle_center"
+        ]
+    },
+    "touch_to_start":{
+        "recognition":"template_match",
+        "action":"click",
+        "params":{
+            "template":"clear_all_caches",
+            "target_offset":[400, -400],
+            "post_delay": 3
+        },
+        "next":[
+            "main_circle_center"
+        ]
+    },
+    "back_to_init_page":{
+        "recognition":"template_match",
+        "action":"back_to_init_page",
+        "inverse": true,
+        "params":{
+            "template":"main_drive_no_text"
+        },
+        "next":[
+            "touch_to_start",
+            "main_circle_center"
+        ]
+    },
+    "main_circle_center":{
+        "action":"error_handler",
+        "next":[
+            "back_to_init_page",
+            "task_center"
+        ]
+    },
+    "task_center":{
+        "action":"enter_enkephalin",
+        "next":[
+            "check_and_get_mails",
+            "exp_entry",
+            "thread_entry",
+            "mirror_entry",
+            "reward_entry",
+            "end"
+        ]
+    },
+    "end":{
+        "desc": "这是要结束任务流水线的终点，虽然不强制终点导过来，但可以完整地标志任务结束",
+        "interrupt":[
+
+        ]
+    },
+    "semi_auto_main":{
+        "desc": "半自动的入口，暂且只是纯粹的P，也只用这个",
+        "action":"battle_entry",
+        "params":{
+            "post_delay": 1
+        },
+        "next": [
+            "semi_auto_main"
+        ]
+    }
+}

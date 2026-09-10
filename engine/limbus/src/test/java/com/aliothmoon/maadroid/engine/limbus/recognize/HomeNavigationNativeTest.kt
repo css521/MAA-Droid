@@ -61,7 +61,7 @@ object HomeNavigationNativeTest {
                     check(window.x in 805..845 && window.y in 630..670) { "Wrong Window target: $window" }
                     val gate = NodeRecognizer(recognizer)
                     val labels = Mat(screen, Rect(640, 400, 640, 320))
-                    try { println("OCR navigation: ${reader.detect(labels, mergeX = false, mergeY = false)}") }
+                    try { println("OCR navigation: ${reader.detect(labels, mergeX = false, mergeY = false, enhanceContrast = false)}") }
                     finally { labels.release() }
                     check(!gate.recognize(pipeline.require("back_to_init_page")).hit)
                     check(gate.recognize(pipeline.require("main_window_confirm")).hit)

@@ -12,8 +12,8 @@ data class TextMatch(val text: String, val x: Int, val y: Int, val score: Double
 /**
  * 裁剪区域，对应上游的 `mask=[x, y, w, h]`。
  *
- * 注意上游这个参数名叫 mask 但语义是**裁剪**（`mask_screenshot` 做的是 crop），
- * 且返回坐标会加回偏移。照抄语义以便流水线参数无需转换。
+ * 模板匹配用 `mask_screenshot` 裁剪后加回坐标偏移；OCR 用 `fill_mask_screenshot`
+ * 保留整帧并涂黑区域外。两者都返回原始画面的坐标。
  */
 data class Crop(val x: Int, val y: Int, val width: Int, val height: Int)
 
@@ -57,7 +57,7 @@ interface Recognizer {
         screenshotScale: Double = 1.0,
     ): List<Match>
 
-    /** 文本检测：返回画面里所有识别到的文本块 */
+    /** 文本检测：[crop] 外涂黑，保留整帧尺寸，返回原画面坐标。 */
     suspend fun detectText(crop: Crop? = null, threshold: Double = 0.3): List<TextMatch>
 
     /** 文本查找：包含目标子串，对应上游 find_text_in_image；threshold 是 OCR 置信度。 */

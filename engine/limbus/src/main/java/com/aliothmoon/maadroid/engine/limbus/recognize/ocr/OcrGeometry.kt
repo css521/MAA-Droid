@@ -80,7 +80,8 @@ object OcrGeometry {
 
     /** 上游 rec_img_shape = [3, 48, 320] */
     const val REC_HEIGHT = 48
-    const val REC_MAX_WIDTH = 320
+    const val REC_BASE_WIDTH = 320
+    const val REC_BATCH_SIZE = 6
 
     /** rec 的归一化同样是 mean=std=0.5 */
     const val REC_MEAN = 0.5f
@@ -105,18 +106,16 @@ object OcrGeometry {
     }
 
     /**
-     * 一批文字块的统一输入宽度 = `48 * 批内最大宽高比`，上限 320。
+     * 一批文字块的统一输入宽度 = `48 * max(320/48, 批内最大宽高比)`。
      *
-     * 上游按批取最大宽高比，让同批内所有图共用一个宽度以便一次前向。
-     * 取批内最大而非各自宽度：否则同批张量形状不一致，无法拼批。
+     * RapidOCR 3.8.4 的 320 是基准下限，不是上限；把长文字挤进 320 会损失字形。
+     * 上游按宽高比排序后每六框一批，同批所有图共用最大宽度。
      */
     fun recBatchWidth(sizes: List<Pair<Int, Int>>): Int {
-        if (sizes.isEmpty()) return REC_HEIGHT
-        val maxRatio = sizes.maxOf { (w, h) ->
+        val maxRatio = sizes.maxOfOrNull { (w, h) ->
             if (h <= 0) 1.0 else w.toDouble() / h
-        }
-        val width = (REC_HEIGHT * maxRatio).toInt()
-        return width.coerceIn(REC_HEIGHT, REC_MAX_WIDTH)
+        } ?: 1.0
+        return (REC_HEIGHT * maxOf(REC_BASE_WIDTH.toDouble() / REC_HEIGHT, maxRatio)).toInt()
     }
 
     /**

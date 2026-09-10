@@ -25,7 +25,21 @@ data class LimbusWorkspaceConfig(
             val task = task(key)
             if (!task.enabled) continue
             if (task.count !in 1..999) return "$key 的执行次数应为 1–999"
-            if (key != "Mirror" && task.string("luxcavationMode", "Enter") == "Skip Battle") continue
+            if (key != "Mirror") {
+                // Missing legacy fields use the same defaults as backendSections; explicit
+                // null/non-primitive values must not silently fall back to a runnable task.
+                val modeValue = task.params["luxcavationMode"]
+                val mode = if (modeValue == null) "Enter" else (modeValue as? JsonPrimitive)?.contentOrNull
+                if (mode !in setOf("Enter", "Skip Battle")) return "$key 的战斗模式应为 Enter 或 Skip Battle"
+                val stageKey = if (key == "EXP") "expStage" else "threadStage"
+                val stageValue = task.params[stageKey]
+                val stage = if (stageValue == null) {
+                    if (key == "EXP") "09" else "60"
+                } else (stageValue as? JsonPrimitive)?.contentOrNull
+                // Do not parse as Int: EXP uses leading zeroes and upstream may add levels.
+                if (stage.isNullOrEmpty() || stage.any { it !in '0'..'9' }) return "$key 的关卡应为非空数字（0–9）"
+                if (mode == "Skip Battle") continue // Only battle-team validation is skipped.
+            }
             if (task.teams.isEmpty()) return "请为 $key 选择队伍，并在队伍页配置出战顺序"
             if (task.teams.distinct().size != task.teams.size) return "$key 的队伍重复"
             for (slot in task.teams) {
@@ -126,7 +140,13 @@ data class LimbusWorkspaceConfig(
                 val old = JsonLimbusConfig.sectionsOf(params[type].orEmpty())[type].orEmpty()
                 var t = result.task(key).copy(enabled = enabled[type] ?: result.task(key).enabled)
                 for ((from, to) in mapOf("exp_stage" to "expStage", "thread_stage" to "threadStage", "mirror_mode" to "mirror_mode", "accept_reward" to "accept_reward")) old[from]?.let { t = t.with(to, it) }
-                old["luxcavation_mode"]?.jsonPrimitive?.content?.let { t = t.with("luxcavationMode", JsonPrimitive(if (it == "skip battle") "Skip Battle" else "Enter")) }
+                old["luxcavation_mode"]?.let { mode ->
+                    t = t.with("luxcavationMode", when ((mode as? JsonPrimitive)?.contentOrNull) {
+                        "enter", "Enter" -> JsonPrimitive("Enter")
+                        "skip battle", "Skip Battle" -> JsonPrimitive("Skip Battle")
+                        else -> mode // Preserve invalid legacy values so validation can reject them.
+                    })
+                }
                 result = result.withTask(key, t)
             }
             return result

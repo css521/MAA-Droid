@@ -2,6 +2,7 @@ package com.aliothmoon.maadroid.engine.limbus.recognize
 
 import com.aliothmoon.maadroid.engine.Frame
 import com.aliothmoon.maadroid.engine.FrameSource
+import com.aliothmoon.maadroid.engine.limbus.recognize.ocr.OcrImageOps
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import org.opencv.core.CvType
@@ -132,7 +133,8 @@ class LimbusRecognizer(
     /**
      * 文本检测 + 识别。上游用量第二（22 处）：饰品名、主题卡包、队伍人数、现金都靠它。
      *
-     * [crop] 语义与模板匹配一致 —— 是**裁剪**，返回坐标会加回偏移。
+     * [crop] 对应上游 OCR 的 fill_mask_screenshot：保留整帧，仅涂黑区域外的像素。
+     * 裁成窄图会被检测模型的短边规则过度放大，也会改变文字的识别尺寸。
      * OCR 不可用时返回空表（等价于「识别不中」），依赖文字的步骤会走兜底分支。
      */
     override suspend fun detectText(crop: Crop?, threshold: Double): List<TextMatch> {
@@ -145,17 +147,15 @@ class LimbusRecognizer(
         try {
             val region = crop?.clampTo(screen.cols(), screen.rows())
             if (crop != null && region == null) return emptyList()
-            val work = if (region == null) screen else Mat(screen, region.toRect())
+            val work = if (region == null) screen else OcrImageOps.maskedFrame(screen, region.toRect())
             try {
-                val offsetX = region?.x ?: 0
-                val offsetY = region?.y ?: 0
                 return engine.detect(work)
                     .filter { it.confidence >= threshold }
                     .map {
                         TextMatch(
                             text = it.text,
-                            x = it.centerX + offsetX,
-                            y = it.centerY + offsetY,
+                            x = it.centerX,
+                            y = it.centerY,
                             score = it.confidence.toDouble(),
                         )
                     }

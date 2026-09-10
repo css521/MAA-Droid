@@ -69,14 +69,14 @@ class OcrGeometryTest {
     // ---- 识别输入宽度 ----
 
     @Test
-    fun `批宽取批内最大宽高比乘 48 并封顶 320`() {
-        // 同批共用一个宽度才能拼成一个张量
-        assertEquals(320, OcrGeometry.recBatchWidth(listOf(100 to 20, 300 to 25)))
-        // 极扁的框也不超过 320
-        assertEquals(320, OcrGeometry.recBatchWidth(listOf(2000 to 20)))
-        // 下限是高度本身
-        assertEquals(48, OcrGeometry.recBatchWidth(listOf(10 to 100)))
-        assertEquals(48, OcrGeometry.recBatchWidth(emptyList()))
+    fun `识别批宽至少 320 并随长文本放大而不压缩字形`() {
+        // 来自上游 uv.lock 锁定的 RapidOCR 3.8.4 TextRecognizer 的计算式。
+        assertEquals(320, OcrGeometry.recBatchWidth(listOf(10 to 20)))
+        assertEquals(320, OcrGeometry.recBatchWidth(listOf(100 to 20)))
+        assertEquals(576, OcrGeometry.recBatchWidth(listOf(300 to 25)))
+        assertEquals(576, OcrGeometry.recBatchWidth(listOf(100 to 20, 300 to 25)))
+        assertEquals(4800, OcrGeometry.recBatchWidth(listOf(2000 to 20)))
+        assertEquals(320, OcrGeometry.recBatchWidth(emptyList()))
     }
 
     @Test

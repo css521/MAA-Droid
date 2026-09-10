@@ -2,15 +2,14 @@ package com.aliothmoon.maadroid.engine.limbus.ui
 
 import com.aliothmoon.maadroid.engine.limbus.LimbusTask
 import com.aliothmoon.maadroid.engine.limbus.config.JsonLimbusConfig
+import com.aliothmoon.maadroid.engine.limbus.fixtures.LalcV500Fixtures
 import com.aliothmoon.maadroid.engine.limbus.pipeline.PipelineRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Test
-import java.io.File
 
 /**
  * 任务模型与面板参数的契约。
@@ -26,20 +25,13 @@ import java.io.File
  */
 class LimbusTaskContractTest {
 
-    private val upstreamTaskDir =
-        File("/Users/css521/project/java/LixAssistantLimbusCompany/lalc_backend/config/task")
-
-    private fun upstreamRegistry(): PipelineRegistry {
-        val files = upstreamTaskDir.listFiles { f -> f.extension == "json" }!!
-            .associate { it.name to it.readText() }
-        return PipelineRegistry.load(files)
-    }
+    private fun upstreamRegistry(): PipelineRegistry =
+        PipelineRegistry.load(LalcV500Fixtures.taskFiles())
 
     // ---- 任务 ↔ 节点 ----
 
     @Test
     fun `每个任务都对应一个真实存在的流水线节点`() {
-        assumeTrue("未找到上游 clone，跳过", upstreamTaskDir.isDirectory)
         val reg = upstreamRegistry()
 
         for (task in LimbusTask.entries) {
@@ -52,7 +44,6 @@ class LimbusTaskContractTest {
 
     @Test
     fun `任务标识本身不是节点名`() {
-        assumeTrue("未找到上游 clone，跳过", upstreamTaskDir.isDirectory)
         val reg = upstreamRegistry()
         // 这条正是先前 bug 的根源：把任务标识当入口节点用
         for (task in LimbusTask.entries) {
@@ -66,7 +57,6 @@ class LimbusTaskContractTest {
 
     @Test
     fun `任务节点集合与上游 task_center 的分支一致`() {
-        assumeTrue("未找到上游 clone，跳过", upstreamTaskDir.isDirectory)
         val reg = upstreamRegistry()
         val branches = reg.require("task_center").next
 
@@ -90,7 +80,6 @@ class LimbusTaskContractTest {
 
     @Test
     fun `未选中的任务节点会被关掉`() {
-        assumeTrue("未找到上游 clone，跳过", upstreamTaskDir.isDirectory)
         val reg = upstreamRegistry()
 
         // 只选镜牢
@@ -105,7 +94,6 @@ class LimbusTaskContractTest {
 
     @Test
     fun `覆盖不影响原注册表`() {
-        assumeTrue("未找到上游 clone，跳过", upstreamTaskDir.isDirectory)
         val reg = upstreamRegistry()
         reg.withEnabled(mapOf(LimbusTask.EXP.nodeName to false))
         // 节点不可变是为了资源包能整体替换；一次运行的选择不该污染下一次
@@ -114,7 +102,6 @@ class LimbusTaskContractTest {
 
     @Test
     fun `覆盖里的陌生节点名被忽略而不是让装配失败`() {
-        assumeTrue("未找到上游 clone，跳过", upstreamTaskDir.isDirectory)
         val reg = upstreamRegistry()
         // 上游改了节点名时，宁可该任务不跑，也不要整条链起不来
         val patched = reg.withEnabled(mapOf("node_that_does_not_exist" to false))
