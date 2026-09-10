@@ -19,6 +19,15 @@ internal object AndroidHomeNavigation {
     private val names = setOf("main_drive_no_text", "main_window_no_text", "main_drive_with_text")
     fun supports(name: String) = name in names
 
+    // 同一帧内缓存 drive icon 的多尺度匹配结果。
+    // 每次 templateMatch 调用之间帧不变（bridge 按内容递增 seq），
+    // 同一轮 probe 里多个主页导航判据不需要各自做一遍 17 档多尺度搜索。
+    // 这是 39 秒卡顿的根因：error_handler 打转 ~10 轮 × 每轮多个主页判据 × 17 档。
+    private var cachedDriveSeq: Long = -1
+    private var cachedDrive: Match? = null
+    private var cachedLabelsSeq: Long = -1
+    private var cachedLabels: List<TextMatch>? = null
+
     fun match(
         screen: Mat,
         name: String,
@@ -28,16 +37,30 @@ internal object AndroidHomeNavigation {
         language: String,
         ocr: PpOcrEngine?,
         checkActive: () -> Unit,
+        frameSeq: Long = -1,
     ): Match? {
         if (!supports(name) || screen.cols() != 1280 || screen.rows() != 720) return null
-        val drive = icon(screen, driveTemplate, threshold, checkActive) ?: return null
+        val drive = if (frameSeq >= 0 && frameSeq == cachedDriveSeq) {
+            cachedDrive ?: return null
+        } else {
+            icon(screen, driveTemplate, threshold, checkActive).also {
+                if (frameSeq >= 0) { cachedDriveSeq = frameSeq; cachedDrive = it }
+            } ?: return null
+        }
         return when (name) {
             "main_drive_no_text" -> drive
             "main_window_no_text" -> icon(screen, template, threshold, checkActive)
                 ?.takeIf { isWindowBesideDrive(it, drive) }
             else -> {
                 val reader = ocr ?: return null
-                confirmedDriveLabel(drive, labels(screen, reader, checkActive), language, threshold)
+                val lbl = if (frameSeq >= 0 && frameSeq == cachedLabelsSeq) {
+                    cachedLabels ?: emptyList()
+                } else {
+                    labels(screen, reader, checkActive).also {
+                        if (frameSeq >= 0) { cachedLabelsSeq = frameSeq; cachedLabels = it }
+                    }
+                }
+                confirmedDriveLabel(drive, lbl, language, threshold)
             }
         }
     }

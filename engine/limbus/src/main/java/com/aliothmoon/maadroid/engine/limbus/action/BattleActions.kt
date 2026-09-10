@@ -194,12 +194,16 @@ private object ReadyToBattleAction : ActionBackend {
 
 private object ChooseTeamAction : ActionBackend {
     override suspend fun execute(ctx: ActionContext): ActionOutcome {
-        ctx.log("选择队伍")
         val cfgType = ctx.node.str("cfg_type") ?: return ActionOutcome.Continue
         val cfgIndex = resolveCfgIndex(ctx, cfgType)
         // 配置里是 1..20 的人类编号，减一化为 0..19
         val teamNo = (ctx.config.intAt(cfgType, "team_indexes", cfgIndex, 1) - 1)
             .coerceIn(0, MAX_TEAM_NO)
+        val scrollCount = (teamNo / TEAMS_PER_PAGE).coerceIn(0, MAX_SCROLL)
+        val clickIndex =
+            if (teamNo < LAST_PAGE_FIRST_TEAM) teamNo % TEAMS_PER_PAGE
+            else teamNo - LAST_PAGE_OFFSET
+        ctx.log("选择队伍 #${teamNo + 1}（滑 $scrollCount 页，点第 $clickIndex 格 @${TEAM_CLICK_POSITIONS[clickIndex]}）")
 
         // 先划到顶部重置，否则续跑时列表停在上次位置，下面的滚动次数就对不上。
         // 每次滑动后必须等列表**惯性滑动停下**：上游给 0.5 秒是 PC 的量，安卓上不够——
@@ -210,16 +214,10 @@ private object ChooseTeamAction : ActionBackend {
             ctx.delay(LIST_SETTLE)
         }
 
-        val scrollCount = (teamNo / TEAMS_PER_PAGE).coerceIn(0, MAX_SCROLL)
         repeat(scrollCount) {
             swipe(ctx.input, 130, 500, 130, 280)
             ctx.delay(LIST_SETTLE)
         }
-
-        // 最后一页只剩两格可点（18→4、19→5），不能再按整页取模
-        val clickIndex =
-            if (teamNo < LAST_PAGE_FIRST_TEAM) teamNo % TEAMS_PER_PAGE
-            else teamNo - LAST_PAGE_OFFSET
 
         click(ctx.input, TEAM_CLICK_POSITIONS[clickIndex].first, TEAM_CLICK_POSITIONS[clickIndex].second)
         // 点完队伍要等罪人阵容真的载入：上游点完即返回，后续 ready_to_battle 会读

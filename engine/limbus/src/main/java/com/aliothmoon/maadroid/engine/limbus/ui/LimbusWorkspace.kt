@@ -79,13 +79,16 @@ private fun WorkspaceContent(config: LimbusWorkspaceConfig, change: (LimbusWorks
                 TextButton(onClick = { more = true }, modifier = Modifier.width(48.dp), contentPadding = PaddingValues(0.dp)) { Text("更多") }
                 DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
                     DropdownMenuItem(text = { Text("导入 / 导出配置") }, onClick = { more = false; transfer = true })
-                    DropdownMenuItem(text = { Text("清理采集帧") }, onClick = {
+                    DropdownMenuItem(text = { Text("清理采集帧与日志") }, onClick = {
                         more = false
                         // 采集帧存在 Maa/debug/limbus/frames/，清掉后下次运行会重新采集全部界面
                         val frames = root?.let { java.io.File(it, "debug/limbus/frames") }
                         val count = frames?.listFiles()?.count { it.isFile && it.extension == "png" } ?: 0
                         frames?.listFiles()?.forEach { if (it.isFile && it.extension == "png") it.delete() }
-                        clearToast = "已清理 $count 张采集帧"
+                        // 清理边狱的诊断日志（events.log 等），避免旧日志混在新数据里
+                        val diag = root?.parentFile?.let { java.io.File(it, "diagnostics") }
+                        val logCount = diag?.walkTopDown()?.count { it.isFile && it.delete() } ?: 0
+                        clearToast = "已清理 $count 张采集帧、$logCount 条诊断日志"
                     })
                 }
             }

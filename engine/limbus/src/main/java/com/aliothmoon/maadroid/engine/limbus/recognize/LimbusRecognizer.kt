@@ -233,6 +233,7 @@ class LimbusRecognizer(
                 val mobile = AndroidHomeNavigation.match(
                     screen, template, tpl, drive, threshold, gameLanguage, ocr,
                     checkActive = { coroutine.ensureActive() },
+                    frameSeq = seq,
                 ) ?: return emptyList()
                 if (warned.add("android_home:$template")) {
                     onInfo("已识别 Android 主页导航 $template，位置=${mobile.x},${mobile.y}")
