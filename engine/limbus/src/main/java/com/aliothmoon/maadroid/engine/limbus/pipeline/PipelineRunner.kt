@@ -174,37 +174,59 @@ class PipelineRunner(
         }
 
         // next 按声明顺序取第一个命中的，不是取分数最高的
-        val hitNext = firstHit(step.node.next)
-        if (hitNext != null) {
-            stack.addLast(Step.Route(hitNext, registry.require(hitNext)))
-            stack.addLast(Step.Action(hitNext, registry.require(hitNext)))
+        val next = probe(step.node.next)
+        if (next.hit != null) {
+            // 命中的若是无条件 direct 节点、而它前面的真候选全落空，那这不是"识别到了什么"，
+            // 而是"识别全败后落到了兜底分支"。上游把这种兜底写成 report_error（例如
+            // exp_can_not_skip_battle 报"该跳过未解锁"），于是识别失败被伪装成业务结论，
+            // 排查方向被带偏。这里必须把真实原因和每个候选差多少讲清楚。
+            if (registry[next.hit]?.recognition == PipelineNode.RECOGNITION_DIRECT && next.misses.isNotEmpty()) {
+                onLog(
+                    "节点 ${step.name} 的真候选全部未命中，落到兜底节点 ${next.hit}；" +
+                        "各候选差距: ${next.misses.joinToString("; ")}",
+                )
+            }
+            stack.addLast(Step.Route(next.hit, registry.require(next.hit)))
+            stack.addLast(Step.Action(next.hit, registry.require(next.hit)))
             rateLimit(step.node, started)
             return
         }
 
         // next 全不命中才试 interrupt
-        val hitInterrupt = firstHit(registry.interruptsOf(step.name))
-        if (hitInterrupt != null) {
-            val node = registry.require(hitInterrupt)
+        val interrupt = probe(registry.interruptsOf(step.name))
+        if (interrupt.hit != null) {
+            val node = registry.require(interrupt.hit)
             // 中断处理完要回到本节点继续路由 —— 先压自身的 Route，它会最后执行
             stack.addLast(Step.Route(step.name, step.node))
-            stack.addLast(Step.Route(hitInterrupt, node))
-            stack.addLast(Step.Action(hitInterrupt, node))
+            stack.addLast(Step.Route(interrupt.hit, node))
+            stack.addLast(Step.Action(interrupt.hit, node))
             rateLimit(step.node, started)
             return
         }
 
-        onLog("节点 ${step.name} 的 next 与 interrupt 均未命中，该分支结束")
+        val misses = next.misses + interrupt.misses
+        onLog(
+            "节点 ${step.name} 的 next 与 interrupt 均未命中，该分支结束" +
+                if (misses.isEmpty()) "" else "；各候选差距: ${misses.joinToString("; ")}",
+        )
         rateLimit(step.node, started)
     }
+
+    /** 一轮候选识别的结果：命中者（可能为 null）与命中之前所有落空候选的量化差距 */
+    private class Probe(val hit: String?, val misses: List<String>)
 
     /**
      * 返回第一个识别命中的节点名，并记下它的命中坐标供该节点的动作取用。
      *
      * 按声明顺序取**第一个**命中的，不是取分数最高的 —— 上游如此，
      * 流水线的 next 顺序本身就是优先级。
+     *
+     * 同时收集落空候选的 [TemplateMiss]。**这里只收集不输出**：路由本来就靠
+     * 「没命中就试下一个」，未命中是常态，逐次打日志会把日志淹掉。
+     * 由调用方在真正的决策点（落到兜底分支 / 全都不中）才汇总输出。
      */
-    private suspend fun firstHit(candidates: List<String>): String? {
+    private suspend fun probe(candidates: List<String>): Probe {
+        val misses = ArrayList<String>()
         for (name in candidates) {
             val node = registry[name] ?: continue
             // enable 在 recognizeGate 里也判了；这里先挡一次省掉一次截图识别
@@ -212,10 +234,11 @@ class PipelineRunner(
             val outcome = recognizeGate(node)
             if (outcome.hit) {
                 lastRecognition[name] = outcome.matches
-                return name
+                return Probe(name, misses)
             }
+            outcome.miss?.let { misses += "$name($it)" }
         }
-        return null
+        return Probe(null, misses)
     }
 
     /** 补足 rateLimit 指定的最小耗时，避免识别不中时空转烧 CPU */

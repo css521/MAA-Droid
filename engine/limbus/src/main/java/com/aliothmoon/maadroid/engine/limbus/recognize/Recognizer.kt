@@ -51,13 +51,21 @@ interface Recognizer {
     /** 同一帧的 EGO 卡片与 0% 侵蚀标识。null 表示无法观察，不能当作面板已关闭。 */
     suspend fun battleEgoPanel(): BattleEgoPanel? = null
 
-    /** 灰度模板匹配。[template] 是素材基名（不含扩展名与语言目录） */
+    /**
+     * 灰度模板匹配。[template] 是素材基名（不含扩展名与语言目录）
+     *
+     * [onMiss] 在相关图峰值不足 [threshold] 时回调 `(峰值, 峰值中心x, 峰值中心y)`。
+     * **不要在这一层把它打成日志**：路由本身就依赖「没命中就试下一个候选」，
+     * 未命中是常态，逐次输出会淹掉日志。峰值应当上传到流水线，
+     * 由它在「所有真候选都落空」这个决策点一次性汇总。
+     */
     suspend fun templateMatch(
         template: String,
         threshold: Double = 0.85,
         crop: Crop? = null,
         maskTemplate: Crop? = null,
         screenshotScale: Double = 1.0,
+        onMiss: ((Double, Int, Int) -> Unit)? = null,
     ): List<Match>
 
     /** 文本检测：[crop] 外涂黑，保留整帧尺寸，返回原画面坐标。 */

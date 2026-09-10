@@ -13,10 +13,39 @@ import com.aliothmoon.maadroid.engine.limbus.recognize.Recognizer
  * 所以这条路径今天走不到；但保留它才不会在上游改成字符串 target 时静默漂移
  * （重新匹配会多一次截图，且期间画面可能已变）。
  */
-data class RecognizeOutcome(val hit: Boolean, val matches: List<Match> = emptyList()) {
+data class RecognizeOutcome(
+    val hit: Boolean,
+    val matches: List<Match> = emptyList(),
+    /** 未命中时的定量原因，仅供诊断；命中时为 null。见 [TemplateMiss] */
+    val miss: TemplateMiss? = null,
+) {
     companion object {
         val MISS = RecognizeOutcome(hit = false)
         val DIRECT_HIT = RecognizeOutcome(hit = true)
+    }
+}
+
+/**
+ * 一次模板识别未命中的定量原因。
+ *
+ * 存在的理由：模板匹配的相关图峰值在阈值判定时本来就算出来了，过去被直接丢弃，
+ * 于是「界面不对」和「界面对了但素材匹配不上」在日志里长得一模一样——
+ * 而这两者的修法完全不同（改时序 vs 重截图）。带上峰值就能一眼分开：
+ * 峰值 0.2 说明画面根本不是那一页，峰值 0.83 卡在 0.85 说明素材需要重截或降阈值。
+ *
+ * [peak] 为 null 表示没有可比的相关图（素材缺失，或模板尺寸超出画面）。
+ */
+data class TemplateMiss(
+    val template: String,
+    val threshold: Double,
+    val peak: Double?,
+    val x: Int = 0,
+    val y: Int = 0,
+) {
+    override fun toString(): String = if (peak == null) {
+        "$template 无相关图(素材缺失或模板大于画面) 阈值=$threshold"
+    } else {
+        "$template 峰值=${"%.3f".format(peak)}@$x,$y 阈值=$threshold"
     }
 }
 
@@ -48,8 +77,8 @@ class NodeRecognizer(
             PipelineNode.RECOGNITION_DIRECT -> RecognizeOutcome.DIRECT_HIT
 
             PipelineNode.RECOGNITION_TEMPLATE_MATCH ->
-                byTemplate(node, DEFAULT_TEMPLATE_THRESHOLD) { t, th, crop ->
-                    val matches = recognizer.templateMatch(t, th, crop)
+                byTemplate(node, DEFAULT_TEMPLATE_THRESHOLD) { t, th, crop, onMiss ->
+                    val matches = recognizer.templateMatch(t, th, crop, onMiss = onMiss)
                     // 只放行不使用命中坐标的经验/纺锤选队动作。其他 Details 点击、镜牢、
                     // inverse、裁剪或自定义阈值仍完全使用上游模板，不伪造按钮坐标。
                     if (matches.isEmpty() && node.enable && t == "details" && node.action == "choose_team" &&
@@ -60,12 +89,12 @@ class NodeRecognizer(
                 }
 
             PipelineNode.RECOGNITION_COLOR_TEMPLATE_MATCH ->
-                byTemplate(node, DEFAULT_COLOR_FEATURE_THRESHOLD) { t, th, crop ->
+                byTemplate(node, DEFAULT_COLOR_FEATURE_THRESHOLD) { t, th, crop, _ ->
                     recognizer.colorTemplateMatch(t, th, crop)
                 }
 
             PipelineNode.RECOGNITION_FEATURE_MATCH ->
-                byTemplate(node, DEFAULT_COLOR_FEATURE_THRESHOLD) { t, th, crop ->
+                byTemplate(node, DEFAULT_COLOR_FEATURE_THRESHOLD) { t, th, crop, _ ->
                     recognizer.featureMatch(t, th, crop)
                 }
 
@@ -73,13 +102,19 @@ class NodeRecognizer(
         }
 
         val hit = if (node.inverse) !raw.hit else raw.hit
-        return RecognizeOutcome(hit = node.enable && hit, matches = raw.matches)
+        val finalHit = node.enable && hit
+        // inverse 节点「识别不中」就是命中，此时那份 miss 不是失败原因，别往上报
+        return RecognizeOutcome(
+            hit = finalHit,
+            matches = raw.matches,
+            miss = if (finalHit) null else raw.miss,
+        )
     }
 
     private suspend fun byTemplate(
         node: PipelineNode,
         defaultThreshold: Double,
-        match: suspend (String, Double, Crop?) -> List<Match>,
+        match: suspend (String, Double, Crop?, ((Double, Int, Int) -> Unit)?) -> List<Match>,
     ): RecognizeOutcome {
         // 上游 template 一律单串；这里仍按多个处理，任一命中即命中，
         // 以便上游将来改成数组时无需改动
@@ -88,11 +123,23 @@ class NodeRecognizer(
         val crop = node.ints("mask")
             ?.let { Crop(it[0], it[1], it[2], it[3]) }
 
+        // 多模板时留下峰值最高的那次未命中：它最接近命中，最能说明差在哪
+        var best: TemplateMiss? = null
         for (t in templates) {
-            val found = match(t, threshold, crop)
+            var peak: Double? = null
+            var peakX = 0
+            var peakY = 0
+            val found = match(t, threshold, crop) { p, x, y ->
+                peak = p
+                peakX = x
+                peakY = y
+            }
             if (found.isNotEmpty()) return RecognizeOutcome(hit = true, matches = found)
+            val current = TemplateMiss(t, threshold, peak, peakX, peakY)
+            val prev = best
+            if (prev == null || (current.peak ?: -1.0) > (prev.peak ?: -1.0)) best = current
         }
-        return RecognizeOutcome.MISS
+        return RecognizeOutcome(hit = false, miss = best)
     }
 
     private companion object {

@@ -363,6 +363,7 @@ class MailPipelineTest {
 
             override suspend fun templateMatch(
                 template: String, threshold: Double, crop: Crop?, maskTemplate: Crop?, screenshotScale: Double,
+                onMiss: ((Double, Int, Int) -> Unit)?,
             ): List<Match> {
                 check(++recognitionCount <= 200) { "mail did not complete: $logs" }
                 val match = when (template) {

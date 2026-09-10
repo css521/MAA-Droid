@@ -96,6 +96,7 @@ class FakeRecognizer : Recognizer {
         crop: Crop?,
         maskTemplate: Crop?,
         screenshotScale: Double,
+        onMiss: ((Double, Int, Int) -> Unit)?,
     ): List<Match> {
         templateCalls += template
         templateQueue[template]?.let { q ->

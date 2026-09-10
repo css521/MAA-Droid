@@ -101,6 +101,7 @@ class LimbusRecognizer(
         crop: Crop?,
         maskTemplate: Crop?,
         screenshotScale: Double,
+        onMiss: ((Double, Int, Int) -> Unit)?,
     ): List<Match> {
         val tpl = templateOf(template) ?: return emptyList()
         val frame = frames.grab() ?: return emptyList()
@@ -124,6 +125,7 @@ class LimbusRecognizer(
                         offsetX = region?.x ?: 0,
                         offsetY = region?.y ?: 0,
                         screenshotScale = screenshotScale,
+                        onMiss = onMiss,
                     )
                     if (matches.isNotEmpty() || crop != null || maskTemplate != null || screenshotScale != 1.0 ||
                         !AndroidHomeNavigation.supports(template)) return matches

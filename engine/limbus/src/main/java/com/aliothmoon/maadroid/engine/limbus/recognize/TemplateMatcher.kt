@@ -37,6 +37,11 @@ object TemplateMatcher {
      * @param threshold 匹配阈值，流水线默认 0.85
      * @param offsetX 裁剪偏移，结果坐标会加回去（上游 mask 语义）
      * @param screenshotScale 对屏幕的缩放倍率；结果坐标按原始尺度返回
+     * @param onMiss 相关图峰值低于 [threshold] 时回调 `(峰值, 峰值中心x, 峰值中心y)`。
+     *   峰值在阈值判定时本来就算出来了，只是过去被丢掉——它是「差多少才算命中」
+     *   唯一的定量答案，没有它就只能靠猜。仅诊断用，不参与匹配结果。
+     *   注意模板尺寸超出屏幕时不会回调（那种情况没有相关图可言），
+     *   调用方应把「未收到回调」与「峰值不足」区分开来报告。
      */
     fun match(
         screen: Mat,
@@ -45,6 +50,7 @@ object TemplateMatcher {
         offsetX: Int = 0,
         offsetY: Int = 0,
         screenshotScale: Double = 1.0,
+        onMiss: ((Double, Int, Int) -> Unit)? = null,
     ): List<Match> {
         val prepScreen = preprocess(screen, screenshotScale)
         val prepTemplate = preprocess(template, 1.0)
@@ -64,6 +70,7 @@ object TemplateMatcher {
                     offsetX = offsetX,
                     offsetY = offsetY,
                     scale = screenshotScale,
+                    onMiss = onMiss,
                 )
             } finally {
                 result.release()
@@ -123,10 +130,20 @@ object TemplateMatcher {
         offsetX: Int,
         offsetY: Int,
         scale: Double,
+        onMiss: ((Double, Int, Int) -> Unit)? = null,
     ): List<Match> {
         // 先快速判断有没有超过阈值的点，避免逐点扫描整张相关图
         val mm = Core.minMaxLoc(result)
-        if (mm.maxVal < threshold) return emptyList()
+        if (mm.maxVal < threshold) {
+            onMiss?.let { sink ->
+                val (peakX, peakY) = toCenter(
+                    mm.maxLoc.x.toInt(), mm.maxLoc.y.toInt(),
+                    templateWidth, templateHeight, offsetX, offsetY, scale,
+                )
+                sink(mm.maxVal, peakX, peakY)
+            }
+            return emptyList()
+        }
 
         val rows = result.rows()
         val cols = result.cols()

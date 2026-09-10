@@ -76,6 +76,90 @@ class PipelineRunnerTest {
         )
     )
 
+    /**
+     * 上游经验本的形状：`next` 末位是一个没有 `recognition` 字段的节点，
+     * 它默认 [PipelineNode.RECOGNITION_DIRECT] 因而**永不失败**，动作是 report_error。
+     * 于是「两个真候选都没匹配上」被上报成「该跳过未解锁 | Can not Skip Battle」
+     * ——识别失败伪装成业务结论，真机排查方向被整个带偏
+     * （见 luxcavation.json 的 exp_can_not_skip_battle）。
+     *
+     * 这里钉住：落到这种兜底分支时，日志必须讲出真实原因和每个候选差多少。
+     */
+    @Test
+    fun `落到无条件兜底节点时报出真实原因与各候选差距`() = runTest {
+        // 注册表 load 时会校验 action / interrupt 目标是否已存在，故先注册原生动作
+        ActionRegistry.register("act_report", object : ActionBackend {
+            override suspend fun execute(ctx: ActionContext) =
+                ActionOutcome.Finish(success = false, message = "该跳过未解锁 | Can not Skip Battle")
+        })
+        val reg = PipelineRegistry.load(
+            mapOf(
+                "flow.json" to """
+                    {
+                      "empty":         { "action": "empty" },
+                      "error_handler": { "action": "empty" },
+                      "act_report":    { "action": "empty" },
+                      "team":   { "action": "empty", "recognition": "template_match",
+                                  "params": { "template": "details" } },
+                      "skip":   { "action": "empty", "recognition": "template_match",
+                                  "params": { "template": "skip_battle" } },
+                      "cannot": { "action": "act_report" },
+                      "stage":  { "action": "empty", "rate_limit": 0,
+                                  "next": ["team", "skip", "cannot"] }
+                    }
+                """.trimIndent(),
+            )
+        )
+        val logs = mutableListOf<String>()
+        val runner = PipelineRunner(
+            registry = reg,
+            contextFactory = { name, node, matches -> fakeContext(node, name, matches) },
+            recognizeGate = { node ->
+                when (reg.names().first { reg[it] === node }) {
+                    // 页面对了但素材匹配不上：峰值贴着阈值
+                    "team" -> RecognizeOutcome(false, miss = TemplateMiss("details", 0.85, 0.831, 640, 410))
+                    // 画面根本不是这一页：峰值很低
+                    "skip" -> RecognizeOutcome(false, miss = TemplateMiss("skip_battle", 0.85, 0.402, 12, 34))
+                    else -> RecognizeOutcome.DIRECT_HIT
+                }
+            },
+            onLog = { logs += it },
+        ).also { it.delayer = {} }
+
+        val reason = runner.run("stage")
+
+        // 业务结论照旧上报（不改上游语义），但日志里必须同时有可定位的真实原因
+        assertEquals("该跳过未解锁 | Can not Skip Battle", reason)
+        val fallback = logs.firstOrNull { it.contains("落到兜底节点") }
+        assertTrue("应报出落到兜底分支: $logs", fallback != null)
+        assertTrue(fallback!!, fallback.contains("cannot"))
+        // 两个候选各差多少都要在，才能分开「改时序」和「重截素材」
+        assertTrue(fallback, fallback.contains("details 峰值=0.831@640,410 阈值=0.85"))
+        assertTrue(fallback, fallback.contains("skip_battle 峰值=0.402@12,34 阈值=0.85"))
+    }
+
+    @Test
+    fun `真候选命中时不输出兜底诊断`() = runTest {
+        val reg = basicRegistry()
+        ActionRegistry.register("act_a", recordingAction("A"))
+        ActionRegistry.register("act_b", recordingAction("B"))
+        hits = setOf("a")
+        val logs = mutableListOf<String>()
+        val runner = PipelineRunner(
+            registry = reg,
+            contextFactory = { name, node, matches -> fakeContext(node, name, matches) },
+            recognizeGate = { node ->
+                RecognizeOutcome(hit = reg.names().first { reg[it] === node } in hits)
+            },
+            onLog = { logs += it },
+        ).also { it.delayer = {} }
+
+        runner.run("main")
+
+        // 未命中是路由常态，不能因此刷日志
+        assertTrue("命中时不应有兜底诊断: $logs", logs.none { it.contains("落到兜底节点") })
+    }
+
     @Test
     fun nextTakesFirstDeclaredHitNotBestScore() = runTest {
         val reg = basicRegistry()
@@ -345,6 +429,7 @@ class PipelineRunnerTest {
             override suspend fun templateMatch(
                 template: String, threshold: Double, crop: Crop?,
                 maskTemplate: Crop?, screenshotScale: Double,
+                onMiss: ((Double, Int, Int) -> Unit)?,
             ) = error("调度用例不应做识别")
 
             override suspend fun detectText(crop: Crop?, threshold: Double) =

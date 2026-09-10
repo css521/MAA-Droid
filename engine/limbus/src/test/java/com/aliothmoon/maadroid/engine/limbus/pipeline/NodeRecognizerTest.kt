@@ -134,6 +134,7 @@ class NodeRecognizerTest {
             override suspend fun templateMatch(
                 template: String, threshold: Double, crop: Crop?,
                 maskTemplate: Crop?, screenshotScale: Double,
+                onMiss: ((Double, Int, Int) -> Unit)?,
             ): List<Match> {
                 seen = threshold
                 return emptyList()
@@ -162,6 +163,7 @@ class NodeRecognizerTest {
             override suspend fun templateMatch(
                 template: String, threshold: Double, crop: Crop?,
                 maskTemplate: Crop?, screenshotScale: Double,
+                onMiss: ((Double, Int, Int) -> Unit)?,
             ): List<Match> {
                 seen = crop
                 return emptyList()
@@ -266,5 +268,87 @@ class NodeRecognizerTest {
         val node = nodeWith("""{"template":["first","second","third"]}""").copy(recognition = "template_match")
         assertTrue(NodeRecognizer(rec).recognize(node).hit)
         assertEquals(listOf("first", "second"), rec.templateCalls)
+    }
+
+    /**
+     * 相关图峰值是「差多少才算命中」唯一的定量答案，过去在阈值判定后被丢弃。
+     * 丢了它，「画面不是这一页」（峰值 0.2）和「页面对了但素材匹配不上」（峰值 0.83
+     * 卡在 0.85）在日志里长得一模一样，而这两者一个该改时序、一个该重截素材。
+     */
+    private fun peakReporting(peak: Double?, template: String = "skip_battle") =
+        object : Recognizer by FakeRecognizer() {
+            override suspend fun templateMatch(
+                t: String, threshold: Double, crop: Crop?,
+                maskTemplate: Crop?, screenshotScale: Double,
+                onMiss: ((Double, Int, Int) -> Unit)?,
+            ): List<Match> {
+                // 模板缺失或尺寸超出画面时没有相关图可言，此时底层不回调
+                if (t == template && peak != null) onMiss?.invoke(peak, 640, 410)
+                return emptyList()
+            }
+        }
+
+    @Test fun `未命中时把相关图峰值和位置一并上传`() = runTest {
+        val node = nodeWith("""{"template":"skip_battle"}""")
+            .copy(recognition = PipelineNode.RECOGNITION_TEMPLATE_MATCH)
+
+        val outcome = NodeRecognizer(peakReporting(0.831)).recognize(node)
+
+        assertFalse(outcome.hit)
+        val miss = requireNotNull(outcome.miss)
+        assertEquals("skip_battle", miss.template)
+        assertEquals(0.85, miss.threshold, 1e-9)
+        assertEquals(0.831, requireNotNull(miss.peak), 1e-9)
+        assertEquals(640, miss.x)
+        assertEquals(410, miss.y)
+        // 日志里要能一眼看出差多少，而不是只说"没命中"
+        assertTrue(miss.toString(), miss.toString().contains("峰值=0.831@640,410"))
+        assertTrue(miss.toString(), miss.toString().contains("阈值=0.85"))
+    }
+
+    @Test fun `没有相关图时报素材缺失而不是伪造一个峰值`() = runTest {
+        val node = nodeWith("""{"template":"skip_battle"}""")
+            .copy(recognition = PipelineNode.RECOGNITION_TEMPLATE_MATCH)
+
+        val miss = requireNotNull(NodeRecognizer(peakReporting(null)).recognize(node).miss)
+
+        assertEquals(null, miss.peak)
+        assertTrue(miss.toString(), miss.toString().contains("无相关图"))
+    }
+
+    @Test fun `inverse 因未命中而命中时不带 miss`() = runTest {
+        // inverse 是「识别不中才算命中」，此时那份 miss 不是失败原因，报出去会误导排查
+        val node = nodeWith("""{"template":"skip_battle"}""")
+            .copy(recognition = PipelineNode.RECOGNITION_TEMPLATE_MATCH, inverse = true)
+
+        val outcome = NodeRecognizer(peakReporting(0.2)).recognize(node)
+
+        assertTrue(outcome.hit)
+        assertEquals(null, outcome.miss)
+    }
+
+    @Test fun `多模板时保留峰值最高的那次未命中`() = runTest {
+        val rec = object : Recognizer by FakeRecognizer() {
+            override suspend fun templateMatch(
+                t: String, threshold: Double, crop: Crop?,
+                maskTemplate: Crop?, screenshotScale: Double,
+                onMiss: ((Double, Int, Int) -> Unit)?,
+            ): List<Match> {
+                onMiss?.invoke(if (t == "near") 0.842 else 0.31, 1, 2)
+                return emptyList()
+            }
+        }
+        val node = nodeWith("""{"template":["far","near","alsofar"]}""")
+            .copy(recognition = PipelineNode.RECOGNITION_TEMPLATE_MATCH)
+
+        // 最接近命中的那个才说明问题；报第一个或最后一个都会指错方向
+        assertEquals("near", NodeRecognizer(rec).recognize(node).miss?.template)
+    }
+
+    @Test fun `命中时不带 miss`() = runTest {
+        val node = nodeWith("""{"template":"hit"}""").copy(recognition = "template_match")
+        val outcome = NodeRecognizer(recognizerWith("hit" to listOf(Match(1, 2, .9)))).recognize(node)
+        assertTrue(outcome.hit)
+        assertEquals(null, outcome.miss)
     }
 }
