@@ -294,3 +294,84 @@ details              0.739    skip_battle         0.755    pass_missions        
 `details` 的**跨队伍泛化未验证**——只有一张队伍页真帧。压缩截图上得 0.697 不作为
 反证（那些图 2.17 宽高比被压成 16:9，命中点 y 一致而 x 偏 42px）。下次采到另一套
 队伍的真帧后需复核。
+
+---
+
+## 七、根治办法：文字判据走 OCR（已实施 19 个节点）
+
+### 为什么这才是根治
+
+50 个流水线判据里约 35 个是**文字标签**，而两个客户端显示的是**同一串文字**。
+OCR 读字不读像素，字体渲染、按钮底纹、UI 缩放的差异都不影响它。
+
+同一个按钮在真机原帧上的对比：
+
+```
+模板匹配（上游素材）   0.485    全图峰值 0.739 还落在卡牌美术上
+模板匹配（真帧重裁）   0.983    可用，但跨队伍泛化未验证
+OCR                   conf 1.00
+```
+
+**OCR 那条不需要任何素材**，所以上游更新、游戏改版、换设备都免疫 —— 这也解释了
+为什么 Thread 的 60→G0 修完就一直好着。逐张重裁素材是打补丁，去掉素材依赖才是根治。
+
+### 三处机制
+
+1. `PipelineNode.RECOGNITION_OCR`：用 `params.text` 而非 `template`。
+   校验强制 text 非空 —— 空串会让 findText 恒命中，节点变成无条件通过，比识别不中更危险。
+2. `PipelineRegistry.load(files, patches)`：**节点级字段补丁**，顶层覆盖 + `params` 深合并。
+   不是整文件替换（那会挡掉上游后续的流程改动）。补丁名打错会被装载校验拒绝。
+3. 安装时覆盖层：`AtomicResourceInstaller` 在 `finalizeUpstreamInstall` **之前**把
+   APK assets 的覆盖层盖到 staging。顺序关键 —— finalize 要校验的是最终内容。
+
+补丁文件 `config/task-patch.json`，缺失即纯上游行为。
+
+### 关键：期望文字不需要真机帧
+
+**直接对上游素材本身做 OCR** 就能拿到实际显示文字 —— 素材就是那段文字的裁图。
+50 张里 22 张读出文字，取读得稳的子串即可。
+
+**长句不给 mask**（串足够独特），**短串必须给 mask**：实测 `dungeon_enter` 期望
+"Enter" 时全屏 OCR 匹配到了警告句里的「…fficulty to enter.」。
+
+### 离线验证环境（这是不必反复真机测的关键）
+
+```bash
+uv venv /tmp/ocrenv --python 3.12
+uv pip install --python /tmp/ocrenv/bin/python onnxruntime rapidocr-onnxruntime opencv-python-headless
+# 模型取自资源包，与设备同一套
+unzip -o pack.zip "recognize/models/*" -d /tmp/ocrmodels
+```
+
+用它可以：把素材 OCR 成文字、在真帧上验证区域（区域外涂黑后重跑）、
+核对不会误撞别处文字。**本机 0.669 / 设备 0.652 已验证同口径。**
+
+### 已转 19 个节点
+
+带 mask 的短串（6）：`exp/thread/mirror_choose_team`、`mirror_ready_to_battle`（Details）、
+`touch_to_start`（Clear all caches）、`mirror_enter_resume`（Resume）。
+
+无 mask 的长句（13）：6 个 `error_*` 弹窗、`mirror_select_encounter_reward_card`、
+`mirror_select_event_effect`、`mirror_select_floor_ego_gift2`、`event_pass_check`、
+`mirror_enter_last_week`、`mirror_choose_star`、`mirror_defeat`。
+
+### 刻意不转的
+
+`connecting`、`charge_enkephalin`、`luxcavation`（美术字，且模板 0.951 好用）、
+`no_mail_in_storage`、`download_data`、`server_error_occurred_try_again`（OCR 跨行乱序，
+无可靠子串）、`dungeon_enter`（短串需区域，缺验证帧）。
+`inferno`(0.954) / `luxcavation`(0.951) / `reward_coin`(0.930) / `clear_all_caches`(0.910)
+模板本来就好用，不动以免回归。
+
+### 一个差点上线的 bug
+
+补丁文件加 `_comment` 注释键（JSON 无注释，但这个文件需要写清为什么这么改）后，
+它的值是数组，`jsonObject` 会抛异常，继而被 `runCatching` 吞掉 ——
+**所有补丁一起静默失效**，症状是"改了完全没用"。现在解析时过滤下划线前缀并有用例钉住。
+
+### 剩下的图标判据
+
+约 15 个（`skip_battle` 17x17、`red_exclaimation`、`main_drive_*`、`win_rate`、
+`legend`、`skill_*`…）仍需模板，且必须是安卓源的。这是**有界的小集合**，
+覆盖层机制正好承载。选素材看**与次高峰的余量**而非只看自匹配分数
+（62x20 的反例自匹配 0.919 但余量仅 0.001 且命中错位置 —— 小图会被噪声淹没）。
