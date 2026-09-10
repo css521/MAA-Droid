@@ -1,8 +1,36 @@
 {
+  "_comment": [
+    "平台补丁：把文字判据从 template_match 改成 ocr。",
+    "上游 LALC 只自动化 Steam 客户端，其素材在安卓上大面积失配 —— 真机原帧实测",
+    "details 在真实按钮处仅 0.485、network_is_unstable 0.254、server_error 0.304。",
+    "而两个客户端显示的是同一串文字，OCR 读字不读像素，不受渲染与缩放差异影响。",
+    "",
+    "text 取自对上游素材本身做 OCR 得到的实际显示文字，只保留读得稳的子串。",
+    "长句不给 mask：串足够独特，误撞概率极低，且省掉一次区域测量。",
+    "短串（Details / Enter 这类）必须给 mask —— 实测 dungeon_enter 期望 Enter 时",
+    "全屏 OCR 匹配到了警告句里的『…fficulty to enter.』。",
+    "",
+    "本文件由覆盖层随资源安装写入，缺失即纯上游行为；节点名打错会被装载校验拒绝。"
+  ],
+
   "exp_choose_team":        { "recognition": "ocr", "params": { "text": "Details", "mask": [880, 100, 120, 50] } },
   "thread_choose_team":     { "recognition": "ocr", "params": { "text": "Details", "mask": [880, 100, 120, 50] } },
   "mirror_choose_team":     { "recognition": "ocr", "params": { "text": "Details", "mask": [880, 100, 120, 50] } },
   "mirror_ready_to_battle": { "recognition": "ocr", "params": { "text": "Details", "mask": [880, 100, 120, 50] } },
   "touch_to_start":         { "recognition": "ocr", "params": { "text": "Clear all caches", "mask": [170, 630, 190, 55] } },
-  "mirror_enter_resume":    { "recognition": "ocr", "params": { "text": "Resume", "mask": [570, 370, 150, 60] } }
+  "mirror_enter_resume":    { "recognition": "ocr", "params": { "text": "Resume", "mask": [570, 370, 150, 60] } },
+
+  "error_cannot_operate_the_game":              { "recognition": "ocr", "params": { "text": "Cannot operate the game" } },
+  "error_new_download_added":                   { "recognition": "ocr", "params": { "text": "new download has been added" } },
+  "error_server_is_under_sceduled_maintenance": { "recognition": "ocr", "params": { "text": "Scheduled Maintenance" } },
+  "error_weekly_record_has_been_reset":         { "recognition": "ocr", "params": { "text": "weekly record has been reset" } },
+  "error_client_is_not_up_to_date":             { "recognition": "ocr", "params": { "text": "Game client is not" } },
+  "error_network_is_unstable":                  { "recognition": "ocr", "params": { "text": "network is unstable" } },
+  "mirror_select_encounter_reward_card":        { "recognition": "ocr", "params": { "text": "Select Encounter Reward Card" } },
+  "mirror_select_event_effect":                 { "recognition": "ocr", "params": { "text": "Select Event Effect" } },
+  "mirror_select_floor_ego_gift2":              { "recognition": "ocr", "params": { "text": "Refuse Gift" } },
+  "event_pass_check":                           { "recognition": "ocr", "params": { "text": "Choose character to perform" } },
+  "mirror_enter_last_week":                     { "recognition": "ocr", "params": { "text": "previous session has expired" } },
+  "mirror_choose_star":                         { "recognition": "ocr", "params": { "text": "Grace of the Star of" } },
+  "mirror_defeat":                              { "recognition": "ocr", "params": { "text": "have been killed" } }
 }

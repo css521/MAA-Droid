@@ -126,7 +126,12 @@ class LimbusEngine(
         // 补丁文件由覆盖层随资源安装写入，只覆盖具名字段，上游流程更新仍照常生效。
         val patchFile = File(resourceDir, PIPELINE_PATCH)
         val patches = if (!patchFile.isFile) emptyMap() else runCatching {
-            Json.parseToJsonElement(patchFile.readText()).jsonObject.mapValues { it.value.jsonObject }
+            Json.parseToJsonElement(patchFile.readText()).jsonObject
+                // 下划线前缀是注释键。JSON 不支持注释，而这个文件需要写清"为什么这么改"，
+                // 故约定 _ 开头的键跳过。不过滤的话它的值（数组）会让 jsonObject 抛异常，
+                // 继而被 runCatching 吞掉，**所有补丁一起静默失效**。
+                .filterKeys { !it.startsWith("_") }
+                .mapValues { it.value.jsonObject }
         }.onFailure { warn("流水线补丁解析失败，按纯上游运行: ${it.message}") }.getOrDefault(emptyMap())
         if (patches.isNotEmpty()) info("已应用流水线补丁 ${patches.size} 个节点")
 

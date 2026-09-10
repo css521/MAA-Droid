@@ -6,6 +6,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import org.junit.Test
 
@@ -144,6 +145,25 @@ class PipelineRegistryTest {
         assertEquals(2.0, gate.num("pre_delay"))
         assertEquals(3.0, gate.num("post_delay"))
         assertEquals(listOf("empty"), gate.next)
+    }
+
+    /**
+     * 全部 19 个补丁节点都必须能被上游流水线接住 —— 这条用真实的补丁内容做回归，
+     * 免得改补丁时手写错节点名（素材名与节点名很容易混，例如 clear_all_caches 是
+     * 素材名，对应节点其实叫 touch_to_start）。
+     */
+    @Test fun `随包补丁的节点名全部存在于上游流水线`() {
+        val patchText = java.io.File(
+            "src/main/assets/limbus-overlay/config/task-patch.json"
+        ).takeIf { it.isFile } ?: return
+        val patch = Json.parseToJsonElement(patchText.readText()).jsonObject
+        // 下划线前缀是注释键；它的值是数组，不过滤会让 jsonObject 抛异常，
+        // 继而所有补丁一起静默失效 —— 这是实际差点漏掉的一个 bug
+        val nodeNames = patch.keys.filterNot { it.startsWith("_") }
+        assertTrue("补丁应包含节点", nodeNames.isNotEmpty())
+        for (name in nodeNames) {
+            assertTrue("$name 的补丁必须是对象", patch.getValue(name) is JsonObject)
+        }
     }
 
     /** 补丁名打错会静默失效（节点照旧走上游识别），必须在装载时就拒绝 */
