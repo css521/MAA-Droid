@@ -41,6 +41,22 @@ class LimbusRecognizer(
 
     private val templateCache = HashMap<Pair<String, Boolean>, Mat?>()
 
+    override suspend fun observeTeamSelection(): Match? {
+        if (gameLanguage != "en") return null
+        val frame = frames.grab() ?: return null
+        val screen = frame.toMat()
+        val coroutine = currentCoroutineContext()
+        try {
+            return TeamSelectionDetector.detect(screen, ocr,
+                checkActive = { coroutine.ensureActive() },
+                onCandidates = { onDiagnostic("team.ocr", "frame=${frame.seq} $it") },
+            ).also { match ->
+                onDiagnostic("team.observe", "frame=${frame.seq} size=${frame.width}x${frame.height} team=${match != null}")
+                if (match != null && warned.add("android_team")) onInfo("已识别 Android 队伍选择页")
+            }
+        } finally { screen.release() }
+    }
+
     override suspend fun observeGameLanguage(): GameLanguageObservation {
         val frame = frames.grab() ?: return GameLanguageObservation.Uncertain
         val screen = frame.toMat()

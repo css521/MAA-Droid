@@ -49,7 +49,14 @@ class NodeRecognizer(
 
             PipelineNode.RECOGNITION_TEMPLATE_MATCH ->
                 byTemplate(node, DEFAULT_TEMPLATE_THRESHOLD) { t, th, crop ->
-                    recognizer.templateMatch(t, th, crop)
+                    val matches = recognizer.templateMatch(t, th, crop)
+                    // 只放行不使用命中坐标的经验/纺锤选队动作。其他 Details 点击、镜牢、
+                    // inverse、裁剪或自定义阈值仍完全使用上游模板，不伪造按钮坐标。
+                    if (matches.isEmpty() && node.enable && t == "details" && node.action == "choose_team" &&
+                        node.str("cfg_type") in setOf("exp", "thread") && !node.inverse &&
+                        crop == null && th == DEFAULT_TEMPLATE_THRESHOLD) {
+                        recognizer.observeTeamSelection()?.let { listOf(it) } ?: matches
+                    } else matches
                 }
 
             PipelineNode.RECOGNITION_COLOR_TEMPLATE_MATCH ->

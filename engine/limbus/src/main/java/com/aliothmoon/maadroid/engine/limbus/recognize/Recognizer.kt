@@ -34,6 +34,9 @@ interface Recognizer {
     /** Current-frame language evidence. Missing navigation or unclear OCR remains uncertain. */
     suspend fun observeGameLanguage(): GameLanguageObservation = GameLanguageObservation.Uncertain
 
+    /** Android 队伍页的独立正向证据。坐标是页内锚点，不能当作 Details 按钮点击。 */
+    suspend fun observeTeamSelection(): Match? = null
+
     /** 只返回确认过的标题页开始位置，不返回清理缓存按钮的位置。 */
     suspend fun titleScreenStart(): Match? =
         TitleScreenDetector.fromAnchor(templateMatch("clear_all_caches"))

@@ -15,6 +15,8 @@ import com.aliothmoon.maadroid.engine.limbus.fixtures.LalcV500Fixtures
 import com.aliothmoon.maadroid.engine.limbus.recognize.Match
 import com.aliothmoon.maadroid.engine.limbus.recognize.GameLanguageObservation
 import com.aliothmoon.maadroid.engine.limbus.recognize.Recognizer
+import com.aliothmoon.maadroid.engine.limbus.recognize.TextMatch
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -87,6 +89,92 @@ class UpstreamPipelineRunTest {
             recognizeGate = { nodeRecognizer.recognize(it) },
             onLog = onLog,
         )
+    }
+
+    @Test fun realStageActionWaitsForMobileTeamPageThenUsesUpstreamChooseTeam() = runTest {
+        for (section in listOf("exp", "thread")) {
+            val base = FakeRecognizer().apply { textHits = listOf(TextMatch(if (section == "exp") "09" else "60", 800, 205, .95)) }
+            var observations = 0
+            val reader = object : Recognizer by base {
+                override suspend fun observeTeamSelection(): Match? =
+                    if (++observations < 3) null else Match(1176, 520, .828)
+            }
+            val chosen = mutableListOf<String>()
+            // The supplied phone evidence stops at team selection. Do not pretend a battle ran.
+            ActionRegistry.register("choose_team", object : ActionBackend {
+                override suspend fun execute(ctx: ActionContext): ActionOutcome {
+                    chosen += ctx.nodeName
+                    return ActionOutcome.Finish(true)
+                }
+            })
+            val input = FakeInput()
+            val logs = mutableListOf<String>()
+            val runner = runnerFor(reader, input, onLog = logs::add).also { it.delayer = {} }
+            assertNull(runner.run("${section}_select_stage"))
+            assertEquals(listOf("${section}_choose_team"), chosen)
+            assertEquals(4, observations) // three observations in action, one in the real next gate
+            assertEquals(if (section == "exp") listOf(810 to 480) else
+                listOf(140 to 330, 370 to 480, 800 to 205), input.clicks())
+            assertTrue(logs.none { "exp_can_not_skip_battle 执行动作" in it })
+        }
+    }
+
+    @Test fun realSkipEntryWaitsForItsDialogWithoutSelectingTeamOrRepeatingClick() = runTest {
+        val reader = FakeRecognizer().apply {
+            textHits = listOf(TextMatch("09", 1000, 205, .95))
+            onTemplateSequence("skip_battle", emptyList(), emptyList())
+            onTemplate("skip_battle", Match(640, 360, .95))
+        }
+        val reached = mutableListOf<String>()
+        ActionRegistry.register("click", object : ActionBackend {
+            override suspend fun execute(ctx: ActionContext): ActionOutcome {
+                reached += ctx.nodeName
+                return ActionOutcome.Finish(true)
+            }
+        })
+        val input = FakeInput()
+        val config = pipelineConfig().put("exp", "luxcavation_mode", "skip battle")
+        val runner = runnerFor(reader, input, config).also { it.delayer = {} }
+        assertNull(runner.run("exp_select_stage"))
+        assertEquals(listOf("exp_skip_battle"), reached)
+        assertEquals(listOf(1010 to 515), input.clicks())
+    }
+
+    @Test fun unknownPageFailsAtStageEntryAndDoesNotClaimSkipIsLocked() = runTest {
+        for (mode in listOf("enter", "skip battle")) {
+            val reader = FakeRecognizer().apply { textHits = listOf(TextMatch("09", 1000, 205, .95)) }
+            val input = FakeInput()
+            val logs = mutableListOf<String>()
+            val runner = runnerFor(reader, input, pipelineConfig().put("exp", "luxcavation_mode", mode), logs::add)
+                .also { it.delayer = {} }
+            val failure = runner.run("exp_select_stage")
+            assertTrue(failure.orEmpty().contains("未能确认"))
+            assertFalse(failure.orEmpty().contains("未解锁"))
+            assertEquals(listOf(1010 to if (mode == "enter") 480 else 515), input.clicks())
+            assertTrue(logs.none { "exp_can_not_skip_battle 执行动作" in it || "choose_team 执行动作" in it })
+            assertEquals(10, reader.templateCalls.count { it == if (mode == "enter") "details" else "skip_battle" })
+        }
+    }
+
+    @Test fun cancellingDuringPageObservationStopsWithoutFurtherInput() = runTest {
+        val base = FakeRecognizer().apply { textHits = listOf(TextMatch("09", 1000, 205, .95)) }
+        var observations = 0
+        val reader = object : Recognizer by base {
+            override suspend fun observeTeamSelection(): Match? {
+                if (++observations == 2) throw CancellationException("cancel team wait")
+                return null
+            }
+        }
+        val input = FakeInput()
+        val runner = runnerFor(reader, input).also { it.delayer = {} }
+        try {
+            runner.run("exp_select_stage")
+            throw AssertionError("Cancellation was swallowed")
+        } catch (_: CancellationException) {
+            assertEquals(2, observations)
+            assertEquals(listOf(1010 to 480), input.clicks())
+            assertFalse(runner.isRunning)
+        }
     }
 
     @Test fun realCheckNodeRepeatsUntilTargetCountThenTakesItsExit() = runTest {

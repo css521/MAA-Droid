@@ -4,6 +4,7 @@ import com.aliothmoon.maadroid.engine.limbus.action.FakeRecognizer
 import com.aliothmoon.maadroid.engine.limbus.action.nodeWith
 import com.aliothmoon.maadroid.engine.limbus.recognize.Crop
 import com.aliothmoon.maadroid.engine.limbus.recognize.Match
+import com.aliothmoon.maadroid.engine.limbus.recognize.Recognizer
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -17,6 +18,35 @@ import org.junit.Test
  * 只会让流水线走错分支 —— 例如 inverse 反了会变成「在主界面时才回主界面」。
  */
 class NodeRecognizerTest {
+
+    @Test fun mobileTeamEvidenceOnlyAuthorizesKnownTeamActionNotDetailsClicks() = runTest {
+        var observations = 0
+        val rec = object : Recognizer by FakeRecognizer() {
+            override suspend fun observeTeamSelection(): Match {
+                observations++
+                return Match(1176, 520, .828)
+            }
+        }
+        val gate = NodeRecognizer(rec)
+        for (section in listOf("exp", "thread")) {
+            val node = nodeWith("""{"template":"details","cfg_type":"$section"}""", "choose_team")
+                .copy(recognition = PipelineNode.RECOGNITION_TEMPLATE_MATCH)
+            assertTrue(gate.recognize(node).hit)
+            for (other in listOf(node.copy(action = "click"), node.copy(inverse = true),
+                node.copy(enable = false),
+                nodeWith("""{"template":"details","cfg_type":"mirror"}""", "choose_team")
+                    .copy(recognition = PipelineNode.RECOGNITION_TEMPLATE_MATCH),
+                nodeWith("""{"template":"details","cfg_type":"$section","threshold":0.95}""", "choose_team")
+                    .copy(recognition = PipelineNode.RECOGNITION_TEMPLATE_MATCH),
+                nodeWith("""{"template":"details","cfg_type":"$section","mask":[0,0,100,100]}""", "choose_team")
+                    .copy(recognition = PipelineNode.RECOGNITION_TEMPLATE_MATCH))) {
+                val before = observations
+                gate.recognize(other)
+                assertEquals(before, observations)
+            }
+        }
+        assertEquals(2, observations)
+    }
 
     private fun recognizerWith(vararg hits: Pair<String, List<Match>>) =
         FakeRecognizer().apply { hits.forEach { (k, v) -> templateHits[k] = v } }

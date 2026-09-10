@@ -185,6 +185,10 @@ private object WaitDisappearAction : ActionBackend {
 
 private object ReportErrorAction : ActionBackend {
     override suspend fun execute(ctx: ActionContext): ActionOutcome {
+        if (ctx.nodeName == "exp_can_not_skip_battle" && ctx.node.recognition == "direct") {
+            // 上游这是无条件兜底，没有“未解锁”的正向识别证据。
+            return ActionOutcome.Finish(false, "未能确认经验副本的队伍或跳过确认页，请放大游戏画面检查后重试")
+        }
         if (ctx.node.inverse && ctx.node.str("template") == "main_drive_with_text") {
             // The upstream inverse template gate treats any miss as a wrong language.
             // On Android, let a transition finish and require positive language evidence.
