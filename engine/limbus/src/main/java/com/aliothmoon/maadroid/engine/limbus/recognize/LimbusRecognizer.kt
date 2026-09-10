@@ -313,34 +313,75 @@ class LimbusRecognizer(
     }
 
     override suspend fun battleSkillIcons(): List<BattleSkillIcon> {
-        val cls = classifier ?: return emptyList()
-        val spec = cls.specOf("skill_icon") ?: return emptyList()
-        val templates = listOf("skill_blunt", "skill_pierce", "skill_slash")
-            .map { templateOf(it, color = true) ?: return emptyList() }
-        val frame = frames.grab() ?: return emptyList()
-        if (frame.width != 1280 || frame.height != 720) return emptyList()
+        // 这里有五个各自独立的失败原因，过去它们产生完全相同的空结果，调用方只能打出
+        // 「未取得技能图标分类」——分不清是模型没装、素材缺失、帧尺寸不对，还是
+        // SKILL_AREA 这个上游 PC 坐标在手机上框错了位置。每种的修法都不一样，
+        // 所以每个出口都要说明白自己是谁。
+        val cls = classifier ?: run {
+            onDiagnostic("battle.skill", "分类器未初始化"); return emptyList()
+        }
+        val spec = cls.specOf("skill_icon") ?: run {
+            onDiagnostic("battle.skill", "缺少 skill_icon 模型元数据"); return emptyList()
+        }
+        val templateNames = listOf("skill_blunt", "skill_pierce", "skill_slash")
+        val templates = ArrayList<Mat>(templateNames.size)
+        for (name in templateNames) {
+            val tpl = templateOf(name, color = true) ?: run {
+                onDiagnostic("battle.skill", "缺少彩色素材 $name（资源包未包含或语言目录不匹配）")
+                return emptyList()
+            }
+            templates += tpl
+        }
+        val frame = frames.grab() ?: run {
+            onDiagnostic("battle.skill", "取帧失败"); return emptyList()
+        }
+        if (frame.width != 1280 || frame.height != 720) {
+            onDiagnostic("battle.skill", "帧尺寸非 1280x720，实际 ${frame.width}x${frame.height}")
+            return emptyList()
+        }
         val screen = frame.toMat()
         try {
             val area = BattlePerception.SKILL_AREA
             val strip = Mat(screen, area.toRect())
+            // 逐个素材记锚点数：全为 0 说明 SKILL_AREA 框错或素材匹配不上，
+            // 只有个别为 0 则是那一种技能类型的素材问题
+            val perTemplate = LinkedHashMap<String, Int>()
             val anchors = try {
-                templates.flatMap { BattleImageOps.skillAnchors(strip, it) }
+                templateNames.zip(templates).flatMap { (name, tpl) ->
+                    BattleImageOps.skillAnchors(strip, tpl).also { perTemplate[name] = it.size }
+                }
             } finally {
                 strip.release()
             }
-            val winRateX = templateOf("win_rate")?.let {
+            val winRate = templateOf("win_rate")?.let {
                 TemplateMatcher.match(screen, it, 0.85).firstOrNull()?.x
-            } ?: 1280
+            }
+            val winRateX = winRate ?: 1280
             val regions = BattlePerception.skillRegions(anchors, winRateX)
+            if (regions.isEmpty()) {
+                onDiagnostic(
+                    "battle.skill",
+                    "frame=${frame.seq} 未框出技能区域 area=$area 锚点=$perTemplate " +
+                        "win_rate=${winRate ?: "未命中(按 1280 处理)"}",
+                )
+                return emptyList()
+            }
             val images = regions.map { region ->
                 val tile = BattleImageOps.paddedCrop(screen, region)
                 try {
-                    MirrorRegions.toRgbBytes(tile, spec.inputWidth, spec.inputHeight) ?: return emptyList()
+                    MirrorRegions.toRgbBytes(tile, spec.inputWidth, spec.inputHeight) ?: run {
+                        onDiagnostic("battle.skill", "区域转张量失败 region=$region")
+                        return emptyList()
+                    }
                 } finally {
                     tile.release()
                 }
             }
-            if (images.isEmpty()) return emptyList()
+            onDiagnostic(
+                "battle.skill",
+                "frame=${frame.seq} 技能区域 ${regions.size} 个 锚点=$perTemplate " +
+                    "win_rate=${winRate ?: "未命中(按 1280 处理)"}",
+            )
             return BattlePerception.bindSkills(regions, cls.classify("skill_icon", images))
         } finally {
             screen.release()
