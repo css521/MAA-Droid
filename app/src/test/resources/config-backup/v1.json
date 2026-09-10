@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "exportedAt": "2026-09-09T12:00:00",
+  "appSettings": {
+    "language": "EN",
+    "shizukuLaunchPackage": "",
+    "customBackgroundEnabled": "true",
+    "customBackgroundToken": "other-device-background"
+  },
+  "notificationSettings": { "sendOnComplete": "false" },
+  "taskProfiles": [{
+    "id": "legacy-ark",
+    "name": "旧方舟配置",
+    "chain": [{
+      "id": "legacy-wakeup",
+      "name": "开始唤醒",
+      "config": {
+        "type": "com.aliothmoon.maadroid.data.model.WakeUpConfig",
+        "clientType": "Bilibili",
+        "startGameEnabled": false
+      }
+    }]
+  }],
+  "activeProfileId": "legacy-ark",
+  "scheduleStrategies": [{
+    "id": "legacy-schedule", "name": "早间任务", "enabled": false,
+    "profileId": "legacy-ark", "daysOfWeek": [1], "executionTimes": ["08:00"], "createdAt": 0
+  }]
+}

@@ -63,6 +63,20 @@ Gradle 路径与目录对应，例如 `:engine:limbus`、`:core:bridge`。`app` 
 
 `EngineUi.SettingsSection()` 与 `OnboardingSteps()` 是预留接口，当前没有宿主调用点。`Capability` 也只是声明；不能仅添加 `SCHEDULE` 或 `COPILOT` 就宣称已接通定时或外部作业入口。
 
+### 多游戏配置备份
+
+[ConfigBackupManager](../../../app/src/main/java/com/aliothmoon/maadroid/data/preferences/ConfigBackupManager.kt) 当前导出 v2，接受 v1、v2 导入；[ConfigBackup](../../../app/src/main/java/com/aliothmoon/maadroid/data/preferences/ConfigBackup.kt) 的缺省版本仍为 1，以读取旧文件。v2 保留通用设置、通知、方舟任务 profiles、活动 profile 和定时策略，新增 `engineTasks: Map<String, String>`。键为 engine ID，值为该引擎任务 envelope 的原始 JSON 字符串，包含任务开关 `enabled`、参数字符串映射 `params` 和可空的工作区字符串 `workspaceConfig`。
+
+`EngineTaskStore.exportSnapshot()` 枚举已经持久化的 `engine.<id>.tasks`，不按当前注册表筛选，因此当前 APK 未注册的未知引擎也能备份、恢复。导入与再次导出保留 envelope 原始字符串；普通开关、参数和 workspace 编辑会合并已知字段，保留 envelope 顶层的未知字段。这个保留保证不涵盖整个 `ConfigBackup` 的未知顶层字段；参数和 workspace 内部的业务结构仍由引擎解释和迁移。
+
+导入只按引擎整条替换 `engineTasks` 中列出的条目，不与本地 envelope 逐字段合并；未包含的引擎保持原样。普通 v1 文件没有 `engineTasks`，缺省为空映射，所以不覆盖本地边狱等引擎配置；若 v1 显式携带该字段，仍会校验并导入其中的引擎。v2 同样保留未包含的引擎，不能把“v1 兼容”理解为忽略所有引擎数据。
+
+备份边界要求 engine ID 非空白、envelope 可按 `EngineTasks` 解析；`params` 中的每个非空白字符串和非空白的 `workspaceConfig` 必须是有效 JSON，拒绝 `not-json` 这样的未加引号字面量。空白参数以及缺省、null 或空白的 workspace 仍允许保留。这里只检查存储格式和 JSON 语法，不调用 workspace 的业务 `validate`；队伍等必填业务内容尚未填完、但 JSON 有效的草稿也能往返。能否执行由启动前的引擎配置校验决定。导入在任何设置写入前完成备份解析、版本和全部引擎配置检查；导出遇到坏的持久化数据也会失败，不以启动读取时的空状态回退替代原数据。
+
+导入读取并关闭输入文件后，先校验、等待方舟任务加载，并直接读取持久化的定时策略；记录旧值后，再依次写入通用设置、通知、方舟 profiles、包含的引擎配置和定时策略，全部持久化写入成功后才取消、重建系统闹钟。定时策略的导出和旧值快照均通过 `ScheduleStrategyRepository.snapshot()` 读取 DataStore 最新已提交数据，不再等待定时仓库的 `isLoaded`，避免 UI 缓存延迟造成旧快照。每次写入尝试前登记撤销步骤，遇到异常或协程取消时，在 `NonCancellable + Dispatchers.IO` 中按逆序尽力恢复；已触及闹钟时也尝试恢复旧调度。单项撤销失败仍继续其余恢复，最终明确报告“部分旧配置未能恢复”，取消情形保留取消语义；恢复成功则继续抛出原异常或取消。
+
+包含的引擎条目在 `engine_tasks` 的一次 DataStore `edit` 中提交，但整次备份恢复跨多个存储和系统闹钟，**不具备跨 DataStore 的事务原子性**。管理器的 mutex 只串行化自身导入、导出，不阻止其他配置写入入口，也不保证导出取得跨存储的同一时刻快照。撤销记录只在内存中，没有持久化恢复日志；进程退出或被杀时不能依赖回滚，可能留下部分导入状态，不具备 crash atomic 保证。整包导入也不会重放所有设置的运行态副作用，导入成功后仍建议重启应用。
+
 ## 通用运行生命周期
 
 入口代码为 [EngineTaskViewModel](../../../app/src/main/java/com/aliothmoon/maadroid/presentation/viewmodel/EngineTaskViewModel.kt)、[EngineSession](../../../app/src/main/java/com/aliothmoon/maadroid/engine/EngineSession.kt) 和 [EngineDeviceSession](../../../app/src/main/java/com/aliothmoon/maadroid/engine/EngineDeviceSession.kt)。

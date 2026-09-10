@@ -14,5 +14,7 @@ data class ConfigBackup(
     val notificationSettings: NotificationSettings,
     val taskProfiles: List<TaskProfile>,
     val activeProfileId: String,
-    val scheduleStrategies: List<ScheduleStrategy>
+    val scheduleStrategies: List<ScheduleStrategy>,
+    /** engineId -> 原始任务状态 JSON；缺省支持读取仅包含方舟的 v1 备份。 */
+    val engineTasks: Map<String, String> = emptyMap(),
 )

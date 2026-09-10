@@ -7,9 +7,16 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
 import timber.log.Timber
 
 /**
@@ -29,7 +36,8 @@ import timber.log.Timber
  * 方舟将来收拢为 `AutomationEngine` 时应迁到这里；届时 `TaskChainState` 里的方舟
  * 类型留在 `engine/arknights`，宿主侧只剩下这份泛化状态。
  */
-class EngineTaskStore(private val context: Context) {
+class EngineTaskStore internal constructor(private val dataStore: DataStore<Preferences>) {
+    constructor(context: Context) : this(context.engineTaskStore)
 
     /**
      * 一个引擎的全部任务状态。
@@ -48,7 +56,7 @@ class EngineTaskStore(private val context: Context) {
     )
 
     fun flow(engineId: String): Flow<EngineTasks> =
-        context.engineTaskStore.data.map { prefs -> decode(prefs[keyOf(engineId)]) }
+        dataStore.data.map { prefs -> decode(prefs[keyOf(engineId)]) }
 
     suspend fun current(engineId: String): EngineTasks =
         decode(readRaw(engineId))
@@ -63,6 +71,50 @@ class EngineTaskStore(private val context: Context) {
 
     suspend fun setWorkspaceConfig(engineId: String, configJson: String) {
         update(engineId) { it.copy(workspaceConfig = configJson) }
+    }
+
+    /**
+     * Export every persisted engine, including one not installed in this APK variant.
+     * Keep the original envelope so unknown future fields and engine-owned JSON survive
+     * a round trip. Unlike startup display, backup must never silently reset bad data.
+     */
+    suspend fun exportSnapshot(): Map<String, String> {
+        val snapshot = dataStore.data.first().asMap().entries.mapNotNull { (key, value) ->
+            engineIdOf(key.name)?.let { id ->
+                require(value is String) { "引擎 $id 的配置存储格式无效，无法导出" }
+                id to value
+            }
+        }.sortedBy { it.first }.toMap()
+        return validateSnapshot(snapshot)
+    }
+
+    /**
+     * Replace only engines present in the backup, in one DataStore transaction. An old
+     * Arknights-only backup must not erase Limbus or other local engine settings.
+     */
+    suspend fun importSnapshot(snapshot: Map<String, String>) {
+        val validated = validateSnapshot(snapshot)
+        if (validated.isEmpty()) return
+        dataStore.edit { prefs ->
+            validated.forEach { (id, raw) -> prefs[keyOf(id)] = raw }
+        }
+    }
+
+    /** In-memory undo for the engines touched by a whole-app import, including absent keys. */
+    internal class ImportCheckpoint internal constructor(internal val raw: Map<String, String?>)
+
+    internal suspend fun checkpoint(engineIds: Set<String>): ImportCheckpoint {
+        val prefs = dataStore.data.first()
+        return ImportCheckpoint(engineIds.associateWith { prefs[keyOf(it)] })
+    }
+
+    internal suspend fun restore(checkpoint: ImportCheckpoint) {
+        if (checkpoint.raw.isEmpty()) return
+        dataStore.edit { prefs ->
+            checkpoint.raw.forEach { (id, raw) ->
+                if (raw == null) prefs.remove(keyOf(id)) else prefs[keyOf(id)] = raw
+            }
+        }
     }
 
     /**
@@ -84,16 +136,17 @@ class EngineTaskStore(private val context: Context) {
 
     private suspend fun update(engineId: String, mutate: (EngineTasks) -> EngineTasks) {
         val key = keyOf(engineId)
-        context.engineTaskStore.edit { prefs ->
-            prefs[key] = json.encodeToString(mutate(decode(prefs[key])))
+        dataStore.edit { prefs ->
+            val raw = prefs[key]
+            val original = runCatching { raw?.let { json.parseToJsonElement(it).jsonObject } }.getOrNull()
+            val changed = json.encodeToJsonElement(EngineTasks.serializer(), mutate(decode(raw))).jsonObject
+            // Editing a known field after restoring a future backup must not erase the
+            // envelope's unknown fields. Engine-owned params/workspace remain opaque strings.
+            prefs[key] = JsonObject(original.orEmpty() + changed).toString()
         }
     }
 
-    private suspend fun readRaw(engineId: String): String? {
-        var raw: String? = null
-        context.engineTaskStore.edit { prefs -> raw = prefs[keyOf(engineId)] }
-        return raw
-    }
+    private suspend fun readRaw(engineId: String): String? = dataStore.data.first()[keyOf(engineId)]
 
     /**
      * 解析失败一律回落到空状态而不是抛异常。
@@ -105,11 +158,48 @@ class EngineTaskStore(private val context: Context) {
 
     private fun keyOf(engineId: String) = stringPreferencesKey("engine.$engineId.tasks")
 
-    private companion object {
+    companion object {
         val Context.engineTaskStore: DataStore<Preferences>
             by preferencesDataStore(name = "engine_tasks")
 
-        val json get() = EngineTaskSelection.json
+        private val json get() = EngineTaskSelection.json
+
+        /** Validate all engines before the backup manager writes any application settings. */
+        internal fun validateSnapshot(snapshot: Map<String, String>): Map<String, String> =
+            snapshot.toMap().also { copy ->
+                copy.forEach { (id, raw) ->
+                    require(id.isNotBlank()) { "备份包含空的引擎 ID" }
+                    val tasks = runCatching {
+                        require(validLiterals(json.parseToJsonElement(raw)))
+                        json.decodeFromString<EngineTasks>(raw)
+                    }.getOrElse {
+                        throw IllegalArgumentException("引擎 $id 的任务配置格式无效", it)
+                    }
+                    fun validJson(value: String?, label: String) {
+                        if (value.isNullOrBlank()) return
+                        require(runCatching { validLiterals(json.parseToJsonElement(value)) }.getOrDefault(false)) {
+                            "引擎 $id 的 $label 不是有效 JSON"
+                        }
+                    }
+                    tasks.params.forEach { (type, value) -> validJson(value, "任务 $type 参数") }
+                    validJson(tasks.workspaceConfig, "工作区配置")
+                }
+            }
+
+        // Json's tree parser accepts bare unknown literals such as `not-json`. They are
+        // not JSON strings and would fail when an engine decodes its own typed config.
+        private val jsonNumber = Regex("-?(0|[1-9][0-9]*)(\\.[0-9]+)?([eE][+-]?[0-9]+)?")
+        private fun validLiterals(value: JsonElement): Boolean = when (value) {
+            is JsonObject -> value.values.all(::validLiterals)
+            is JsonArray -> value.all(::validLiterals)
+            is JsonPrimitive -> value.isString || value == JsonNull ||
+                value.content == "true" || value.content == "false" || jsonNumber.matches(value.content)
+        }
+
+        private fun engineIdOf(key: String): String? =
+            if (key.startsWith("engine.") && key.endsWith(".tasks")) {
+                key.removePrefix("engine.").removeSuffix(".tasks")
+            } else null
     }
 }
 

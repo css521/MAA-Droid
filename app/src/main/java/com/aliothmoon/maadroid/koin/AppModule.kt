@@ -90,6 +90,7 @@ import com.aliothmoon.maadroid.domain.service.update.checker.AppVersionChecker
 import com.aliothmoon.maadroid.domain.service.update.checker.ResourceVersionChecker
 import com.aliothmoon.maadroid.engine.arknights.ArknightsResourcePreparation
 import com.aliothmoon.maadroid.engine.arknights.MaaResourcePreparation
+import com.aliothmoon.maadroid.engine.EngineTaskStore
 import com.aliothmoon.maadroid.maa.callback.ConnectionInfoHandler
 import com.aliothmoon.maadroid.maa.callback.CopilotRuntimeStateStore
 import com.aliothmoon.maadroid.maa.callback.MaaCallbackDispatcher
@@ -160,12 +161,18 @@ val appModule = module {
     singleOf(::MainTabNavigator)
 
 
-    singleOf(::AppSettingsManager)
+    single {
+        AppSettingsManager(
+            context = get(),
+            // Reporter depends on settings: resolve it after construction, on a saved change.
+            onLanguageChanged = { get<AchievementReporter>().reportLanguageChanged() },
+        )
+    }
     single { UnlockGestureStore(get()) } bind UnlockGestureReader::class
     singleOf(::BackgroundImageStore)
     singleOf(::AchievementRepository)
     singleOf(::AchievementReporter)
-    singleOf(::ScheduleStrategyRepository)
+    single { ScheduleStrategyRepository(androidContext()) }
     singleOf(::ScheduleTriggerLogger)
     singleOf(::ScheduleAlarmManager)
     singleOf(::LaunchMutex)
@@ -220,6 +227,7 @@ val appModule = module {
         )
     }
     singleOf(::TaskChainState)
+    single { EngineTaskStore(androidContext()) }
     singleOf(::ConfigBackupManager)
     // 把「数据放哪」的设置在装配点读成布尔值再传给 MaaPathConfig ——
     // 让方舟侧不必认识 AppSettingsManager（见该类构造参数的注释）

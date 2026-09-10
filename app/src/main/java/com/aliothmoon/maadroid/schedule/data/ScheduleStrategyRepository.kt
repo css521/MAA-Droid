@@ -15,25 +15,32 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import timber.log.Timber
 
-class ScheduleStrategyRepository(private val context: Context) {
+class ScheduleStrategyRepository internal constructor(
+    private val dataStore: DataStore<Preferences>,
+    private val scope: CoroutineScope,
+) {
+    constructor(context: Context) : this(
+        context.store,
+        CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    )
 
     companion object {
         private val Context.store: DataStore<Preferences> by preferencesDataStore(name = "schedule_strategies")
         private val STRATEGIES_KEY = stringPreferencesKey("strategies")
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val json = JsonUtils.common
 
     private val _isLoaded = MutableStateFlow(false)
     val isLoaded: StateFlow<Boolean> = _isLoaded.asStateFlow()
 
     /** 从 DataStore 自动同步的策略列表 */
-    val strategies: StateFlow<List<ScheduleStrategy>> = context.store.data
+    val strategies: StateFlow<List<ScheduleStrategy>> = dataStore.data
         .map { prefs ->
             val list = decodeStrategies(prefs[STRATEGIES_KEY])
             _isLoaded.value = true
@@ -41,10 +48,17 @@ class ScheduleStrategyRepository(private val context: Context) {
         }
         .stateIn(scope, SharingStarted.Eagerly, emptyList())
 
+    /** Read committed data for backup/undo; the UI StateFlow may still be catching up. */
+    suspend fun snapshot(): List<ScheduleStrategy> {
+        val raw = dataStore.data.first()[STRATEGIES_KEY]
+        // An unreadable backup must fail rather than silently replace saved schedules with [].
+        return if (raw.isNullOrEmpty()) emptyList() else json.decodeFromString(raw)
+    }
+
     // ---- 策略 CRUD ----
 
     suspend fun add(strategy: ScheduleStrategy) {
-        context.store.edit { prefs ->
+        dataStore.edit { prefs ->
             val current = decodeStrategies(prefs[STRATEGIES_KEY]).toMutableList()
             current.add(strategy)
             prefs[STRATEGIES_KEY] = json.encodeToString<List<ScheduleStrategy>>(current)
@@ -53,7 +67,7 @@ class ScheduleStrategyRepository(private val context: Context) {
     }
 
     suspend fun update(strategy: ScheduleStrategy) {
-        context.store.edit { prefs ->
+        dataStore.edit { prefs ->
             val current = decodeStrategies(prefs[STRATEGIES_KEY]).toMutableList()
             val idx = current.indexOfFirst { it.id == strategy.id }
             if (idx >= 0) {
@@ -65,7 +79,7 @@ class ScheduleStrategyRepository(private val context: Context) {
     }
 
     suspend fun remove(strategyId: String) {
-        context.store.edit { prefs ->
+        dataStore.edit { prefs ->
             val current = decodeStrategies(prefs[STRATEGIES_KEY]).toMutableList()
             if (current.removeAll { it.id == strategyId }) {
                 prefs[STRATEGIES_KEY] = json.encodeToString<List<ScheduleStrategy>>(current)
@@ -75,7 +89,7 @@ class ScheduleStrategyRepository(private val context: Context) {
     }
 
     suspend fun setEnabled(strategyId: String, enabled: Boolean) {
-        context.store.edit { prefs ->
+        dataStore.edit { prefs ->
             val current = decodeStrategies(prefs[STRATEGIES_KEY]).toMutableList()
             val idx = current.indexOfFirst { it.id == strategyId }
             if (idx >= 0) {
@@ -96,7 +110,7 @@ class ScheduleStrategyRepository(private val context: Context) {
         message: String? = null,
         executedAt: Long = System.currentTimeMillis(),
     ) {
-        context.store.edit { prefs ->
+        dataStore.edit { prefs ->
             val current = decodeStrategies(prefs[STRATEGIES_KEY]).toMutableList()
             val idx = current.indexOfFirst { it.id == strategyId }
             if (idx < 0) {
@@ -115,7 +129,7 @@ class ScheduleStrategyRepository(private val context: Context) {
 
 
     suspend fun importStrategies(strategies: List<ScheduleStrategy>) {
-        context.store.edit { prefs ->
+        dataStore.edit { prefs ->
             prefs[STRATEGIES_KEY] = json.encodeToString<List<ScheduleStrategy>>(strategies)
             Timber.d("导入 %d 条调度策略", strategies.size)
         }

@@ -79,6 +79,14 @@ object NewGameProvider : EngineProvider {
 
 [EngineTaskStore](../../../app/src/main/java/com/aliothmoon/maadroid/engine/EngineTaskStore.kt) 在 DataStore 的 `engine.<id>.tasks` 下保存参数与 workspace JSON；资源目录不是配置存储目录。升级配置结构应保留原 ID 和字段语义，并提供迁移测试。
 
+写入这里的配置会自动纳入 [ConfigBackupManager](../../../app/src/main/java/com/aliothmoon/maadroid/data/preferences/ConfigBackupManager.kt) 的 v2 `engineTasks` 备份，无需为新游戏添加备份分支。宿主按持久化键导出，即使当前未注册该引擎也保留其原始 JSON envelope；普通编辑保留 envelope 顶层未知字段。参数和 workspace 是不透明的 JSON 字符串，引擎自己负责编辑、迁移时保留其中仍需兼容的业务字段；不要把 envelope 的保留规则扩大为整个备份文件的未知字段保证。
+
+导入只整条替换备份中包含的引擎，未包含的本地引擎不变，包含项不与本地旧 envelope 逐字段合并。普通 v1 文件缺少 `engineTasks`，因此不会清空新游戏配置；若 v1 显式包含引擎数据，仍会导入。请同时覆盖 v2 往返、未知引擎/字段和旧 v1 导入，不要依赖当前 provider 列表筛掉未来或暂未安装的游戏数据。
+
+面板与 workspace 应输出有效 JSON，允许队伍、策略等业务内容尚未填完的草稿。备份导入、导出会检查 envelope 格式，并要求非空白参数和 workspace 字符串是有效 JSON；空白参数以及 null/空白 workspace 不在此被当作业务错误。宿主不会为备份调用 `workspace.validate`，启动前才做可执行性检查；新游戏不能把“必须能立即运行”当作保存和恢复草稿的前提。
+
+若另增不在 `EngineTaskStore` 中的持久化状态或导入副作用，需要明确接入备份和撤销流程。现有异常、取消处理只提供尽力回滚，失败时报告未完整恢复；多个 DataStore 和系统闹钟没有统一事务，内存撤销记录也无法在进程退出后恢复。具体写入顺序、并发和 crash atomic 限制见[配置备份说明](ARCHITECTURE.md#多游戏配置备份)，不要向新游戏承诺整次导入完全原子。
+
 简单 `TaskPanelSpec.content` 当前没有 `editable` 入参。宿主 ViewModel 在运行中拒绝配置回写；如新界面需要明确禁用复杂控件，使用 workspace 或先扩展通用接口，不要读取方舟运行状态。
 
 `SettingsSection()` 和 `OnboardingSteps()` 虽已定义，当前尚无宿主调用点。重要的语言、渠道或授权前提应先放入已接通的 workspace；如需独立设置或引导流程，应单独完成宿主接线和验证。
@@ -144,6 +152,7 @@ object NewGameProvider : EngineProvider {
 |---|---|
 | 模块依赖、游戏 ID / 资源隔离 | [ModuleBoundaryContractTest](../../../core/remote/src/test/java/com/aliothmoon/maadroid/ModuleBoundaryContractTest.kt)、[MultiEngineContractTest](../../../app/src/test/java/com/aliothmoon/maadroid/engine/MultiEngineContractTest.kt) |
 | 配置重载、旧数据迁移、任务顺序 | [EngineTaskSelectionTest](../../../app/src/test/java/com/aliothmoon/maadroid/engine/EngineTaskSelectionTest.kt)、本引擎的 workspace 测试 |
+| 多游戏备份、未知字段与草稿、异常/取消回滚 | [EngineTaskStoreTest](../../../app/src/test/java/com/aliothmoon/maadroid/engine/EngineTaskStoreTest.kt)、[MultiEngineConfigBackupTest](../../../app/src/test/java/com/aliothmoon/maadroid/data/preferences/MultiEngineConfigBackupTest.kt) |
 | 缺文件、未知动作、坏 ZIP、取消与旧资源恢复 | [EngineResourceInstallTest](../../../app/src/test/java/com/aliothmoon/maadroid/engine/resource/EngineResourceInstallTest.kt)、本引擎 manifest 测试 |
 | 重复启动、失败/停止收尾、设备归属 | [EngineTaskViewModelTest](../../../app/src/test/java/com/aliothmoon/maadroid/presentation/viewmodel/EngineTaskViewModelTest.kt)、[EngineDeviceSessionTest](../../../app/src/test/java/com/aliothmoon/maadroid/engine/EngineDeviceSessionTest.kt)、[EngineExecutionCoordinatorTest](../../../engine/api/src/test/java/com/aliothmoon/maadroid/engine/EngineExecutionCoordinatorTest.kt) |
 | 多包目录传递、部分失败/取消、无资源任务 | [EngineSessionLifecycleTest](../../../app/src/test/java/com/aliothmoon/maadroid/engine/EngineSessionLifecycleTest.kt)、[EngineResourcesTest](../../../engine/api/src/test/java/com/aliothmoon/maadroid/engine/EngineResourcesTest.kt) |

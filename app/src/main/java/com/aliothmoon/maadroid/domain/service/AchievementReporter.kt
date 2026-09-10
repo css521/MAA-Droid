@@ -16,6 +16,11 @@ class AchievementReporter(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val taskStoppedBeforeNextStart = AtomicBoolean(false)
 
+    suspend fun reportLanguageChanged() {
+        // Keep setLanguage's existing awaited reporting behavior after its successful write.
+        repository.report { event = AchievementEvents.LANGUAGE_CHANGED }
+    }
+
     fun reportTaskStarted(
         taskCount: Int,
         launchesGame: Boolean,

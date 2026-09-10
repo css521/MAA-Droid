@@ -128,6 +128,7 @@ fun EngineTaskContent(
     key(engineId) {
         val context = LocalContext.current.applicationContext
         val resourceService = koinInject<EngineResourceService>()
+        val taskStore = koinInject<EngineTaskStore>()
         val settings = koinInject<AppSettingsManager>()
         val audio = koinInject<GameMuteCoordinator>()
         val screenSaver = koinInject<ScreenSaverOverlayManager>()
@@ -140,7 +141,7 @@ fun EngineTaskContent(
         ) {
             EngineTaskViewModel(
                 engineId = engineId,
-                store = EngineTaskStore(context),
+                store = taskStore,
                 executionState = executionState,
                 canStart = canStart,
                 quickActions = EngineTaskQuickActions(settings, audio),

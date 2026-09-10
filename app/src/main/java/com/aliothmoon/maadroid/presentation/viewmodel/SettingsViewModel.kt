@@ -15,6 +15,8 @@ import com.aliothmoon.maadroid.constant.OFFICIAL_SHIZUKU_PACKAGE
 import com.aliothmoon.maadroid.data.model.update.UpdateChannel
 import com.aliothmoon.maadroid.data.preferences.AppSettingsManager
 import com.aliothmoon.maadroid.data.preferences.ConfigBackupManager
+import com.aliothmoon.maadroid.data.preferences.IncompleteRestoreCancellationException
+import kotlinx.coroutines.CancellationException
 import com.aliothmoon.maadroid.data.preferences.TaskChainState
 import com.aliothmoon.maadroid.data.preferences.UnlockGestureStore
 import com.aliothmoon.maadroid.data.background.BackgroundImageStore
@@ -104,6 +106,7 @@ class SettingsViewModel(
                 configBackupManager.exportTo(outputStream)
                 _settingsMessage.value = uiTextOf(R.string.settings_export_success)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Timber.e(e, "export config failed")
                 _settingsMessage.value =
                     uiTextOf(R.string.settings_export_failed, e.message.orEmpty())
@@ -117,9 +120,11 @@ class SettingsViewModel(
                 configBackupManager.importFrom(inputStream)
                 _showRestartDialog.value = true
             } catch (e: Exception) {
+                if (e is CancellationException && e !is IncompleteRestoreCancellationException) throw e
                 Timber.e(e, "import config failed")
                 _settingsMessage.value =
                     uiTextOf(R.string.settings_import_failed, e.message.orEmpty())
+                if (e is CancellationException) throw e
             }
         }
     }

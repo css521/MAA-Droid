@@ -117,7 +117,7 @@ class HostEngineIsolationContractTest {
         "domain/usecase" to 9,               // AnalyzeTaskChainUseCase 独占多数
         "presentation/view/settings" to 8,   // 成就 UI
         "(顶层文件)" to 6,                    // MainActivity / MaaApplication
-        "data/preferences" to 7,             // TaskChainState 整体是方舟任务链状态机
+        "data/preferences" to 5,             // TaskChainState / ConfigBackupManager；AppSettingsManager 已解耦
         "remote" to 1,                       // 只保留提权进程的引擎工厂装配
         "overlay" to 3,
         "presentation/state" to 2,

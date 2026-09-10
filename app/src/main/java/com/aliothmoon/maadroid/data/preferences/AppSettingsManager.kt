@@ -9,8 +9,6 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.preferencesDataStore
 import com.aliothmoon.maadroid.R
 import com.aliothmoon.maadroid.constant.DefaultDisplayConfig
-import com.aliothmoon.maadroid.data.achievement.AchievementEvents
-import com.aliothmoon.maadroid.data.achievement.AchievementRepository
 import com.aliothmoon.maadroid.data.model.update.UpdateChannel
 import com.aliothmoon.maadroid.data.model.update.UpdateSource
 import com.aliothmoon.maadroid.data.preferences.AppSettingsManager.Companion.FONT_SIZE_SCALE_AUTO
@@ -36,7 +34,7 @@ import kotlinx.coroutines.runBlocking
 
 class AppSettingsManager(
     private val context: Context,
-    private val achievementRepository: AchievementRepository,
+    private val onLanguageChanged: suspend () -> Unit,
 ) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -557,9 +555,8 @@ class AppSettingsManager(
         with(AppSettingsSchema) {
             context.dataStore.edit { it[language] = lang.name }
         }
-        achievementRepository.report {
-            event = AchievementEvents.LANGUAGE_CHANGED
-        }
+        // Notify only after DataStore confirms the write; a failed/cancelled write skips it.
+        onLanguageChanged()
     }
 
     // 待展示的更新公告

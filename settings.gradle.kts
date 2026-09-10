@@ -30,8 +30,9 @@ dependencyResolutionManagement {
 
 rootProject.name = "MaaDroid"
 
-// 模块按层分组，目录结构即依赖方向：
-//   app -> engine:* -> engine:api -> core:* -> hidden-api
+// 按职责分组：app 装配具体游戏，engine:api 定义共享契约，core 提供平台能力。
+// core:remote / core:ui 可以使用 engine:api；engine:api 依赖 core:bridge。
+// 具体依赖以各模块声明为准，不是一条经过所有 core 模块的线性链。
 //
 // 接入一个新游戏 = 在 engine/ 下加一个目录，照 engine/limbus 的样子实现
 // GameProfile / AutomationEngine / EngineUi / ResourcePackSpec，
@@ -43,7 +44,7 @@ include(":engine:api")
 include(":engine:arknights")
 include(":engine:limbus")
 
-// 平台能力层：与游戏无关，不得反向依赖 engine:*（由 ModuleBoundaryContractTest 钉住）
+// 平台能力层：与游戏无关，不得依赖具体引擎或宿主（由 ModuleBoundaryContractTest 钉住）
 include(":core:bridge")
 include(":core:remote")
 // 引擎与宿主共用的 Compose 组件与主题。范围按「引擎实际需要」划，

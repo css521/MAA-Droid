@@ -6,14 +6,19 @@ import com.aliothmoon.maadroid.data.model.TaskProfile
 import com.aliothmoon.maadroid.data.notification.NotificationSettings
 import com.aliothmoon.maadroid.data.notification.NotificationSettingsManager
 import com.aliothmoon.maadroid.data.notification.reapplyWebhookPresetIfBlank
+import com.aliothmoon.maadroid.domain.models.AppSettings
+import com.aliothmoon.maadroid.engine.EngineTaskStore
 import com.aliothmoon.maadroid.engine.arknights.enums.InfrastMode
 import com.aliothmoon.maadroid.engine.arknights.enums.UiUsageConstants
-import com.aliothmoon.maadroid.domain.models.AppSettings
 import com.aliothmoon.maadroid.schedule.data.ScheduleStrategyRepository
 import com.aliothmoon.maadroid.schedule.service.ScheduleAlarmManager
 import com.aliothmoon.maadroid.utils.JsonUtils
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import java.io.InputStream
@@ -27,28 +32,34 @@ class ConfigBackupManager(
     private val taskChainState: TaskChainState,
     private val scheduleStrategyRepository: ScheduleStrategyRepository,
     private val scheduleAlarmManager: ScheduleAlarmManager,
+    private val engineTaskStore: EngineTaskStore,
 ) {
+    private val operation = Mutex()
     private val json = Json(JsonUtils.common) {
         prettyPrint = true
     }
 
-    suspend fun exportTo(outputStream: OutputStream) = withContext(Dispatchers.IO) {
-        // 等待异步数据加载完成，避免导出空数据
-        taskChainState.isLoaded.first { it }
-        scheduleStrategyRepository.isLoaded.first { it }
+    private suspend fun storageOperation(block: suspend () -> Unit) =
+        withContext(Dispatchers.IO) { operation.withLock { block() } }
 
-        val backup = ConfigBackup(
-            version = CURRENT_VERSION,
-            exportedAt = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
-            appSettings = appSettingsManager.settings.first().sanitized(),
-            notificationSettings = notificationSettingsManager.settings.first()
-                .sanitizedForExport(),
-            taskProfiles = taskChainState.profiles.value.map { it.sanitized() },
-            activeProfileId = taskChainState.profileId.value,
-            scheduleStrategies = scheduleStrategyRepository.strategies.value,
-        )
-        outputStream.bufferedWriter().use { writer ->
+    suspend fun exportTo(outputStream: OutputStream) = outputStream.bufferedWriter().use { writer ->
+        storageOperation {
+            // 等待异步数据加载完成，避免导出空数据
+            taskChainState.isLoaded.first { it }
+
+            val backup = ConfigBackup(
+                version = CURRENT_VERSION,
+                exportedAt = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
+                appSettings = appSettingsManager.settings.first().sanitized(),
+                notificationSettings = notificationSettingsManager.settings.first()
+                    .sanitizedForExport(),
+                taskProfiles = taskChainState.profiles.value.map { it.sanitized() },
+                activeProfileId = taskChainState.profileId.value,
+                scheduleStrategies = scheduleStrategyRepository.snapshot(),
+                engineTasks = engineTaskStore.exportSnapshot(),
+            )
             writer.write(json.encodeToString(ConfigBackup.serializer(), backup))
+            writer.flush()
         }
     }
 
@@ -57,32 +68,99 @@ class ConfigBackupManager(
      * 注意：AppSettings 采用整包写入，部分设置（如 startupBackend、debugMode）的运行态副作用
      * 不会立刻触发，建议导入后重启应用以确保所有设置完全生效。
      */
-    suspend fun importFrom(inputStream: InputStream) = withContext(Dispatchers.IO) {
-        val content = inputStream.bufferedReader().use { it.readText() }
-        val backup = json.decodeFromString(ConfigBackup.serializer(), content)
-        require(backup.version <= CURRENT_VERSION) {
-            "不支持的备份版本: ${backup.version}，当前最高支持: $CURRENT_VERSION"
+    suspend fun importFrom(inputStream: InputStream) {
+        // Finish and close the supplied document before any mutation. Even cancellation
+        // before the IO dispatcher starts, or an input close failure, leaves no open stream.
+        val content = inputStream.bufferedReader().use { reader ->
+            withContext(Dispatchers.IO) { reader.readText() }
         }
-        // 自定义背景的开关与令牌指向本机文件，导入其他设备的配置时保留本机值。
-        val localSettings = appSettingsManager.settings.first()
-        appSettingsManager.setSettings(
-            backup.appSettings.normalizedForImport().copy(
-                customBackgroundEnabled = localSettings.customBackgroundEnabled,
-                customBackgroundToken = localSettings.customBackgroundToken,
-            )
-        )
-        notificationSettingsManager.updateSettings(backup.notificationSettings.reapplyWebhookPresetIfBlank())
-        taskChainState.importProfiles(backup.taskProfiles, backup.activeProfileId)
+        importContent(content)
+    }
 
-        // 先取消旧闹钟，再导入并重新注册
-        val oldStrategies = scheduleStrategyRepository.strategies.value
-        oldStrategies.forEach { scheduleAlarmManager.cancel(it.id) }
-        scheduleStrategyRepository.importStrategies(backup.scheduleStrategies)
-        scheduleAlarmManager.rescheduleAll(backup.scheduleStrategies)
+    private suspend fun importContent(content: String) = operation.withLock {
+        // Keep the catch outside the dispatcher switch: cancellation can arrive while
+        // synchronous alarm calls finish and only be thrown by withContext on its return.
+        var rollback: suspend (Exception) -> Boolean = { false }
+        try {
+            withContext(Dispatchers.IO) {
+                val backup = json.decodeFromString(ConfigBackup.serializer(), content)
+                require(backup.version in 1..CURRENT_VERSION) {
+                    "不支持的备份版本: ${backup.version}，当前最高支持: $CURRENT_VERSION"
+                }
+                // Syntax only; an incomplete team is still a valid engine-owned draft.
+                val engineTasks = EngineTaskStore.validateSnapshot(backup.engineTasks)
+                taskChainState.isLoaded.first { it }
+                val localSettings = appSettingsManager.settings.first()
+                val localNotifications = notificationSettingsManager.settings.first()
+                val localProfiles = taskChainState.profiles.value
+                val localActiveProfile = taskChainState.profileId.value
+                require(localProfiles.isNotEmpty()) { "当前任务配置尚未加载，无法导入" }
+                val engineCheckpoint = engineTaskStore.checkpoint(engineTasks.keys)
+                val oldStrategies = scheduleStrategyRepository.snapshot()
+                val undo = mutableListOf<suspend () -> Unit>()
+                var alarmsTouched = false
+                rollback = { failure ->
+                    var failed = false
+                    suspend fun recover(action: suspend () -> Unit) {
+                        try { action() } catch (restoreFailure: Exception) {
+                            failed = true
+                            if (restoreFailure !== failure) failure.addSuppressed(restoreFailure)
+                        }
+                    }
+                    if (alarmsTouched) {
+                        (oldStrategies + backup.scheduleStrategies).map { it.id }.distinct().forEach { id ->
+                            recover { scheduleAlarmManager.cancel(id) }
+                        }
+                    }
+                    undo.asReversed().forEach { recover(it) }
+                    if (alarmsTouched) oldStrategies.forEach { strategy ->
+                        recover { scheduleAlarmManager.rescheduleAll(listOf(strategy)) }
+                    }
+                    failed
+                }
+                // Undo is registered before each attempt, including writes that change
+                // memory before their disk flush, or commit just before cancellation.
+                suspend fun change(restore: suspend () -> Unit, apply: suspend () -> Unit) {
+                    undo += restore
+                    apply()
+                }
+                change({ appSettingsManager.setSettings(localSettings) }) {
+                    appSettingsManager.setSettings(backup.appSettings.normalizedForImport().copy(
+                        customBackgroundEnabled = localSettings.customBackgroundEnabled,
+                        customBackgroundToken = localSettings.customBackgroundToken,
+                    ))
+                }
+                change({ notificationSettingsManager.updateSettings(localNotifications) }) {
+                    notificationSettingsManager.updateSettings(backup.notificationSettings.reapplyWebhookPresetIfBlank())
+                }
+                change({ taskChainState.importProfiles(localProfiles, localActiveProfile) }) {
+                    taskChainState.importProfiles(backup.taskProfiles, backup.activeProfileId)
+                }
+                change({ engineTaskStore.restore(engineCheckpoint) }) { engineTaskStore.importSnapshot(engineTasks) }
+                change({ scheduleStrategyRepository.importStrategies(oldStrategies) }) {
+                    scheduleStrategyRepository.importStrategies(backup.scheduleStrategies)
+                }
+                // Only touch OS alarms after all persistent writes have succeeded.
+                alarmsTouched = true
+                oldStrategies.forEach { scheduleAlarmManager.cancel(it.id) }
+                scheduleAlarmManager.rescheduleAll(backup.scheduleStrategies)
+            }
+        } catch (failure: Exception) {
+            withContext(NonCancellable + Dispatchers.IO) {
+                val restoreFailed = rollback(failure)
+                if (restoreFailed) {
+                    if (failure is CancellationException) throw IncompleteRestoreCancellationException(failure)
+                    throw IllegalStateException("配置导入失败，部分旧配置未能恢复，请检查存储后重新导入", failure)
+                }
+                // Throw inside this boundary too. Returning a Boolean to a cancelled
+                // dispatcher would discard it before the caller can report failed undo.
+                throw failure
+            }
+        }
     }
 
     companion object {
-        const val CURRENT_VERSION = 1
+        const val CURRENT_VERSION = 2
 
         /**
          * 导出时剥离设备本地字段：CDK 与解锁 PIN 属敏感信息；
@@ -138,3 +216,9 @@ internal fun NotificationSettings.sanitizedForExport() = copy(
     customWebhookUrl = "",
     customWebhookHeaders = "",
 )
+
+/** Cancellation still propagates, while the caller can surface incomplete recovery distinctly. */
+internal class IncompleteRestoreCancellationException(cause: CancellationException) :
+    CancellationException("配置导入已取消，部分旧配置未能恢复，请检查存储后重新导入") {
+    init { initCause(cause) }
+}
