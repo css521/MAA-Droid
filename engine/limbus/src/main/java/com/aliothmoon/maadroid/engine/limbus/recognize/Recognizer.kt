@@ -37,6 +37,19 @@ interface Recognizer {
     /** Android 队伍页的独立正向证据。坐标是页内锚点，不能当作 Details 按钮点击。 */
     suspend fun observeTeamSelection(): Match? = null
 
+    /**
+     * 队伍页是否已出现 —— 读 Details 按钮的**文字**，不看素材。
+     *
+     * 上游用 `templateMatch("details")` 判这件事，但那张素材来自 Steam 客户端，
+     * 在安卓真帧的真实按钮处只有 0.485（全图峰值 0.739 还落在卡牌美术上）。
+     * 而两个客户端显示的是同一串文字：真帧上 OCR 读出 "Details" 置信度 1.00。
+     *
+     * 与 `config/task-patch.json` 里那几个 choose_team 节点用的是同一组文字与区域，
+     * 改动时两处要一起改（区域常量见 [TeamPage]）。
+     */
+    suspend fun teamPageVisible(): Boolean =
+        findText(TeamPage.TEXT, TeamPage.REGION, TeamPage.THRESHOLD).isNotEmpty()
+
     /** 只返回确认过的标题页开始位置，不返回清理缓存按钮的位置。 */
     suspend fun titleScreenStart(): Match? =
         TitleScreenDetector.fromAnchor(templateMatch("clear_all_caches"))

@@ -154,7 +154,10 @@ class UpstreamPipelineRunTest {
             assertFalse(failure.orEmpty().contains("未解锁"))
             assertEquals(listOf(1010 to if (mode == "enter") 480 else 515), input.clicks())
             assertTrue(logs.none { "exp_can_not_skip_battle 执行动作" in it || "choose_team 执行动作" in it })
-            assertEquals(10, reader.templateCalls.count { it == if (mode == "enter") "details" else "skip_battle" })
+            // enter 分支已改走文字判据（上游 details 素材在安卓上匹配不到，OCR 读 "Details" 稳定），
+            // 所以这里数的是 OCR 调用；skip battle 分支仍用模板。
+            if (mode == "enter") assertEquals(10, reader.textCalls.count { it == "Details" })
+            else assertEquals(10, reader.templateCalls.count { it == "skip_battle" })
         }
     }
 

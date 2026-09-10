@@ -97,7 +97,10 @@ private suspend fun awaitSelectionPage(ctx: ActionContext, section: String, mode
     repeat(10) { attempt ->
         ctx.ensureActive()
         val found = if (mode == "enter") {
-            ctx.recognize.templateMatch("details").isNotEmpty() || ctx.recognize.observeTeamSelection() != null
+            // 先读文字：上游那张 details 素材来自 Steam 客户端，在安卓上匹配不到
+            // （真实按钮处 0.485），而 OCR 读 "Details" 置信度 1.00。
+            // observeTeamSelection 留作次级兜底，OCR 因故不可用时仍有正向证据。
+            ctx.recognize.teamPageVisible() || ctx.recognize.observeTeamSelection() != null
         } else ctx.recognize.templateMatch("skip_battle").isNotEmpty()
         if (found) return ActionOutcome.Continue
         if (attempt == 0) ctx.log("等待$label")

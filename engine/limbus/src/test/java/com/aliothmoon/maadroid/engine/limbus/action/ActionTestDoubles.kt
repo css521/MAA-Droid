@@ -107,8 +107,13 @@ class FakeRecognizer : Recognizer {
 
     override suspend fun detectText(crop: Crop?, threshold: Double): List<TextMatch> = textHits
 
-    override suspend fun findText(target: String, crop: Crop?, threshold: Double): List<TextMatch> =
-        textHits.filter { target in it.text }
+    /** 记录每次 findText 的目标串，便于断言"用的是文字判据而不是模板" */
+    val textCalls = mutableListOf<String>()
+
+    override suspend fun findText(target: String, crop: Crop?, threshold: Double): List<TextMatch> {
+        textCalls += target
+        return textHits.filter { target in it.text }
+    }
 
     override suspend fun classify(model: String, regions: List<Crop>): List<String> = classifyResult
 
