@@ -10,7 +10,13 @@
     "短串（Details / Enter 这类）必须给 mask —— 实测 dungeon_enter 期望 Enter 时",
     "全屏 OCR 匹配到了警告句里的『…fficulty to enter.』。",
     "",
-    "本文件由覆盖层随资源安装写入，缺失即纯上游行为；节点名打错会被装载校验拒绝。"
+    "本文件由覆盖层随资源安装写入，缺失即纯上游行为；节点名打错会被装载校验拒绝。",
+    "",
+    "check_enkephalin 是 inverse 自环：没找到充能面板就点脑啡肽计数器(390,650)开面板，",
+    "面板出现后本节点不再命中，路由落到 recharge_enkephalin 退出循环。上游 post_delay=1",
+    "是 PC 的量，安卓上面板 1 秒还没渲染完就又判一次，于是每轮多点一次（真机实测",
+    "8 次执行 / 4 个 main = 每轮 2 次）。延长等待即可，素材本身没问题——它在主页帧上",
+    "只有 0.622 是因为面板没打开，元素本来就不在，属正确拒绝。"
   ],
   "exp_choose_team": {
     "recognition": "ocr",
@@ -178,6 +184,11 @@
     "recognition": "ocr",
     "params": {
       "text": "returned to the title screen"
+    }
+  },
+  "check_enkephalin": {
+    "params": {
+      "post_delay": 2.5
     }
   }
 }
