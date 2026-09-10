@@ -57,6 +57,10 @@ ENGINES = {
         # 流水线 JSON 所在目录(相对资源根),用于引用校验
         "pipeline_dir": "config/task",
         "template_dir": "img",
+        # 本仓库自带的素材覆盖层(相对项目根)。上游素材来自 Steam 客户端,
+        # 部分控件在安卓客户端上完全不同 —— 这里放从真机帧裁出的替代素材,
+        # 打包时盖在上游之上。上游更新不会冲掉它。
+        "overlay": "engine/limbus/overlay",
         "min_engine_version": 1,
     },
 }
@@ -303,9 +307,31 @@ def main() -> int:
     # ---- 产出 ----
     os.makedirs(args.out, exist_ok=True)
     rel_files = collect_files(resource_root, cfg["include"])
+    # 每个相对路径的实际来源。上游先铺满,随后用本仓库自带的覆盖层盖掉同名项 ——
+    # 这样上游怎么更新都不会把平台修正冲掉,而覆盖层只需要装"上游素材在安卓上不适用"的那几张。
+    sources = {rel: os.path.join(resource_root, rel) for rel in rel_files}
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    overlay_root = os.path.join(project_root, cfg.get("overlay", ""))
+    overridden, added = [], []
+    if cfg.get("overlay") and os.path.isdir(overlay_root):
+        for root, _dirs, files in os.walk(overlay_root):
+            for fn in files:
+                if fn.startswith("."):
+                    continue
+                abs_p = os.path.join(root, fn)
+                rel = os.path.relpath(abs_p, overlay_root)
+                (overridden if rel in sources else added).append(rel)
+                sources[rel] = abs_p
+        if overridden or added:
+            print(f"\n[覆盖层] {overlay_root}")
+            for rel in sorted(overridden):
+                print(f"  [覆盖] {rel}")
+            for rel in sorted(added):
+                print(f"  [新增] {rel}")
+    rel_files = sorted(sources)
     entries = []
     for rel in rel_files:
-        abs_p = os.path.join(resource_root, rel)
+        abs_p = sources[rel]
         entries.append({
             "path": rel.replace(os.sep, "/"),
             "sha256": sha256_of(abs_p),
@@ -321,7 +347,7 @@ def main() -> int:
     zip_path = os.path.join(args.out, zip_name)
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for e in entries:
-            zf.write(os.path.join(resource_root, e["path"]), e["path"])
+            zf.write(sources[e["path"]], e["path"])
 
     manifest = {
         "schema_version": SCHEMA_VERSION,
