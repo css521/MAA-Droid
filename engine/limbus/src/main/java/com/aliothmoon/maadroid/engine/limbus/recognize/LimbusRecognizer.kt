@@ -227,6 +227,12 @@ class LimbusRecognizer(
     override suspend fun findExpStage(stage: String): List<TextMatch> =
         readText(ExpStageQuery.REGION, .5, OcrTextQuery(stage), "ocr.exp_stage", ExpStageQuery(stage)::matches)
 
+    override suspend fun findThreadStage(stage: String): List<TextMatch> =
+        readText(
+            ThreadStageQuery.REGION, .5, OcrTextQuery(stage),
+            "ocr.thread_stage", ThreadStageQuery(stage)::matches,
+        )
+
     override suspend fun observeMailbox(): MailboxObservation? {
         val frame = frames.grab() ?: return null
         val screen = frame.toMat()

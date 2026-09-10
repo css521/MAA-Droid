@@ -3,6 +3,7 @@ package com.aliothmoon.maadroid.engine.limbus.action
 import com.aliothmoon.maadroid.engine.limbus.recognize.Crop
 import com.aliothmoon.maadroid.engine.limbus.recognize.Recognizer
 import com.aliothmoon.maadroid.engine.limbus.recognize.TextMatch
+import com.aliothmoon.maadroid.engine.limbus.recognize.ThreadStageQuery
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -21,6 +22,11 @@ class LuxcavationActionsTest {
         val requests = mutableListOf<Pair<String, Crop?>>()
         override suspend fun findExpStage(stage: String): List<TextMatch> =
             findText(stage, Crop(250, 180, 1000, 50), .5)
+
+        // 必须显式转给自己的 findText：接口默认实现会被 `by FakeRecognizer()` 生成的
+        // 委托桥接抢走、落到委托对象上，绕过下面的 override，于是 requests 收不到记录。
+        override suspend fun findThreadStage(stage: String): List<TextMatch> =
+            findText(stage, ThreadStageQuery.REGION, .5)
         override suspend fun findText(target: String, crop: Crop?, threshold: Double): List<TextMatch> {
             requests += target to crop
             return if (remaining.isEmpty()) emptyList() else remaining.removeAt(0)

@@ -78,6 +78,10 @@ interface Recognizer {
     suspend fun findExpStage(stage: String): List<TextMatch> =
         findText(stage, crop = ExpStageQuery.REGION)
 
+    /** 纺锤难度专用：可识别 Android OCR 把编号认成字母的 Lv 标签（实测 60 → G0）。 */
+    suspend fun findThreadStage(stage: String): List<TextMatch> =
+        findText(stage, crop = ThreadStageQuery.REGION)
+
     /** 邮箱专用观察；未知结果不能作为空邮箱或领取完成的证据。 */
     suspend fun observeMailbox(): MailboxObservation? =
         MailboxDetector.fromText(detectText(MailboxDetector.region, .7))
