@@ -11,6 +11,7 @@ import org.opencv.core.CvType
 import org.opencv.core.Core
 import org.opencv.core.Mat
 import org.opencv.core.Rect
+import org.opencv.core.Size
 import org.opencv.imgcodecs.Imgcodecs
 import org.opencv.imgproc.Imgproc
 import java.io.File
@@ -38,9 +39,68 @@ class LimbusRecognizer(
     private val gameLanguage: String = "zh",
     private val onInfo: (String) -> Unit = {},
     private val onDiagnostic: (String, String) -> Unit = { _, _ -> },
+    /** 开发模式采集底片的落盘目录；null 表示不采集 */
+    private val captureDir: File? = null,
 ) : Recognizer {
 
     private val templateCache = HashMap<Pair<String, Boolean>, Mat?>()
+
+    // ---- 开发模式：采集素材底片 ----
+    //
+    // 适配安卓的真实阻塞是缺「这台设备的真帧」。上游素材来自 Steam 客户端，在安卓上
+    // 大面积失配；而判断某张素材该改成什么，必须看识别器实际参与匹配的那一帧。
+    // 不能用聊天/截图渠道传来的图片当依据——那条链路会磨掉小素材依赖的细节，
+    // 系统性压低所有匹配分数（实测 main_drive_no_text 在这种图片上只有 0.555，
+    // 而同一时刻设备日志显示它识别成功）。
+    //
+    // 采集而非「失败时落盘」：要裁素材的界面也包括现在还正常的那些，而失败帧
+    // 往往是转场中间的糊图，不适合当素材源。
+
+    /** 上一张已采集帧的缩略指纹，用于判断画面是否真的变了 */
+    private var lastCaptureFingerprint: Mat? = null
+
+    private var capturedCount = 0
+
+    /**
+     * 采集一帧底片。画面与上一张差异不大时跳过，避免走一遍主页就写下几千张重复。
+     *
+     * 命名带上当时正在识别的素材名：导出后据此就能分清哪张是队伍页、哪张是关卡页，
+     * 裁素材时不必猜。
+     */
+    private fun captureFrame(screen: Mat, seq: Long, tag: String) {
+        val base = captureDir ?: return
+        if (capturedCount >= MAX_CAPTURES) return
+        val small = Mat()
+        try {
+            Imgproc.resize(screen, small, Size(64.0, 36.0), 0.0, 0.0, Imgproc.INTER_AREA)
+            if (small.channels() > 1) Imgproc.cvtColor(small, small, Imgproc.COLOR_BGR2GRAY)
+            val previous = lastCaptureFingerprint
+            if (previous != null) {
+                val diff = Mat()
+                try {
+                    Core.absdiff(small, previous, diff)
+                    // 均值差阈值：低于此值视为同一画面。取 6 是为了容忍动画与呼吸灯，
+                    // 又不至于把「同一页不同弹窗」当成同一张。
+                    if (Core.mean(diff).`val`[0] < CAPTURE_DIFF_THRESHOLD) return
+                } finally {
+                    diff.release()
+                }
+            }
+            if (!base.isDirectory && !base.mkdirs()) return
+            val safeTag = tag.replace(Regex("[^A-Za-z0-9_.-]"), "_").take(48)
+            val file = File(base, "${capturedCount.toString().padStart(2, '0')}_${seq}_$safeTag.png")
+            if (!Imgcodecs.imwrite(file.absolutePath, screen)) return
+            capturedCount++
+            lastCaptureFingerprint?.release()
+            lastCaptureFingerprint = small.clone()
+            // 绝对路径必须进日志：导出器万一没收集到这棵树，也能照路径手动取
+            onDiagnostic("frame.capture", "第 $capturedCount 张 frame=$seq ${file.absolutePath}")
+        } catch (e: Throwable) {
+            onDiagnostic("frame.capture", "采集失败: ${e.message}")
+        } finally {
+            small.release()
+        }
+    }
 
     override suspend fun observeTeamSelection(): Match? {
         if (gameLanguage != "en") return null
@@ -109,6 +169,8 @@ class LimbusRecognizer(
 
         val screen = frame.toMat()
         try {
+            // 开发模式采集：放在这里而不是失败分支，因为要裁素材的界面也包括现在还正常的
+            captureFrame(screen, frame.seq, template)
             // crop 语义是裁剪，返回坐标要加回偏移（照抄上游的 mask 语义）
             val region = crop?.clampTo(screen.cols(), screen.rows())
             if (crop != null && region == null) return emptyList()
@@ -567,6 +629,12 @@ class LimbusRecognizer(
     }
 
     private companion object {
+
+        /** 开发模式采集帧数上限，避免写满存储 */
+        const val MAX_CAPTURES = 60
+
+        /** 缩略图均值差低于此值视为同一画面 */
+        const val CAPTURE_DIFF_THRESHOLD = 6.0
 
         const val MODEL_MIRROR_LEGEND = "mirror_legend"
         const val MODEL_MIRROR_PATH = "mirror_path"

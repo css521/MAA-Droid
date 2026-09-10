@@ -175,6 +175,7 @@ class LimbusEngine(
                 gameLanguage = loadedLanguage,
                 onInfo = { info(it) },
                 onDiagnostic = ::trace,
+                captureDir = captureDirOrNull(dir),
             )
         } catch (failure: Throwable) {
             runCatching { classifier.release() }.exceptionOrNull()?.let(failure::addSuppressed)
@@ -452,9 +453,37 @@ class LimbusEngine(
             ?.takeIf { it.isNotEmpty() }
             ?: DEFAULT_LANGUAGE
 
+    /**
+     * 开发模式采集目录；未开启返回 null。
+     *
+     * 用标记文件而不是编译期开关：真机现场建/删一个文件就能切换，不用重新打包。
+     * 位置放在 MAA 侧的 debug 树下——日志导出器已在收集它，采到的帧才能随日志一起拿到。
+     * 找不到名为 Maa 的祖先目录时退到资源目录同级的 debug。
+     */
+    private fun captureDirOrNull(resourceDir: File): File? {
+        var cursor: File? = resourceDir
+        var debugRoot: File? = null
+        while (cursor != null) {
+            if (cursor.name == "Maa") {
+                debugRoot = File(cursor, "debug/limbus")
+                break
+            }
+            cursor = cursor.parentFile
+        }
+        val root = debugRoot ?: File(resourceDir.parentFile ?: resourceDir, "debug/limbus")
+        val marker = File(root, CAPTURE_MARKER)
+        if (!marker.isFile) return null
+        val frames = File(root, "frames")
+        info("开发模式：采集素材底片到 ${frames.absolutePath}")
+        return frames
+    }
+
     private data class QueuedTask(val id: Int, val type: String, val paramsJson: String)
 
     private companion object {
+        /** 开发模式开关：该文件存在即开启采集，真机现场建/删即可，无需重新打包 */
+        const val CAPTURE_MARKER = ".capture"
+
         const val PIPELINE_DIR = "config/task"
         const val LANGUAGE_MARKER = "config/language/current"
         const val DEFAULT_LANGUAGE = "zh"
