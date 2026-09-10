@@ -201,3 +201,96 @@ OpenCV 差 2.6 倍是因为 MaaFramework 的 world4 编进了 FeatureMatch 需�
 5. 有了正确行为基线之后，才评估 MaaFramework 作为平台后端
 
 **不要做**：全改 AALC 逻辑；现在动 MaaFramework；为省体积先动 OpenCV；无据修改坐标或素材。
+
+---
+
+## 六、素材覆盖：机制已建，但**还没接到设备上**
+
+### 已完成
+
+`engine/limbus/overlay/` 是本仓库自带的素材覆盖层，`scripts/pack_engine_resource.py`
+打包时会用它盖掉上游同名素材（产出时打印 `[覆盖] img/en/ui/details.png`）。
+已放入一张从真帧裁出的安卓版 `details.png`（124x42，自匹配 0.983，与次高峰余量 +0.440）。
+
+### 但这条路到不了设备 —— 关键事实
+
+**App 不下载预打好的资源包，它直接下载 LALC 的 GitHub 仓库归档：**
+
+```kotlin
+// LimbusResourcePack.kt
+override val upstreamArchive = UpstreamArchive(
+    repository = "HSLix/LixAssistantLimbusCompany",
+    initialRevision = ResourceRevision("v5.0.0", "431b432e…"),
+    resourcePrefix = "lalc_backend",
+)
+override val bundledAssetPrefix: String? = null
+```
+
+所以 `pack_engine_resource.py` 是 **CI/校验工具，不是运行时路径**。覆盖必须在
+**设备安装时**生效。
+
+### 正确的接入点
+
+`AtomicResourceInstaller.kt:83`：解包完成、激活之前调用
+`pack.finalizeUpstreamInstall(staging, revision)`。**这就是该插入覆盖的位置** ——
+它作用在 staging 目录上，失败不会破坏已装资源。
+
+障碍：`finalizeUpstreamInstall` 拿不到 `Context`/`AssetManager`，而覆盖素材要从
+APK assets 里读。建议做法（三处小改，都向后兼容）：
+
+1. `engine/api` 的 `ResourcePackSpec` 加 `val overlayAssetPrefix: String? get() = null`
+   —— 带默认值，现有实现与 4 个测试替身都不受影响
+2. `AtomicResourceInstaller` 在调用 `finalizeUpstreamInstall` **之前**，把
+   `assets/<overlayAssetPrefix>/**` 覆盖到 staging
+3. `LimbusResourcePack` 设 `overlayAssetPrefix`，覆盖素材放
+   `engine/limbus/src/main/assets/<prefix>/img/en/ui/details.png`
+
+注意 `assets/lalc/ui/README.md` 说的「不要在这里重新提交批量 PNG」指的是几百张
+饰品/卡包图鉴，不是这几 KB 的覆盖素材，两者不冲突。
+
+同一份覆盖素材应同时留在 `engine/limbus/overlay/`（供 CI 打包与离线审计）和 APK
+assets（供设备安装），或让打包器从 assets 目录取，避免两处维护。
+
+### 选素材的原则（实测得出）
+
+**看与次高峰的余量，不能只看自匹配分数。** 5 个候选实测：
+
+```
+仅 Details 文字      70x24  自匹配 0.976  余量 +0.236
+含 « 与按钮边框      112x34  自匹配 0.963  余量 +0.392
+按钮整块+留白       124x42  自匹配 0.983  余量 +0.440  ← 采用
+下方小 Details        62x20  自匹配 0.919  余量 +0.001  ← 反例，且最佳位置落在错处
+下方小 Details+边框   76x32  自匹配 0.953  余量 +0.187
+```
+
+小图会被噪声淹没——这也解释了为什么 17x17 的 `skill_blunt` 在没有技能的界面上
+得分反而更高。素材应带上按钮边框等结构，宁大勿小。
+
+### 真帧上的确切数据（推翻了之前基于压缩截图的结论）
+
+上游素材**并非全废**，真帧实测有 4 张本来就好用：
+
+```
+inferno 0.954 ✅   luxcavation 0.951 ✅   reward_coin 0.930 ✅   clear_all_caches 0.910 ✅
+```
+
+真正要换的（界面对了但素材不行）：
+
+```
+main_drive_no_text   0.491    main_window_no_text 0.502    main_drive_with_text 0.533
+quit_game            0.508    charge_enkephalin   0.623    resume               0.647
+details              0.739    skip_battle         0.755    pass_missions        0.823
+```
+
+主页导航那三个真帧只有 0.49~0.53，而设备日志显示它们识别成功——因为走了
+`AndroidHomeNavigation` 那条自带缩放的旁路。**旁路一直在替素材背锅。**
+
+分数低但**不是问题**的（界面根本不对，采集恰好发生在识别失败时）：
+`network_is_unstable` 0.254、`server_error_*` 0.304、`server_is_under_*` 0.333、
+`dungeon_enter` 0.336。
+
+### 待验证
+
+`details` 的**跨队伍泛化未验证**——只有一张队伍页真帧。压缩截图上得 0.697 不作为
+反证（那些图 2.17 宽高比被压成 16:9，命中点 y 一致而 x 偏 42px）。下次采到另一套
+队伍的真帧后需复核。
