@@ -33,6 +33,7 @@ class PipelineRunner(
     private val contextFactory: (String, PipelineNode, List<Match>) -> ActionContext,
     private val recognizeGate: suspend (PipelineNode) -> RecognizeOutcome,
     private val onLog: (String) -> Unit = {},
+    private val observer: PipelineObserver? = null,
 ) {
 
     private sealed interface Step {
@@ -96,6 +97,8 @@ class PipelineRunner(
     }
 
     private suspend fun runAction(step: Step.Action, stack: ArrayDeque<Step>) {
+        observer?.onNodeEntered(step.name)
+        if (!running) return
         val actionName = step.node.action
         val backend = ActionRegistry[actionName]
         if (backend == null) {
@@ -158,7 +161,9 @@ class PipelineRunner(
         if (step.node.type == "check") {
             val ctx = contextFactory(step.name, step.node, lastRecognition[step.name].orEmpty())
             val target = step.node.num("target_count")?.toInt() ?: error("检查节点 ${step.name} 缺少 target_count")
-            if (ctx.counterOf(step.name) < target) {
+            val count = ctx.counterOf(step.name)
+            observer?.onCheckEvaluated(step.name, step.node.str("disable_node"), count, target)
+            if (count < target) {
                 val origin = step.node.str("origin") ?: error("检查节点 ${step.name} 缺少 origin")
                 stack.addLast(Step.Route(origin, registry.require(origin)))
                 stack.addLast(Step.Action(origin, registry.require(origin)))

@@ -2,7 +2,11 @@ package com.aliothmoon.maadroid.engine.limbus.pipeline
 
 import android.view.KeyEvent
 import com.aliothmoon.maadroid.engine.InputSink
+import com.aliothmoon.maadroid.engine.EngineEvent
+import com.aliothmoon.maadroid.engine.TaskPhase
 import com.aliothmoon.maadroid.engine.limbus.LimbusTask
+import com.aliothmoon.maadroid.engine.limbus.LimbusTaskRun
+import com.aliothmoon.maadroid.engine.limbus.StoppedException
 import com.aliothmoon.maadroid.engine.limbus.action.ActionBackend
 import com.aliothmoon.maadroid.engine.limbus.action.ActionContext
 import com.aliothmoon.maadroid.engine.limbus.action.ActionOutcome
@@ -103,6 +107,61 @@ class MailPipelineTest {
         assertEquals(1, mailbox.opened)
         assertEquals(1, mailbox.claimed)
         assertEquals(1, mailbox.counters["check_mail"])
+    }
+
+    @Test fun expFailureKeepsCompletedMailAndNeverStartsTheRemainingTasks() = runTest {
+        val mailbox = Mailbox(hasMail = true, hasNotification = false)
+        val events = mutableListOf<EngineEvent>()
+        val selected = linkedMapOf(11 to LimbusTask.MAIL, 27 to LimbusTask.EXP,
+            38 to LimbusTask.THREAD, 49 to LimbusTask.REWARD)
+        ActionRegistry.register("exp_select_stage", object : ActionBackend {
+            override suspend fun execute(ctx: ActionContext): ActionOutcome {
+                assertEquals(1, ctx.counterOf("check_mail"))
+                assertEquals(listOf(
+                    EngineEvent.Task(11, "mail", TaskPhase.Started),
+                    EngineEvent.Task(11, "mail", TaskPhase.Completed),
+                    EngineEvent.Task(27, "exp", TaskPhase.Started),
+                ), events.filterIsInstance<EngineEvent.Task>())
+                return ActionOutcome.Finish(false, "找不到 09")
+            }
+        })
+
+        assertFalse(mailbox.taskRun(selected, events::add).execute())
+
+        assertEquals(1, mailbox.opened)
+        assertEquals(1, mailbox.claimed)
+        val tasks = events.filterIsInstance<EngineEvent.Task>()
+        assertEquals(listOf(11, 11, 27, 27, 38, 49), tasks.map { it.taskId })
+        assertEquals(listOf(TaskPhase.Started, TaskPhase.Completed, TaskPhase.Started,
+            TaskPhase.Failed, TaskPhase.Stopped, TaskPhase.Stopped), tasks.map { it.phase })
+        assertTrue(tasks.last().message!!.startsWith("未开始："))
+        assertTrue(events.filterIsInstance<EngineEvent.Failure>().single().reason.contains("找不到 09"))
+    }
+
+    @Test fun stoppingAfterMailKeepsItsSuccessWithoutReportingAnExpFailure() = runTest {
+        val mailbox = Mailbox(hasMail = true, hasNotification = false)
+        val events = mutableListOf<EngineEvent>()
+        ActionRegistry.register("exp_select_stage", object : ActionBackend {
+            override suspend fun execute(ctx: ActionContext): ActionOutcome = throw StoppedException()
+        })
+
+        assertFalse(mailbox.taskRun(linkedMapOf(51 to LimbusTask.MAIL, 62 to LimbusTask.EXP), events::add).execute())
+
+        assertEquals(listOf(TaskPhase.Started, TaskPhase.Completed, TaskPhase.Started, TaskPhase.Stopped),
+            events.filterIsInstance<EngineEvent.Task>().map { it.phase })
+        assertTrue(events.none { it is EngineEvent.Failure })
+    }
+
+    @Test fun emptyMailboxCompletesTheSelectedTaskWithItsActualId() = runTest {
+        val mailbox = Mailbox(hasMail = false, hasNotification = false)
+        val events = mutableListOf<EngineEvent>()
+
+        assertTrue(mailbox.taskRun(mapOf(1001 to LimbusTask.MAIL), events::add).execute())
+
+        assertEquals(1, mailbox.opened)
+        assertEquals(0, mailbox.claimed)
+        assertEquals(listOf(EngineEvent.Task(1001, "mail", TaskPhase.Started),
+            EngineEvent.Task(1001, "mail", TaskPhase.Completed)), events)
     }
 
     @Test fun unconfirmedClaimFailsWithoutEscapingOrClaimingAgainOnTheHomePage() = runTest {
@@ -316,6 +375,28 @@ class MailPipelineTest {
                 recognizeGate = gate::recognize,
                 onLog = logs::add,
             ).also { it.delayer = {} }
+        }
+
+        fun taskRun(selected: Map<Int, LimbusTask>, events: (EngineEvent) -> Unit): LimbusTaskRun {
+            val registry = PipelineRegistry.load(LalcV500Fixtures.taskFiles())
+                .withEnabled(LimbusTask.allNodeNames().associateWith { node -> selected.values.any { it.nodeName == node } })
+                .withAndroidMailEntry()
+                .withTargetCounts(mapOf("exp_check" to 1, "thread_check" to 1, "mirror_check" to 1))
+            val gate = NodeRecognizer(recognize)
+            return LimbusTaskRun(
+                registry, selected,
+                contextFactory = { name, node, matches ->
+                    object : ActionContext by TestActionContext(node, name, input, recognize, recognizeResult = matches) {
+                        override fun counterOf(nodeName: String) = counters[nodeName] ?: 0
+                        override fun incrementCounter(nodeName: String): Int =
+                            ((counters[nodeName] ?: 0) + 1).also { counters[nodeName] = it }
+                        override fun log(message: String) { logs += message }
+                    }
+                },
+                recognizeGate = gate::recognize,
+                emit = events,
+                onLog = logs::add,
+            ).also { it.pipeline.delayer = {} }
         }
     }
 }

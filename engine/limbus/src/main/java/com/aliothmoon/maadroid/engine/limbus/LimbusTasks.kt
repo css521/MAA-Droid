@@ -16,9 +16,11 @@ enum class LimbusTask(
     val nodeName: String,
     /** 该任务的配置分节名；无配置的任务为 null */
     val configSection: String?,
+    /** Android 运行副本中的实际入口；邮件使用上游已有的一次性入口。 */
+    val entryNodeName: String = nodeName,
 ) {
     /** 领取邮件 */
-    MAIL("mail", "check_and_get_mails", null),
+    MAIL("mail", "check_and_get_mails", null, "mail_entry"),
 
     /** 经验副本 */
     EXP("exp", "exp_entry", "exp"),

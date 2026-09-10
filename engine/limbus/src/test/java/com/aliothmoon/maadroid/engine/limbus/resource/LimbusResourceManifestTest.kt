@@ -1,6 +1,7 @@
 package com.aliothmoon.maadroid.engine.limbus.resource
 
 import com.aliothmoon.maadroid.engine.ResourceRevision
+import com.aliothmoon.maadroid.engine.limbus.fixtures.LalcV500Fixtures
 import com.aliothmoon.maadroid.engine.limbus.fixtures.OnnxInterfaceFixture
 import java.io.File
 import java.util.Base64
@@ -18,8 +19,21 @@ class LimbusResourceManifestTest {
     private fun write(path: String, text: String) = File(temp.root, path).also { it.parentFile!!.mkdirs(); it.writeText(text) }
     private fun fixture() {
         write("config/task/main.json", """{"main":{"action":"empty","interrupt":[],"params":{"template":"test"}},"empty":{"action":"empty","interrupt":[]}}""")
+        write("config/task/mail.json", LalcV500Fixtures.taskFiles().getValue("mail.json"))
+        // Minimal surrounding routes for the real upstream mail graph; no inference runs.
+        write("config/task/mail-support.json", """{
+            "task_center":{"next":["check_and_get_mails"]},
+            "main_circle_center":{"next":["task_center"]},
+            "main_window_confirm":{"interrupt":[]},
+            "wait_connecting_disappear":{"interrupt":[]},
+            "error_handler":{"interrupt":[]},
+            "click":{"interrupt":[]},"key":{"interrupt":[]},"check_out_update":{"interrupt":[]}
+        }""")
         write("config/language/zh/test.json", "{}")
         File(temp.root, "img/general").mkdirs()
+        for (template in listOf("main_window_no_text", "red_exclaimation", "no_mail_in_storage")) {
+            write("img/general/$template.png", "").writeBytes(png)
+        }
         for (lang in listOf("zh", "en")) {
             write("img/$lang/test.png", "").writeBytes(png)
         }
@@ -34,12 +48,12 @@ class LimbusResourceManifestTest {
             OnnxInterfaceFixture.model(listOf(null, 3, null, null), listOf(null, 1, null, null)))
         write("recognize/models/ch_PP-OCRv5_rec_mobile.onnx", "").writeBytes(
             OnnxInterfaceFixture.model(listOf(null, 3, 48, null), listOf(null, null, 4), "a\nb"))
-        write(".upstream-source/task_action/base.py", listOf("empty", "click", "key", "swipe")
+        write(".upstream-source/task_action/base.py", listOf("empty", "click", "key", "swipe", "check_out_update")
             .joinToString("\n") { "@TaskExecution.register('$it')\ndef handler(): pass" })
     }
     private fun finalizePack() = LimbusResourceManifest.finalize(temp.root, revision) { text ->
         val required = Json.parseToJsonElement(text).jsonObject.getValue("required_actions").jsonArray.map { it.jsonPrimitive.content }
-        if (required.any { it !in setOf("empty", "click", "key", "swipe") }) "upgrade required" else null
+        if (required.any { it !in setOf("empty", "click", "key", "swipe", "check_out_update") }) "upgrade required" else null
     }
     @Test fun manifestIsDeterministicAndVerifiesEveryFile() {
         fixture()
@@ -84,11 +98,66 @@ class LimbusResourceManifestTest {
         assertEquals(setOf("empty"), LimbusResourceManifest.declaredActions(source))
     }
 
-    private fun rejected(message: String) {
+    private fun rejected(vararg messages: String) {
         val failure = runCatching { finalizePack() }.exceptionOrNull()
-        assertNotNull("Expected rejection: $message", failure)
-        assertTrue(failure!!.message, failure.message.orEmpty().contains(message))
+        assertNotNull("Expected rejection: ${messages.toList()}", failure)
+        for (message in messages) {
+            assertTrue(failure!!.message, failure.message.orEmpty().contains(message))
+        }
         assertFalse(File(temp.root, "manifest.json").exists())
+    }
+
+    private fun rewriteMail(change: (JsonObject) -> JsonObject) {
+        val file = File(temp.root, "config/task/mail.json")
+        file.writeText(change(Json.parseToJsonElement(file.readText()).jsonObject).toString())
+    }
+
+    @Test fun changedMailRouteIsRejectedBeforeWritingManifest() {
+        fixture()
+        rewriteMail { pipeline ->
+            val reward = pipeline.getValue("confirm_reward").jsonObject
+            // The reference exists, so generic graph validation alone accepts this change.
+            JsonObject(pipeline + ("confirm_reward" to JsonObject(reward +
+                ("next" to JsonArray(listOf(JsonPrimitive("exit_mailbox")))))))
+        }
+        rejected("邮件流水线节点 confirm_reward 已变化", "请升级 App")
+    }
+
+    @Test fun disabledMailCannotHideAnIncompatibleClaimTarget() {
+        fixture()
+        rewriteMail { pipeline ->
+            val open = pipeline.getValue("check_and_get_mails").jsonObject
+            val claim = pipeline.getValue("claim_mail").jsonObject
+            val params = claim.getValue("params").jsonObject
+            JsonObject(pipeline + mapOf(
+                "check_and_get_mails" to JsonObject(open + ("enable" to JsonPrimitive(false))),
+                "claim_mail" to JsonObject(claim + ("params" to JsonObject(params +
+                    ("target" to JsonArray(listOf(JsonPrimitive(900), JsonPrimitive(300))))))),
+            ))
+        }
+        rejected("邮件流水线节点 claim_mail 已变化", "请升级 App")
+    }
+
+    @Test fun compatibleMailMetadataKeepsOriginalJsonAndDisabledFlag() {
+        fixture()
+        rewriteMail { pipeline ->
+            val open = pipeline.getValue("check_and_get_mails").jsonObject
+            val params = open.getValue("params").jsonObject
+            JsonObject(pipeline + ("check_and_get_mails" to JsonObject(open + mapOf(
+                "enable" to JsonPrimitive(false),
+                "desc" to JsonPrimitive("Updated upstream mail description"),
+                "rate_limit" to JsonPrimitive(1.5),
+                "params" to JsonObject(params + ("threshold" to JsonPrimitive(0.85))),
+                "future_ui_hint" to JsonObject(mapOf("label" to JsonPrimitive("Mail"))),
+            ))))
+        }
+        val original = File(temp.root, "config/task").listFiles()!!.associateWith { it.readBytes() }
+
+        finalizePack()
+
+        assertNull(LimbusResourceManifest.verify(temp.root) { null })
+        // Validation must not persist the forced enable, task_center rewrite or Android markers.
+        for ((file, bytes) in original) assertArrayEquals(file.name, bytes, file.readBytes())
     }
 
     @Test fun otherLanguageTemplateCannotMaskMissingEnglishTemplate() {

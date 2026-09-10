@@ -8,7 +8,6 @@ import com.aliothmoon.maadroid.engine.EngineDiagnosticSink
 import com.aliothmoon.maadroid.engine.EngineResources
 import com.aliothmoon.maadroid.engine.GameProfile
 import com.aliothmoon.maadroid.engine.LogLevel
-import com.aliothmoon.maadroid.engine.TaskPhase
 import com.aliothmoon.maadroid.engine.limbus.action.LimbusActions
 import com.aliothmoon.maadroid.engine.limbus.config.JsonLimbusConfig
 import kotlinx.serialization.json.JsonObject
@@ -20,6 +19,7 @@ import com.aliothmoon.maadroid.engine.limbus.recognize.OnnxClassifier
 import com.aliothmoon.maadroid.engine.limbus.recognize.ocr.PpOcrEngine
 import com.aliothmoon.maadroid.engine.limbus.recognize.ResourcePackTemplateIndex
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -74,7 +74,7 @@ class LimbusEngine(
     private var runJob: Job? = null
 
     @Volatile
-    private var runner: PipelineRunner? = null
+    private var runner: LimbusTaskRun? = null
 
     @Volatile
     private var stopRequested = false
@@ -223,9 +223,15 @@ class LimbusEngine(
             warn("流水线里没有 ${task.type} 对应的节点 ${task.nodeName}，资源包可能与本版本不匹配")
             return AutomationEngine.INVALID_TASK_ID
         }
-        val id = taskIds.incrementAndGet()
-        synchronized(queue) { queue += QueuedTask(id, type, paramsJson) }
-        return id
+        return synchronized(queue) {
+            // Upstream runs each task type once with a configured repetition count.
+            // Do not issue two IDs for one execution and silently lose the second ID.
+            if (queue.any { it.type == type }) {
+                warn("同类任务 $type 只能追加一次，请通过任务次数配置重复执行")
+                return@synchronized AutomationEngine.INVALID_TASK_ID
+            }
+            taskIds.incrementAndGet().also { queue += QueuedTask(it, type, paramsJson) }
+        }
     }
 
     override fun setTaskParams(taskId: Int, paramsJson: String): Boolean =
@@ -293,25 +299,25 @@ class LimbusEngine(
         runJob = scope.launch {
             var ok = false
             try {
-                selected.forEach {
-                    emit(EngineEvent.Task(taskIdOf(tasks, it), it.type, TaskPhase.Started))
-                }
                 info("本次运行任务：${selected.joinToString { it.type }}")
                 info("游戏语言：${if (language == "en") "英文" else "中文"}")
-                ok = runPipeline(effectiveRegistry, dev, rec, index, config, selected, tasks)
+                ok = runPipeline(effectiveRegistry, dev, rec, index, config, tasks)
                 if (ok && config.bool("other_task", "close_game", false)) {
                     val pkg = profile.gamePackages.firstOrNull { dev.control.isPackageInstalled(it) }
                     if (pkg != null) dev.control.stopApp(pkg)
                 }
+            } catch (cancelled: CancellationException) {
+                ok = false
+                throw cancelled
+            } catch (failure: Throwable) {
+                ok = false
+                fail("任务运行后的处理失败: ${failure.message}", failure)
             } finally {
                 emit(EngineEvent.AllTasksFinished(success = ok && !stopRequested))
             }
         }
         return true
     }
-
-    private fun taskIdOf(tasks: List<QueuedTask>, task: LimbusTask): Int =
-        tasks.firstOrNull { it.type == task.type }?.id ?: AutomationEngine.INVALID_TASK_ID
 
     /**
      * 合并各任务带来的配置分节。
@@ -334,12 +340,12 @@ class LimbusEngine(
         rec: LimbusRecognizer,
         index: ResourcePackTemplateIndex,
         config: JsonLimbusConfig,
-        selected: List<LimbusTask>,
         tasks: List<QueuedTask>,
     ): Boolean {
         val nodeRecognizer = NodeRecognizer(rec) { warn(it) }
-        val pipelineRunner = PipelineRunner(
+        val taskRun = LimbusTaskRun(
             registry = reg,
+            tasks = tasks.associate { it.id to requireNotNull(LimbusTask.ofType(it.type)) },
             contextFactory = { name, node, matches ->
                 LimbusActionContext(
                     node = node,
@@ -355,28 +361,14 @@ class LimbusEngine(
                 )
             },
             recognizeGate = { nodeRecognizer.recognize(it) },
+            emit = ::emit,
+            isStopRequested = { stopRequested },
             onLog = { debug(it) },
         )
-        runner = pipelineRunner
+        runner = taskRun
 
         return try {
-            val reason = pipelineRunner.run(LimbusTask.ENTRY_NODE)
-            val phase = if (reason == null) TaskPhase.Completed else TaskPhase.Failed
-            selected.forEach {
-                emit(EngineEvent.Task(taskIdOf(tasks, it), it.type, phase, reason))
-            }
-            reason == null
-        } catch (e: StoppedException) {
-            selected.forEach {
-                emit(EngineEvent.Task(taskIdOf(tasks, it), it.type, TaskPhase.Stopped))
-            }
-            false
-        } catch (e: Throwable) {
-            selected.forEach {
-                emit(EngineEvent.Task(taskIdOf(tasks, it), it.type, TaskPhase.Failed, e.message))
-            }
-            fail("流水线异常终止: ${e.message}", e)
-            false
+            taskRun.execute()
         } finally {
             runner = null
         }

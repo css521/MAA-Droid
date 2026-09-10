@@ -6,6 +6,8 @@ import com.aliothmoon.maadroid.engine.EngineResources
 import com.aliothmoon.maadroid.engine.GameProfile
 import com.aliothmoon.maadroid.engine.LogLevel
 import com.aliothmoon.maadroid.engine.ResourcePackSpec
+import com.aliothmoon.maadroid.engine.limbus.fixtures.LalcV500Fixtures
+import com.aliothmoon.maadroid.engine.limbus.pipeline.PipelineRegistry
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
@@ -16,10 +18,36 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.Rule
+import org.junit.rules.TemporaryFolder
 import java.io.File
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class LimbusEngineResourcesTest {
+    @get:Rule val temp = TemporaryFolder()
+
+    @Test fun duplicateTaskIsRejectedAtAppendWithoutConsumingAnId() = runTest {
+        val files = LalcV500Fixtures.taskFiles()
+        files.forEach { (name, json) ->
+            File(temp.root, "config/task/$name").apply { parentFile!!.mkdirs(); writeText(json) }
+        }
+        // prepare indexes names without decoding images; connect owns native loading.
+        PipelineRegistry.load(files).referencedTemplates().forEach { name ->
+            File(temp.root, "img/general/$name.png").apply { parentFile!!.mkdirs(); writeBytes(byteArrayOf()) }
+        }
+        val engine = LimbusEngine(backgroundScope)
+        try {
+            engine.prepare(EngineResources(LimbusProfile, mapOf(LimbusResourcePack.packId to temp.root))).getOrThrow()
+            val first = engine.appendTask("exp", "{}")
+            assertTrue(first > 0)
+            assertEquals(AutomationEngine.INVALID_TASK_ID, engine.appendTask("exp", "{}"))
+            assertEquals(first + 1, engine.appendTask("mail", "{}"))
+            assertTrue(engine.setTaskParams(first, "{\"exp\":{\"check_node_target_count\":3}}"))
+        } finally {
+            engine.release()
+        }
+    }
+
     @Test fun missingLimbusPackFailsBeforeLoadingAndEmitsTheExistingFailureEvents() = runTest {
         assertRejectedBeforeLoading(
             EngineResources(LimbusProfile, emptyMap()),

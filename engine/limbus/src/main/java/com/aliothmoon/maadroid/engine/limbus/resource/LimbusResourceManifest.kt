@@ -3,6 +3,7 @@ package com.aliothmoon.maadroid.engine.limbus.resource
 import com.aliothmoon.maadroid.engine.ResourceRevision
 import com.aliothmoon.maadroid.engine.UpstreamArchive
 import com.aliothmoon.maadroid.engine.isSafeResourcePath
+import com.aliothmoon.maadroid.engine.limbus.LimbusTask
 import com.aliothmoon.maadroid.engine.limbus.config.LimbusLanguage
 import com.aliothmoon.maadroid.engine.limbus.pipeline.PipelineRegistry
 import com.aliothmoon.maadroid.engine.limbus.recognize.ClassifierSpec
@@ -166,6 +167,10 @@ internal object LimbusResourceManifest {
         val pipelineFiles = File(root, "config/task").listFiles().orEmpty()
             .filter { it.isFile && it.extension == "json" }.associate { it.name to it.readText() }
         val pipeline = PipelineRegistry.load(pipelineFiles)
+        // Activation must support a later run with Mail selected, even if the resource
+        // disables it by default. Reuse the runtime guard on a copy; keep the original
+        // graph and resource bytes for the manifest, without persisting Android rewrites.
+        pipeline.withEnabled(mapOf(LimbusTask.MAIL.nodeName to true)).withAndroidMailEntry()
         val templates = File(root, "img").walkTopDown().filter { it.isFile && it.extension.equals("png", true) }.toList()
         templates.forEach(PngTemplateContract::validate)
         require(File(root, "img/general").isDirectory) { "缺少通用模板目录 img/general" }

@@ -3,10 +3,12 @@ package com.aliothmoon.maadroid.engine.resource
 import com.aliothmoon.maadroid.engine.ResourceRevision
 import com.aliothmoon.maadroid.engine.limbus.LimbusResourcePack
 import java.io.File
+import java.util.Base64
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
@@ -32,6 +34,32 @@ class LimbusResourceInstallTest {
                     "recognition" to JsonPrimitive("future_model"),
                     "inverse" to JsonPrimitive(true),
                 ))))
+            }
+        }
+    }
+
+    @Test fun changedMailRouteCannotReplaceTheActivePack() {
+        assertRejectedUpdate("邮件流水线节点 confirm_reward 已变化", "请升级 App") { entries ->
+            entries.rewriteJson("config/task/mail.json") { pipeline ->
+                val reward = pipeline.getValue("confirm_reward").jsonObject
+                // Still a valid node reference; the Android mail guard must reject the route.
+                JsonObject(pipeline + ("confirm_reward" to JsonObject(reward +
+                    ("next" to JsonArray(listOf(JsonPrimitive("exit_mailbox")))))))
+            }
+        }
+    }
+
+    @Test fun disabledMailWithChangedClaimTargetCannotReplaceTheActivePack() {
+        assertRejectedUpdate("邮件流水线节点 claim_mail 已变化", "请升级 App") { entries ->
+            entries.rewriteJson("config/task/mail.json") { pipeline ->
+                val open = pipeline.getValue("check_and_get_mails").jsonObject
+                val claim = pipeline.getValue("claim_mail").jsonObject
+                val params = claim.getValue("params").jsonObject
+                JsonObject(pipeline + mapOf(
+                    "check_and_get_mails" to JsonObject(open + ("enable" to JsonPrimitive(false))),
+                    "claim_mail" to JsonObject(claim + ("params" to JsonObject(params +
+                        ("target" to JsonArray(listOf(JsonPrimitive(900), JsonPrimitive(300))))))),
+                ))
             }
         }
     }
@@ -90,7 +118,7 @@ class LimbusResourceInstallTest {
         }
     }
 
-    @Test fun compatibleLanguageAndTemplateUpdateActivatesTheSecondRevision() {
+    @Test fun compatibleMailLanguageAndTemplateUpdateActivatesTheSecondRevision() {
         val entries = fixtureEntries()
         val target = installFirstRevision(entries)
         val before = snapshot(target)
@@ -102,6 +130,24 @@ class LimbusResourceInstallTest {
             JsonObject(pipeline + ("main" to JsonObject(main + ("params" to
                 JsonObject(params + ("template" to JsonPrimitive("updated-test")))))))
         }
+        entries.rewriteJson("config/task/mail.json") { pipeline ->
+            val open = pipeline.getValue("check_and_get_mails").jsonObject
+            val params = open.getValue("params").jsonObject
+            JsonObject(pipeline + ("check_and_get_mails" to JsonObject(open + mapOf(
+                "enable" to JsonPrimitive(false),
+                "desc" to JsonPrimitive("Updated upstream mail description"),
+                "rate_limit" to JsonPrimitive(1.5),
+                "params" to JsonObject(params + ("threshold" to JsonPrimitive(0.85))),
+                "future_ui_hint" to JsonObject(mapOf("label" to JsonPrimitive("Mail"))),
+            ))))
+        }
+        // A different complete 1x1 RGB image, without game assets or native decoding.
+        val mailTemplate = "img/general/no_mail_in_storage.png"
+        val updatedTemplate = Base64.getDecoder().decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYGAAAAAEAAH2FzhVAAAAAElFTkSuQmCC",
+        )
+        assertFalse(updatedTemplate.contentEquals(entries.getValue(SOURCE_PREFIX + mailTemplate)))
+        entries[SOURCE_PREFIX + mailTemplate] = updatedTemplate
         for (language in listOf("en", "zh")) {
             entries.moveEntry("img/$language/test.png", "img/$language/updated-test.png")
         }
@@ -117,6 +163,10 @@ class LimbusResourceInstallTest {
             File(target, "config/language/zh/test.json").readBytes())
         assertArrayEquals(entries.getValue(SOURCE_PREFIX + "config/task/main.json"),
             File(target, "config/task/main.json").readBytes())
+        // Forced enable and Android routing/markers are validation-only, never saved to disk.
+        for (path in listOf("config/task/mail.json", "config/task/mail-support.json", mailTemplate)) {
+            assertArrayEquals(path, entries.getValue(SOURCE_PREFIX + path), File(target, path).readBytes())
+        }
         for (language in listOf("en", "zh")) {
             assertFalse(File(target, "img/$language/test.png").exists())
             assertArrayEquals(entries.getValue(SOURCE_PREFIX + "img/$language/updated-test.png"),
@@ -126,7 +176,7 @@ class LimbusResourceInstallTest {
         assertOnlyActiveDirectoryRemains(target)
     }
 
-    private fun assertRejectedUpdate(reason: String, change: (MutableMap<String, ByteArray>) -> Unit) {
+    private fun assertRejectedUpdate(vararg reasons: String, change: (MutableMap<String, ByteArray>) -> Unit) {
         val entries = fixtureEntries()
         val target = installFirstRevision(entries)
         val before = snapshot(target)
@@ -139,8 +189,10 @@ class LimbusResourceInstallTest {
             installer.install(archive(entries), target, pack, secondRevision, phaseChanged = phases::add)
         }.exceptionOrNull()
 
-        assertNotNull("Expected rejection: $reason", failure)
-        assertTrue("Expected '$reason', got: $failure", failure!!.message.orEmpty().contains(reason))
+        assertNotNull("Expected rejection: ${reasons.toList()}", failure)
+        for (reason in reasons) {
+            assertTrue("Expected '$reason', got: $failure", failure!!.message.orEmpty().contains(reason))
+        }
         assertEquals(verificationPhases, phases)
         assertFalse(ResourceInstallPhase.ACTIVATING in phases)
         assertEquals("Every installed directory and file must remain unchanged", before, snapshot(target))
