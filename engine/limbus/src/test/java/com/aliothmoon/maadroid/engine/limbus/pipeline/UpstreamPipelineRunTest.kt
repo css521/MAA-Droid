@@ -113,8 +113,10 @@ class UpstreamPipelineRunTest {
             assertNull(runner.run("${section}_select_stage"))
             assertEquals(listOf("${section}_choose_team"), chosen)
             assertEquals(4, observations) // three observations in action, one in the real next gate
+            // 纺锤末次点击横向固定为该行 Enter 的 785（手机上难度标签不可点），
+            // 纵向跟随 OCR 命中；经验仍沿用上游的命中坐标 + 偏移
             assertEquals(if (section == "exp") listOf(810 to 480) else
-                listOf(140 to 330, 370 to 480, 800 to 205), input.clicks())
+                listOf(140 to 330, 370 to 480, 785 to 205), input.clicks())
             assertTrue(logs.none { "exp_can_not_skip_battle 执行动作" in it })
         }
     }

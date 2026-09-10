@@ -45,14 +45,26 @@ class LuxcavationActionsTest {
         }
     }
 
-    @Test fun `纺锤先切副本再选模式最后点击 OCR 返回的全屏坐标`() = runTest {
+    /**
+     * 纺锤难度标签的搜索区与点击目标都**故意偏离上游**，因为上游那两个值是 PC 布局的：
+     *
+     * - 上游 `mask=[610, 170, 90, 400]`（luxcavation.py:54）在手机上从标签右边缘外 2px
+     *   起裁，只能读到被切碎的 boss 名（实测 `Brazen Bull - Tearful` → `I - Tearfi`），
+     *   目标层级永远匹配不上。手机上标签在 x 522~608，故左扩到 500。
+     * - 上游点 OCR 命中的标签中心。标签不是可点区域，点它落在行内空白，
+     *   表现为"点了分割线却进不了战斗"。改为点该行的 Enter 按钮（x=785），
+     *   纵向仍取 OCR 命中的 y，这样翻页后仍然点对行。
+     */
+    @Test fun `纺锤在手机布局下搜索难度标签并点击该行 Enter`() = runTest {
         for ((mode, expectedY) in listOf("enter" to 480, "skip battle" to 515)) {
-            val reader = StageRecognizer(listOf(TextMatch("60", 656, 399, .9)))
+            // OCR 命中的是难度标签中心（帧内实测约 565,477），不是 boss 名
+            val reader = StageRecognizer(listOf(TextMatch("60", 565, 477, .9)))
             val ctx = context("thread", "60", mode, reader)
 
             assertEquals(ActionOutcome.Continue, ActionRegistry["thread_select_stage"]!!.execute(ctx))
-            assertEquals(listOf("60" to Crop(610, 170, 90, 400)), reader.requests)
-            assertEquals(listOf(140 to 330, 370 to expectedY, 656 to 399), ctx.fakeInput.clicks())
+            assertEquals(listOf("60" to Crop(500, 170, 200, 400)), reader.requests)
+            // 末次点击横向必须是 Enter 的 785，而不是命中的 565
+            assertEquals(listOf(140 to 330, 370 to expectedY, 785 to 477), ctx.fakeInput.clicks())
         }
     }
 
@@ -83,7 +95,8 @@ class LuxcavationActionsTest {
         assertEquals(2, reader.requests.size)
         assertTrue(ctx.fakeInput.events.contains("down(650,325)"))
         assertTrue(ctx.fakeInput.events.contains("up(650,430)"))
-        assertEquals(listOf(140 to 330, 370 to 480, 645 to 380), ctx.fakeInput.clicks())
+        // 翻页后仍点该行的 Enter：横向固定 785，纵向跟随新命中的 y
+        assertEquals(listOf(140 to 330, 370 to 480, 785 to 380), ctx.fakeInput.clicks())
         assertEquals(listOf(1.0, 1.0, .6), ctx.slept)
     }
 

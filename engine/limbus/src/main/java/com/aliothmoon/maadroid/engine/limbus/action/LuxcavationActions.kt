@@ -65,24 +65,46 @@ private object ThreadSelectStageAction : ActionBackend {
         }
         ctx.delay(1.0)
 
-        var pos = ctx.recognize.findText(targetStage, crop = Crop(610, 170, 90, 400))
+        var pos = ctx.recognize.findText(targetStage, crop = THREAD_DIFFICULTY_REGION)
         var cnt = 0
         while (pos.isEmpty()) {
             ctx.ensureActive()
             swipe(ctx.input, 650, 325, 650, 430)
             ctx.delay(0.6)
-            pos = ctx.recognize.findText(targetStage, crop = Crop(610, 170, 90, 400))
+            pos = ctx.recognize.findText(targetStage, crop = THREAD_DIFFICULTY_REGION)
             if (++cnt > 5) {
                 ctx.log("选不到 Lv$targetStage 的 Thread 副本关卡")
                 return ActionOutcome.Finish(false, "找不到 Thread 副本 $targetStage")
             }
         }
 
-        click(ctx.input, pos[0].x, pos[0].y)
+        // 点该行的 Enter 按钮，而不是 OCR 命中的难度标签中心。标签不是可点区域，
+        // 点它落在行内空白处，表现为"点了分割线但进不了战斗"。行的纵向位置取自
+        // OCR 命中（每行高约 103px，见下），横向用 Enter 的固定位置。
+        click(ctx.input, THREAD_ENTER_X, pos[0].y)
         ctx.log("[thread_select_stage] 模式=$mode，关卡=$targetStage")
         return awaitSelectionPage(ctx, "thread", mode)
     }
 }
+
+/**
+ * Thread 关卡列表里 `Difficulty LvXX` 标签所在区域（1280x720 帧坐标）。
+ *
+ * 上游用的是 `mask=[610, 170, 90, 400]`（见 LALC
+ * `lalc_backend/task_action/luxcavation.py:54`）——那是 PC 版布局。手机上难度标签在
+ * **x 522~608**，而上游 crop 从 610 起，**正好压在标签右边缘外 2px**，于是这条 90px
+ * 竖带只能读到右边的 boss 名，还把它切成碎片（实测 `Brazen Bull - Tearful` → `I - Tearfi`、
+ * `Consecutive Battle ×1` → `utive Battle ×1`，另有 `5`、`品` 这类半个字），
+ * 目标层级永远匹配不上，重试耗尽后报"找不到 Thread 副本"。
+ *
+ * 现区域向左扩到 500 并留出余量。纵向沿用上游的 170~570：实测三行的文字中心在
+ * y=297 / 400 / 503（行高约 103），都在范围内；底部资源数字（脑啡肽、Lunacy）在
+ * y>650，不会被误读成层级。
+ */
+private val THREAD_DIFFICULTY_REGION = Crop(500, 170, 200, 400)
+
+/** Thread 关卡行 Enter 按钮的横向中心（帧内实测 x 763~806） */
+private const val THREAD_ENTER_X = 785
 
 /** 不重复点击入口；等上游 next 所需的页面出现，避免转场中直接落入无条件错误节点。 */
 private suspend fun awaitSelectionPage(ctx: ActionContext, section: String, mode: String): ActionOutcome {
