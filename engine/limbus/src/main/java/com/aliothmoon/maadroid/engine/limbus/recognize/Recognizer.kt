@@ -63,6 +63,14 @@ interface Recognizer {
     /** 文本查找：包含目标子串，对应上游 find_text_in_image；threshold 是 OCR 置信度。 */
     suspend fun findText(target: String, crop: Crop? = null, threshold: Double = 0.5): List<TextMatch>
 
+    /** 经验卡片专用：可识别 Android OCR 丢失前导零的完整 STAGE 标签。 */
+    suspend fun findExpStage(stage: String): List<TextMatch> =
+        findText(stage, crop = ExpStageQuery.REGION)
+
+    /** 邮箱专用观察；未知结果不能作为空邮箱或领取完成的证据。 */
+    suspend fun observeMailbox(): MailboxObservation? =
+        MailboxDetector.fromText(detectText(MailboxDetector.region, .7))
+
     /**
      * 单标签 ONNX 分类：每个区域一个标签。
      * [model] 取 `mirror_legend`（九宫格节点类型）或 `skill_icon`（拼点优劣势）。

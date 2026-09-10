@@ -1,7 +1,6 @@
 package com.aliothmoon.maadroid.engine.limbus.action
 
 import com.aliothmoon.maadroid.engine.limbus.action.InputHelper.click
-import com.aliothmoon.maadroid.engine.limbus.action.InputHelper.keyPress
 import com.aliothmoon.maadroid.engine.limbus.recognize.Match
 
 /** Android mailbox input safeguards; routing and one-shot completion still use mail.json. */
@@ -27,20 +26,56 @@ internal object MailActions {
 
     suspend fun exitIfEmpty(ctx: ActionContext): ActionOutcome? {
         ctx.ensureActive()
-        if (matches(ctx, "no_mail_in_storage").isEmpty()) return null
+        if (ctx.recognize.observeMailbox()?.empty != true && matches(ctx, "no_mail_in_storage").isEmpty()) return null
         ctx.log("邮箱暂无可领取邮件")
         return ActionOutcome.Goto("exit_mailbox")
+    }
+
+    suspend fun closeMailbox(ctx: ActionContext): ActionOutcome {
+        repeat(5) {
+            ctx.ensureActive()
+            val close = ctx.recognize.observeMailbox()?.close
+            if (close != null) {
+                ctx.ensureActive()
+                ctx.log("点击邮箱关闭按钮，位置=${close.x},${close.y}")
+                click(ctx.input, close.x, close.y)
+                return awaitMailboxClosed(ctx)
+            }
+            ctx.delay(0.5)
+        }
+        return ActionOutcome.Finish(false, "无法确认邮箱关闭按钮，请放大游戏画面检查邮箱后重试")
+    }
+
+    private suspend fun awaitMailboxClosed(ctx: ActionContext): ActionOutcome {
+        repeat(10) {
+            ctx.delay(0.5)
+            ctx.ensureActive()
+            if (ctx.recognize.observeMailbox() == null) {
+                val window = ctx.recognize.templateMatch("main_window_no_text").firstOrNull()
+                val drive = ctx.recognize.templateMatch("main_drive_no_text").firstOrNull()
+                // Null alone includes loading/blank frames. Both positive home anchors are
+                // required; recheck the mailbox so its background navigation cannot suffice.
+                if (window != null && drive != null && ctx.recognize.observeMailbox() == null) {
+                    ctx.log("已关闭邮箱并返回主页")
+                    return ActionOutcome.Continue
+                }
+            }
+        }
+        return ActionOutcome.Finish(false, "邮箱仍未关闭或主页尚未就绪，请检查游戏画面后重试")
     }
 
     suspend fun confirmReward(ctx: ActionContext): ActionOutcome {
         repeat(30) {
             ctx.ensureActive()
-            if (matches(ctx, "rewards_acquired_confirm").isNotEmpty()) {
-                keyPress(ctx.input, "esc")
+            // Empty mailboxes must leave before any generic Confirm template is considered.
+            exitIfEmpty(ctx)?.let { return it }
+            val confirm = matches(ctx, "rewards_acquired_confirm").firstOrNull()
+            if (confirm != null) {
+                ctx.ensureActive()
+                click(ctx.input, confirm.x, confirm.y)
                 ctx.delay(0.5)
                 return ActionOutcome.Continue
             }
-            exitIfEmpty(ctx)?.let { return it }
             ctx.delay(1.0)
         }
         // Blind Escape could close the mailbox; the following inverse gate would then

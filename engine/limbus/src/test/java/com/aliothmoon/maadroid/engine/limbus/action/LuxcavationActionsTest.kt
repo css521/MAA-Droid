@@ -19,6 +19,8 @@ class LuxcavationActionsTest {
     private class StageRecognizer(vararg rounds: List<TextMatch>) : Recognizer by FakeRecognizer() {
         private val remaining = rounds.toMutableList()
         val requests = mutableListOf<Pair<String, Crop?>>()
+        override suspend fun findExpStage(stage: String): List<TextMatch> =
+            findText(stage, Crop(250, 180, 1000, 50), .5)
         override suspend fun findText(target: String, crop: Crop?, threshold: Double): List<TextMatch> {
             requests += target to crop
             return if (remaining.isEmpty()) emptyList() else remaining.removeAt(0)

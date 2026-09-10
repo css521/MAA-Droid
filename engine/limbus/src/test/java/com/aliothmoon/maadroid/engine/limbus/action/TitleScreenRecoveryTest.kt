@@ -64,4 +64,24 @@ class TitleScreenRecoveryTest {
         ctx.fakeRecognizer.onTemplate("daily_login_close")
         assertEquals(ActionOutcome.Continue, recover(ctx))
     }
+
+    @Test fun retainedLuxcavationPageUsesUpstreamEscapeImmediatelyAndRetriesAreBounded() = runTest {
+        val ctx = TestActionContext()
+        ctx.fakeRecognizer.onTemplate("luxcavation", Match(147, 198, .96))
+        assertEquals(ActionOutcome.Continue, recover(ctx))
+        assertEquals(listOf(KeyMap.resolve("esc")), ctx.fakeInput.keyPresses())
+        assertTrue(ctx.logs.any { "已识别采光副本选关页" in it })
+        assertFalse(ctx.logs.any { "等待游戏加载或登录" in it })
+        repeat(19) { assertEquals(ActionOutcome.Continue, recover(ctx)) }
+        assertFalse((recover(ctx) as ActionOutcome.Finish).success)
+    }
+
+    @Test fun loadingOverLuxcavationPageStillReceivesNoEscape() = runTest {
+        val ctx = TestActionContext()
+        ctx.fakeRecognizer.onTemplate("luxcavation", Match(147, 198, .96))
+        ctx.fakeRecognizer.onTemplate("connecting", Match(640, 360, .97))
+        recover(ctx)
+        assertTrue(ctx.fakeInput.events.isEmpty())
+        assertTrue(ctx.logs.any { "等待游戏加载或登录" in it })
+    }
 }

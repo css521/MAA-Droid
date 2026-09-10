@@ -165,13 +165,21 @@ private object BackToInitPageAction : ActionBackend {
             if (attempt > 20) {
                 return ActionOutcome.Finish(false, "持续无法识别登录或主页，请检查游戏语言设置，放大画面处理弹窗后重试，并导出日志")
             }
+            val connecting = ctx.recognize.templateMatch("connecting").isNotEmpty()
+            // 上游恢复动作在普通页面立即按 Esc；此前 Android 将所有无 Drive 图标页面
+            // 都先当加载等三轮。选关页会折叠导航，用现有 LALC 标题确认后立即走原有返回。
+            val inLuxcavation = !connecting && (
+                ctx.recognize.templateMatch("luxcavation").any { it.x in 20..280 && it.y in 120..420 } ||
+                    ctx.recognize.pyramidTemplateMatch("luxcavation", .85, Crop(20, 120, 260, 300))
+                        .any { it.x in 20..280 && it.y in 120..420 }
+                )
             // 冷启动、网络连接与转场没有可识别按钮时，先留出加载时间。
-            if (attempt <= 3 || ctx.recognize.templateMatch("connecting").isNotEmpty()) {
+            if (connecting || (attempt <= 3 && !inLuxcavation)) {
                 ctx.log("等待游戏加载或登录（$attempt/20）")
                 ctx.delay(3.0)
                 return ActionOutcome.Continue
             }
-            ctx.log("未检测到特殊情况，按 esc 尝试")
+            ctx.log(if (inLuxcavation) "已识别采光副本选关页，按返回键回到主页" else "未检测到特殊情况，按 esc 尝试")
             keyPress(ctx.input, "esc")
             ctx.delay(1.2)
             if (ctx.recognize.templateMatch("quit_game").isNotEmpty()) {

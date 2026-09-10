@@ -89,8 +89,9 @@ private const val SWIPE_COST_SEC = 0.5
 private object KeyAction : ActionBackend {
     override suspend fun execute(ctx: ActionContext): ActionOutcome {
         val keyName = ctx.node.str("key") ?: return ActionOutcome.Continue
-        if (ctx.nodeName == "confirm_reward" && ctx.node.str("android_mail_flow") == "true" && keyName == "esc") {
-            return MailActions.confirmReward(ctx)
+        if (ctx.node.str("android_mail_flow") == "true" && keyName == "esc") {
+            if (ctx.nodeName == "confirm_reward") return MailActions.confirmReward(ctx)
+            if (ctx.nodeName == "exit_mailbox") return MailActions.closeMailbox(ctx)
         }
         val repeat = ctx.node.num("repeat")?.toInt() ?: 1
         val interval = ctx.node.num("repeat_interval") ?: 0.3

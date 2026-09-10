@@ -26,13 +26,13 @@ private object ExpSelectStageAction : ActionBackend {
         val mode = ctx.config.str("exp", "luxcavation_mode", "enter")
         validateSelection("经验", targetStage, mode)?.let { return it }
 
-        var pos = ctx.recognize.findText(targetStage, crop = Crop(250, 180, 1000, 50))
+        var pos = ctx.recognize.findExpStage(targetStage)
         var cnt = 0
         while (pos.isEmpty()) {
             ctx.ensureActive()
             swipe(ctx.input, 590, 310, 940, 310)
             ctx.delay(0.6)
-            pos = ctx.recognize.findText(targetStage, crop = Crop(250, 180, 1000, 50))
+            pos = ctx.recognize.findExpStage(targetStage)
             if (++cnt > 5) {
                 ctx.log("选不到 Lv$targetStage 的经验副本关卡")
                 return ActionOutcome.Finish(false, "找不到经验副本 $targetStage")

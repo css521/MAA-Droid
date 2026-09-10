@@ -143,13 +143,17 @@ class LimbusRecognizer(
     override suspend fun detectText(crop: Crop?, threshold: Double): List<TextMatch> =
         readText(crop, threshold, query = null)
 
-    private suspend fun readText(crop: Crop?, threshold: Double, query: OcrTextQuery?): List<TextMatch> {
+    private suspend fun readText(
+        crop: Crop?, threshold: Double, query: OcrTextQuery?,
+        diagnosticPhase: String = "ocr.find",
+        accepts: (String) -> Boolean = { query == null || query.matches(it) },
+    ): List<TextMatch> {
         val engine = ocr ?: run {
             warnOnce("OCR", "OCR 不可用，依赖文字识别的步骤将走兜底分支")
             return emptyList()
         }
         val frame = frames.grab() ?: run {
-            if (query?.isNumber == true) onDiagnostic("ocr.find", "target=${query.target.take(32)} frame=unavailable crop=$crop")
+            if (query?.isNumber == true) onDiagnostic(diagnosticPhase, "target=${query.target.take(32)} frame=unavailable crop=$crop")
             return emptyList()
         }
         val screen = frame.toMat()
@@ -159,7 +163,7 @@ class LimbusRecognizer(
             val work = if (region == null) screen else OcrImageOps.maskedFrame(screen, region.toRect())
             try {
                 fun matching(boxes: List<TextBox>) = boxes.filter {
-                    it.confidence >= threshold && (query == null || query.matches(it.text))
+                    it.confidence >= threshold && accepts(it.text)
                 }.map { TextMatch(it.text, it.centerX, it.centerY, it.confidence.toDouble()) }
 
                 val primary = engine.detect(work)
@@ -168,7 +172,7 @@ class LimbusRecognizer(
                 if (matches.isEmpty() && query?.isNumber == true) {
                     currentCoroutineContext().ensureActive()
                     // 手机上的金色窄数字经 CLAHE 后有时会丢失前导零。保持同一帧、同一掩码
-                    // 和置信度，再以原色识别一次；不把 9 猜成 09，也不改变名称 OCR。
+                    // 和置信度，再以原色识别一次；查询规则由调用方提供，不改变名称 OCR。
                     color = engine.detect(work, enhanceContrast = false)
                     matches = matching(color)
                 }
@@ -176,7 +180,7 @@ class LimbusRecognizer(
                     fun describe(boxes: List<TextBox>) = boxes.take(10).joinToString("; ") {
                         "${it.text.take(36).replace('\n', ' ')}@${it.centerX},${it.centerY}:${(it.confidence * 100).toInt()}%"
                     }
-                    onDiagnostic("ocr.find", "target=${query.target.take(32)} frame=${frame.seq} " +
+                    onDiagnostic(diagnosticPhase, "target=${query.target.take(32)} frame=${frame.seq} " +
                         "size=${frame.width}x${frame.height} stride=${frame.stride} crop=$crop threshold=$threshold " +
                         "enhanced=[${describe(primary)}]" + (color?.let { " color=[${describe(it)}]" } ?: "") +
                         " hits=${matches.size}")
@@ -198,6 +202,24 @@ class LimbusRecognizer(
     override suspend fun findText(target: String, crop: Crop?, threshold: Double): List<TextMatch> {
         if (target.isEmpty()) return emptyList()
         return readText(crop, threshold, OcrTextQuery(target))
+    }
+
+    override suspend fun findExpStage(stage: String): List<TextMatch> =
+        readText(ExpStageQuery.REGION, .5, OcrTextQuery(stage), "ocr.exp_stage", ExpStageQuery(stage)::matches)
+
+    override suspend fun observeMailbox(): MailboxObservation? {
+        val frame = frames.grab() ?: return null
+        val screen = frame.toMat()
+        val coroutine = currentCoroutineContext()
+        try {
+            return MailboxDetector.detect(screen, ocr,
+                onCandidates = { onDiagnostic("mail.ocr", "frame=${frame.seq} $it") },
+                checkActive = { coroutine.ensureActive() },
+            ).also {
+                onDiagnostic("mail.observe", "frame=${frame.seq} size=${frame.width}x${frame.height} " +
+                    "mailbox=${it != null} empty=${it?.empty} close=${it?.close}")
+            }
+        } finally { screen.release() }
     }
 
     /**

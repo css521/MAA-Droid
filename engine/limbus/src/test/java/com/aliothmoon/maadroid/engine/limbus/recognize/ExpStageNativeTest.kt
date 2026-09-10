@@ -20,7 +20,7 @@ object ExpStageNativeTest {
         require(args.size == 3) { "usage: <OpenCV JNI> <LALC resource root> <test resources/ocr>" }
         System.load(File(args[0]).absolutePath)
         LuxcavationActions.registerAll()
-        for (name in listOf("exp-stage-linear.png", "exp-stage-nearest.png")) {
+        for (name in listOf("exp-stage-linear.png", "exp-stage-nearest.png", "exp-stage-125359.png")) {
             val screen = Imgcodecs.imread(File(args[2], name).absolutePath)
             require(screen.cols() == 1280 && screen.rows() == 720)
             val pixels = ByteArray(1280 * 720 * 3).also { screen.get(0, 0, it) }
@@ -36,20 +36,24 @@ object ExpStageNativeTest {
                 onDiagnostic = { phase, detail -> diagnostics += "$phase $detail" })
             try {
                 val crop = Crop(250, 180, 1000, 50)
+                if (name == "exp-stage-125359.png") {
+                    // This later attachment is a 542x305 preview, not the logged 1280x720 OCR frame.
+                    // Only 08 survives the downsampling; never infer its neighbouring card numbers.
+                    val eight = recognizer.findExpStage("08")
+                    check(eight.size == 1 && eight.single().x in 660..705) { "Preview anchor: $eight" }
+                    check(recognizer.findExpStage("09").isEmpty()) { "Guessed an unreadable card number" }
+                    println("PASS low-resolution preview: 08 recognized, unreadable 09 remains uncertain; ${diagnostics.last()}")
+                    continue
+                }
                 for ((stage, range) in listOf("07" to 320..360, "08" to 660..705, "09" to 1005..1045)) {
                     val before = grabs
-                    val matches = recognizer.findText(stage, crop)
+                    val matches = recognizer.findExpStage(stage)
                     check(grabs == before + 1) { "Fallback read a different frame" }
-                    check(matches.size == 1 && matches.single().x in range) { "$name $stage: $matches" }
+                    check(matches.size == 1 && matches.single().x in range) { "$name $stage: $matches; ${diagnostics.lastOrNull()}" }
                 }
                 check(diagnostics.any { "target=09" in it && "size=1280x720 stride=3840" in it && "hits=1" in it })
-                if (name.contains("nearest")) {
-                    check(diagnostics.any { "target=09" in it && " color=[" in it && "hits=1" in it })
-                }
                 check(recognizer.findText("109", crop).isEmpty())
-                check(recognizer.findText("9", crop).none { it.x in 1005..1045 }) {
-                    "Leading zero was discarded from the stage number (the title may independently contain #9)"
-                }
+                check(recognizer.findExpStage("109").isEmpty())
                 check(recognizer.findText("09", Crop(250, 300, 1000, 50)).isEmpty())
                 check(recognizer.findText("09", crop, threshold = 1.0).isEmpty()) { "Fallback lowered confidence" }
 

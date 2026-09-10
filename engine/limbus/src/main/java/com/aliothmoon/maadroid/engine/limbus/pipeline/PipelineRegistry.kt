@@ -124,6 +124,7 @@ class PipelineRegistry private constructor(
             ),
             "claim_mail" to adapted(claim),
             "confirm_reward" to adapted(mailNode("confirm_reward")),
+            "exit_mailbox" to adapted(mailNode("exit_mailbox")),
         )
         return PipelineRegistry(patched, interrupts)
     }

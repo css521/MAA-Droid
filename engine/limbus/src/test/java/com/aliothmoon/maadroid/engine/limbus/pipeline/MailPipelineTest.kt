@@ -19,6 +19,7 @@ import com.aliothmoon.maadroid.engine.limbus.config.LimbusWorkspaceConfig
 import com.aliothmoon.maadroid.engine.limbus.fixtures.LalcV500Fixtures
 import com.aliothmoon.maadroid.engine.limbus.recognize.Crop
 import com.aliothmoon.maadroid.engine.limbus.recognize.Match
+import com.aliothmoon.maadroid.engine.limbus.recognize.MailboxObservation
 import com.aliothmoon.maadroid.engine.limbus.recognize.Recognizer
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -55,8 +56,8 @@ class MailPipelineTest {
         assertEquals(1, mailbox.opened)
         assertEquals(1, mailbox.claimed)
         assertEquals(1, mailbox.counters["check_mail"])
-        assertEquals(listOf(825 to 647, 1120 to 125, 950 to 270), mailbox.recorded.clicks())
-        assertEquals(List(2) { KeyEvent.KEYCODE_ESCAPE }, mailbox.recorded.keyPresses())
+        assertEquals(listOf(825 to 647, 1120 to 125, 950 to 270, 640 to 470, 776 to 551), mailbox.recorded.clicks())
+        assertTrue(mailbox.recorded.keyPresses().isEmpty())
         assertEquals(View.HOME, mailbox.view)
         assertEquals(1, mailbox.logs.count { it == "节点 end 执行动作 empty" })
         assertTrue(mailbox.logs.contains("打开邮箱检查并领取邮件"))
@@ -70,8 +71,8 @@ class MailPipelineTest {
         assertEquals(1, mailbox.opened)
         assertEquals(0, mailbox.claimed)
         assertEquals(1, mailbox.counters["check_mail"])
-        assertEquals(listOf(825 to 647, 1120 to 125), mailbox.recorded.clicks())
-        assertEquals(listOf(KeyEvent.KEYCODE_ESCAPE), mailbox.recorded.keyPresses())
+        assertEquals(listOf(825 to 647, 1120 to 125, 776 to 551), mailbox.recorded.clicks())
+        assertTrue(mailbox.recorded.keyPresses().isEmpty())
         assertEquals(1, mailbox.logs.count { it == "节点 end 执行动作 empty" })
         assertFalse(mailbox.logs.any { it == "节点 claim_mail 执行动作 click" })
     }
@@ -86,6 +87,20 @@ class MailPipelineTest {
         assertNull(mailbox.counters["check_mail"])
         assertTrue(mailbox.recorded.events.isEmpty())
         assertEquals(1, mailbox.logs.count { it == "节点 end 执行动作 empty" })
+    }
+
+    @Test fun closeTapCannotCompleteMailUntilTheMailboxIsGoneAndHomeIsVisible() = runTest {
+        for (afterClose in listOf(View.MAILBOX, View.PENDING)) {
+            val mailbox = Mailbox(hasMail = false, hasNotification = false, afterClose = afterClose)
+
+            assertEquals("邮箱仍未关闭或主页尚未就绪，请检查游戏画面后重试",
+                mailbox.runner(selection(mail = true)).run(LimbusTask.ENTRY_NODE))
+
+            assertEquals(1, mailbox.recorded.clicks().count { it == 776 to 551 })
+            assertNull(mailbox.counters["check_mail"])
+            assertFalse(mailbox.logs.any { it == "节点 end 执行动作 empty" })
+            assertTrue(mailbox.recorded.keyPresses().isEmpty())
+        }
     }
 
     @Test fun completedMailIsNotReenteredBeforeTheNextSelectedTask() = runTest {
@@ -292,6 +307,7 @@ class MailPipelineTest {
         var hasMail: Boolean,
         private val hasNotification: Boolean,
         private val showClaimResult: Boolean = true,
+        private val afterClose: View = View.HOME,
     ) {
         var view = View.HOME
         var opened = 0
@@ -319,6 +335,14 @@ class MailPipelineTest {
                         view = if (showClaimResult) View.REWARD else View.PENDING
                         claimed++
                     }
+                    640 to 470 -> {
+                        assertEquals(View.REWARD, view)
+                        view = View.MAILBOX
+                    }
+                    776 to 551 -> {
+                        assertEquals(View.MAILBOX, view)
+                        view = afterClose
+                    }
                     440 to 160 -> view = View.EXP
                 }
             }
@@ -334,6 +358,9 @@ class MailPipelineTest {
         }
 
         private val recognize = object : Recognizer by FakeRecognizer() {
+            override suspend fun observeMailbox(): MailboxObservation? =
+                if (view == View.MAILBOX) MailboxObservation(Match(776, 551, .95), empty = !hasMail) else null
+
             override suspend fun templateMatch(
                 template: String, threshold: Double, crop: Crop?, maskTemplate: Crop?, screenshotScale: Double,
             ): List<Match> {
