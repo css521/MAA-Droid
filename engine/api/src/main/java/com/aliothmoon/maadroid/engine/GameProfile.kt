@@ -7,8 +7,8 @@ import androidx.annotation.StringRes
  * 一个游戏方案的静态描述：宿主靠它决定「能做什么、怎么起游戏、屏幕开多大」，
  * 而不需要认识具体引擎。
  *
- * 接入第三个游戏 = 新增一个 [GameProfile] + 一个 [AutomationEngine] 实现 + 在
- * `:app` 的注册表里加一行，core-* 与既有引擎均不改动。
+ * 新游戏在独立模块提供 [EngineProvider]，接入构建并由 App 注册；
+ * profile 描述能力，具体的执行、资源与 UI 仍需通过相应契约实现。
  */
 interface GameProfile {
 
@@ -28,15 +28,15 @@ interface GameProfile {
     val gamePackages: List<String>
 
     /**
-     * 该方案要求的显示规格。方舟与边狱都是 1280x720 的 16:9 横屏 —— 强制虚拟显示器
-     * 到此分辨率后，两边的模板素材都能直接命中。
+     * 该方案要求的显示规格。方舟与边狱均以 1280x720 横屏作为坐标基准；
+     * Android 与桌面布局仍可能不同，模板及导航适配需独立验证。
      */
     val display: DisplaySpec
 
     /** 该方案需要的资源包（模板图 / 流水线 / 模型 / 语言包），见 [ResourcePackSpec] */
     val resourcePacks: List<ResourcePackSpec>
 
-    /** 宿主据此决定显示哪些入口；引擎不支持的能力宿主不会呈现 */
+    /** 引擎支持的能力声明；入口及设备适配仍需宿主接线 */
     val capabilities: Set<Capability>
 }
 

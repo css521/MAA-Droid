@@ -89,7 +89,7 @@ class PipelineRegistry private constructor(
          * 之所以不直接吃目录：装配逻辑要能在纯 JVM 单测里跑（不依赖 Android 与文件系统
          * 布局），资源实际来源由调用方决定（APK assets 或热更后的资源目录）。
          *
-         * @throws IllegalStateException 存在重名节点或断引用时抛出，绝不产出半可用的流水线
+         * @throws IllegalStateException 节点不兼容、参数无效、存在重名节点或断引用时抛出
          */
         fun load(files: Map<String, String>): PipelineRegistry {
             val nodes = LinkedHashMap<String, PipelineNode>()
@@ -100,6 +100,9 @@ class PipelineRegistry private constructor(
                 val parsed = json.decodeFromString<Map<String, PipelineNode>>(text)
                 for ((name, node) in parsed) {
                     check(name !in nodes) { "流水线节点重名: $name（见 $fileName）" }
+                    node.compatibilityError()?.let { reason ->
+                        error("流水线节点 $name（$fileName）不兼容：$reason")
+                    }
                     nodes[name] = node
                     if (fileName.endsWith(ERROR_FILE)) fromErrorFile += name
                 }

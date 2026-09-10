@@ -27,7 +27,8 @@ data class RecognizeOutcome(val hit: Boolean, val matches: List<Match> = emptyLi
  * 且 template 一律是单个字符串、只出现过一个非默认阈值 0.9、4 个节点带 mask。
  * 另两种（color / feature）在 JSON 里没出现但注册表支持，一并实现以免上游启用时报错。
  *
- * 返回值语义照抄：`enable && (hit xor inverse)`。
+ * 有效节点的返回值语义照抄：`enable && (hit xor inverse)`。
+ * 不支持的识别类型或无效识别参数抛出异常，不作为 MISS 参与 inverse。
  * - `enable=false` 恒不命中 —— 上游 check 节点会把目标节点置 false 实现「用完即弃」
  * - `inverse` 是「识别不中才算命中」，用于「不在主界面就先回主界面」这类判断
  */
@@ -37,6 +38,12 @@ class NodeRecognizer(
 ) {
 
     suspend fun recognize(node: PipelineNode): RecognizeOutcome {
+        // Defend callers that construct/copy a node without going through registry.load.
+        node.compatibilityError()?.let { reason ->
+            val message = "流水线节点识别失败：$reason"
+            onUnknownRecognition(message)
+            error(message)
+        }
         val raw = when (node.recognition) {
             PipelineNode.RECOGNITION_DIRECT -> RecognizeOutcome.DIRECT_HIT
 
@@ -55,13 +62,7 @@ class NodeRecognizer(
                     recognizer.featureMatch(t, th, crop)
                 }
 
-            else -> {
-                // 上游此处 raise ValueError 直接炸掉流水线。这里降为「不命中」+ 告警：
-                // 未知识别方式意味着资源包比 App 新，而那本该由兼容门闸在装载前拦住；
-                // 真漏到运行期时，让这一个分支走不通远好过整条任务链崩掉。
-                onUnknownRecognition("未知识别方式 ${node.recognition}，该节点按不命中处理")
-                RecognizeOutcome.MISS
-            }
+            else -> error("不支持的 recognition '${node.recognition}'，请升级 App 后重新加载资源包")
         }
 
         val hit = if (node.inverse) !raw.hit else raw.hit
@@ -76,10 +77,8 @@ class NodeRecognizer(
         // 上游 template 一律单串；这里仍按多个处理，任一命中即命中，
         // 以便上游将来改成数组时无需改动
         val templates = node.templates()
-        if (templates.isEmpty()) return RecognizeOutcome.MISS
-
         val threshold = node.num("threshold") ?: defaultThreshold
-        val crop = node.ints("mask")?.takeIf { it.size >= 4 }
+        val crop = node.ints("mask")
             ?.let { Crop(it[0], it[1], it[2], it[3]) }
 
         for (t in templates) {

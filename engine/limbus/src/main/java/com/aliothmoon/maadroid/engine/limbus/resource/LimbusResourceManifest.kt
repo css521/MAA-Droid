@@ -3,8 +3,10 @@ package com.aliothmoon.maadroid.engine.limbus.resource
 import com.aliothmoon.maadroid.engine.ResourceRevision
 import com.aliothmoon.maadroid.engine.UpstreamArchive
 import com.aliothmoon.maadroid.engine.isSafeResourcePath
+import com.aliothmoon.maadroid.engine.limbus.config.LimbusLanguage
 import com.aliothmoon.maadroid.engine.limbus.pipeline.PipelineRegistry
 import com.aliothmoon.maadroid.engine.limbus.recognize.ClassifierSpec
+import com.aliothmoon.maadroid.engine.limbus.recognize.ResourcePackTemplateIndex
 import java.io.File
 import java.nio.file.Files
 import java.security.MessageDigest
@@ -165,23 +167,32 @@ internal object LimbusResourceManifest {
             .filter { it.isFile && it.extension == "json" }.associate { it.name to it.readText() }
         val pipeline = PipelineRegistry.load(pipelineFiles)
         val templates = File(root, "img").walkTopDown().filter { it.isFile && it.extension.equals("png", true) }.toList()
-        val signature = byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)
-        templates.forEach { file ->
-            require(prefix(file, 8).contentEquals(signature)) { "无效 PNG 模板：${file.name}" }
+        templates.forEach(PngTemplateContract::validate)
+        require(File(root, "img/general").isDirectory) { "缺少通用模板目录 img/general" }
+        require(File(root, "img/general/ego_gifts").walkTopDown().any { it.isFile && it.extension == "png" }) {
+            "缺少饰品图鉴 img/general/ego_gifts"
         }
-        val missing = pipeline.referencedTemplates() - templates.map { it.nameWithoutExtension }.toSet()
-        require(missing.isEmpty()) { "缺少流水线模板：$missing" }
-        require(File(root, "img").listFiles().orEmpty().count { it.isDirectory } >= 2) { "模板语言目录不完整" }
-        File(root, "config/language").walkTopDown().filter { it.isFile && it.extension == "json" }
-            .forEach { json.parseToJsonElement(it.readText()).jsonObject }
+        require(File(root, "img/general/theme_packs").listFiles().orEmpty().any { it.isFile && it.extension == "png" }) {
+            "缺少主题包图鉴 img/general/theme_packs，请升级 App 或修复资源目录"
+        }
+        for (language in listOf("zh", "en")) {
+            require(File(root, "img/$language").isDirectory) { "缺少模板语言目录 img/$language" }
+            val index = ResourcePackTemplateIndex.load(root, language)
+            val missing = pipeline.referencedTemplates().filterNot { index.contains(it) }
+            require(missing.isEmpty()) { "$language 缺少流水线模板：$missing" }
+            // Use the same value/type rules as execution. English may have no translation table.
+            LimbusLanguage.load(root, language)
+        }
         listOf("ch_PP-OCRv5_det_mobile.onnx", "ch_PP-OCRv5_rec_mobile.onnx").forEach {
             requireModel(File(root, "recognize/models/$it"))
         }
+        LimbusModelContract.validateOcr(root)
         listOf("mirror_legend", "skill_icon", "mirror_path").forEach { name ->
             val spec = requireNotNull(ClassifierSpec.load(root, name)) { "分类模型或元数据不完整：$name" }
             require(spec.inputWidth > 0 && spec.inputHeight > 0 && spec.labels.none { it.isBlank() }) { "分类模型元数据无效：$name" }
             require(spec.multiLabel == (name == "mirror_path")) { "分类模型标签类型不匹配：$name" }
             requireModel(spec.modelFile)
+            LimbusModelContract.validateClassifier(spec)
         }
         return pipeline
     }

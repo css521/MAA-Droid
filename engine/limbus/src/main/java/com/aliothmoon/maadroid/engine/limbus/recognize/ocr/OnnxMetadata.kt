@@ -5,8 +5,117 @@ import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
 
-/** Reads ModelProto.metadata_props (field 14), skipping weights without loading them into memory. */
+/** Reads declared interfaces and metadata, skipping weights without loading them into memory. */
 internal object OnnxMetadata {
+    data class Tensor(val elementType: Long, val dimensions: List<Long?>)
+    data class ValueInfo(val name: String, val tensor: Tensor?)
+    data class ModelInterface(val inputs: List<ValueInfo>, val outputs: List<ValueInfo>)
+
+    /** Read GraphProto's declared inputs/outputs; tensor weights and operator bodies are skipped. */
+    fun readModelInterface(file: File): ModelInterface = RandomAccessFile(file, "r").use { input ->
+        val end = input.length()
+        var irVersion: Long? = null
+        var graph: ModelInterface? = null
+        while (input.filePointer < end) {
+            when (val tag = varint(input, end)) {
+                8L -> irVersion = varint(input, end)
+                58L -> {
+                    require(graph == null) { "Duplicate ONNX graph" }
+                    graph = graphInterface(input, fieldEnd(input, end))
+                }
+                else -> skip(input, end, tag)
+            }
+        }
+        require(irVersion != null && irVersion > 0) { "Missing ONNX IR version" }
+        requireNotNull(graph) { "Missing ONNX graph" }
+    }
+
+    private fun graphInterface(input: RandomAccessFile, end: Long): ModelInterface {
+        val inputs = mutableListOf<ValueInfo>()
+        val outputs = mutableListOf<ValueInfo>()
+        while (input.filePointer < end) {
+            when (val tag = varint(input, end)) {
+                90L, 98L -> {
+                    val tensors = if (tag == 90L) inputs else outputs
+                    require(tensors.size < 64) { "Too many ONNX inputs or outputs" }
+                    val tensor = valueInfo(input, fieldEnd(input, end))
+                    require(tensors.none { it.name == tensor.name }) { "Duplicate ONNX tensor name" }
+                    tensors += tensor
+                }
+                else -> skip(input, end, tag)
+            }
+        }
+        require(inputs.isNotEmpty() && outputs.isNotEmpty()) { "ONNX graph has no input/output declarations" }
+        return ModelInterface(inputs, outputs)
+    }
+
+    private fun valueInfo(input: RandomAccessFile, end: Long): ValueInfo {
+        var name: String? = null
+        var type: Pair<Long, List<Long?>>? = null
+        var hasType = false
+        while (input.filePointer < end) {
+            when (val tag = varint(input, end)) {
+                10L -> name = string(input, end)
+                18L -> { type = valueType(input, fieldEnd(input, end)); hasType = true }
+                else -> skip(input, end, tag)
+            }
+        }
+        require(!name.isNullOrBlank() && hasType) { "ONNX value lacks name or type" }
+        // Only the first output is consumed by our models. Auxiliary sequence/map outputs
+        // may be valid and must not force an otherwise compatible model to be rejected.
+        return ValueInfo(name, type?.let { Tensor(it.first, it.second) })
+    }
+
+    private fun valueType(input: RandomAccessFile, end: Long): Pair<Long, List<Long?>>? {
+        var tensor: Pair<Long, List<Long?>>? = null
+        while (input.filePointer < end) {
+            when (val tag = varint(input, end)) {
+                10L -> tensor = tensorType(input, fieldEnd(input, end))
+                else -> skip(input, end, tag)
+            }
+        }
+        return tensor
+    }
+
+    private fun tensorType(input: RandomAccessFile, end: Long): Pair<Long, List<Long?>> {
+        var elementType: Long? = null
+        var dimensions: List<Long?>? = null
+        while (input.filePointer < end) {
+            when (val tag = varint(input, end)) {
+                8L -> elementType = varint(input, end)
+                18L -> dimensions = tensorShape(input, fieldEnd(input, end))
+                else -> skip(input, end, tag)
+            }
+        }
+        require(elementType != null && dimensions != null) { "ONNX tensor lacks element type or shape" }
+        return elementType to dimensions
+    }
+
+    private fun tensorShape(input: RandomAccessFile, end: Long): List<Long?> {
+        val dimensions = mutableListOf<Long?>()
+        while (input.filePointer < end) {
+            when (val tag = varint(input, end)) {
+                10L -> {
+                    require(dimensions.size < 16) { "ONNX tensor rank exceeds supported limit" }
+                    val dimEnd = fieldEnd(input, end)
+                    var dimension: Long? = null
+                    while (input.filePointer < dimEnd) {
+                        when (val dimTag = varint(input, dimEnd)) {
+                            8L -> dimension = varint(input, dimEnd).also {
+                                require(it >= 0) { "Negative ONNX tensor dimension" }
+                            }
+                            18L -> { string(input, dimEnd); dimension = null }
+                            else -> skip(input, dimEnd, dimTag)
+                        }
+                    }
+                    dimensions += dimension
+                }
+                else -> skip(input, end, tag)
+            }
+        }
+        return dimensions
+    }
+
     fun read(file: File, key: String): String? = RandomAccessFile(file, "r").use { input ->
         val end = input.length()
         while (input.filePointer < end) {

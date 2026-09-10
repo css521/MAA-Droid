@@ -1,10 +1,14 @@
 package com.aliothmoon.maadroid.engine
 
+import com.aliothmoon.maadroid.engine.limbus.LimbusEngineProvider
+import com.aliothmoon.maadroid.engine.limbus.LimbusProfile
+import com.aliothmoon.maadroid.engine.limbus.ui.LimbusUi
 import com.aliothmoon.maadroid.remote.EngineIds
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -27,6 +31,30 @@ class MultiEngineContractTest {
         val ids = EngineRegistry.profiles().map { it.id }
         assertTrue("方舟未注册: $ids", EngineIds.ARKNIGHTS in ids)
         assertTrue("边狱未注册: $ids", EngineIds.LIMBUS in ids)
+    }
+
+    @Test
+    fun limbusProviderComesFromTheEngineModule() {
+        val provider = EngineRegistry.provider(EngineIds.LIMBUS)!!
+        assertSame(LimbusEngineProvider, provider)
+        assertSame(LimbusProfile, provider.profile)
+        assertSame(LimbusUi, provider.ui)
+    }
+
+    @Test
+    fun repeatedInstallationKeepsProviderIdentityAndRegistrationOrder() {
+        val profiles = EngineRegistry.profiles()
+        val providers = profiles.map { EngineRegistry.provider(it.id) }
+        val packs = EngineRegistry.allResourcePacks()
+
+        EngineSetup.install()
+        EngineSetup.install()
+
+        assertEquals(profiles, EngineRegistry.profiles())
+        assertEquals(packs, EngineRegistry.allResourcePacks())
+        profiles.forEachIndexed { index, profile ->
+            assertSame(providers[index], EngineRegistry.provider(profile.id))
+        }
     }
 
     @Test

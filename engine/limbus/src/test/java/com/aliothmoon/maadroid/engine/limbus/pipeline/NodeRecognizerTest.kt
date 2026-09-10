@@ -147,21 +147,94 @@ class NodeRecognizerTest {
     }
 
     @Test
-    fun `未知识别方式按不命中处理并告警而不是抛异常`() = runTest {
-        val warnings = mutableListOf<String>()
-        val node = PipelineNode(recognition = "some_future_recognition")
+    fun `绕过装配的未知识别明确失败且不被 inverse 翻转`() = runTest {
+        for (inverse in listOf(false, true)) {
+            for (enabled in listOf(false, true)) {
+                val warnings = mutableListOf<String>()
+                val rec = FakeRecognizer()
+                val node = PipelineNode(recognition = "some_future_recognition", inverse = inverse, enable = enabled)
 
-        val outcome = NodeRecognizer(FakeRecognizer()) { warnings += it }.recognize(node)
+                val failure = runCatching { NodeRecognizer(rec) { warnings += it }.recognize(node) }.exceptionOrNull()
 
-        // 上游此处 raise ValueError 会炸掉整条任务链；资源包比 App 新本该被
-        // 兼容门闸拦住，真漏到运行期时让一个分支走不通远好过全盘崩掉
-        assertFalse(outcome.hit)
-        assertTrue(warnings.any { "未知识别方式" in it })
+                assertTrue(failure is IllegalStateException)
+                assertTrue(failure!!.message.orEmpty().contains("some_future_recognition"))
+                assertTrue(failure.message.orEmpty().contains("请升级 App"))
+                assertEquals(listOf(failure.message), warnings)
+                assertTrue(rec.templateCalls.isEmpty())
+            }
+        }
     }
 
     @Test
-    fun `缺少 template 参数时不命中`() = runTest {
-        val node = PipelineNode(recognition = PipelineNode.RECOGNITION_TEMPLATE_MATCH)
-        assertFalse(NodeRecognizer(FakeRecognizer()).recognize(node).hit)
+    fun `缺少或损坏 template 时不能通过 inverse 成功`() = runTest {
+        for (recognition in listOf("template_match", "color_template_match", "feature_match")) {
+            for (params in listOf("{}", """{"template":[]}""", """{"template":["x",null]}""", """{"template":true}""")) {
+                val rec = FakeRecognizer()
+                val node = nodeWith(params).copy(recognition = recognition, inverse = true)
+                val failure = runCatching { NodeRecognizer(rec).recognize(node) }.exceptionOrNull()
+                assertTrue(failure is IllegalStateException)
+                assertTrue(failure!!.message.orEmpty().contains("params.template"))
+                assertTrue(rec.templateCalls.isEmpty())
+            }
+        }
+    }
+
+    @Test fun malformedRecognitionParametersFailBeforeCallingBackend() = runTest {
+        for ((params, field) in listOf(
+            """{"template":"x","threshold":"NaN"}""" to "params.threshold",
+            """{"template":"x","threshold":"bad"}""" to "params.threshold",
+            """{"template":"x","mask":[0,0,10]}""" to "params.mask",
+            """{"template":"x","mask":[0,0,10,0]}""" to "params.mask",
+        )) {
+            val rec = FakeRecognizer()
+            val failure = runCatching {
+                NodeRecognizer(rec).recognize(nodeWith(params).copy(recognition = "template_match", inverse = true))
+            }.exceptionOrNull()
+            assertTrue(failure is IllegalStateException)
+            assertTrue(failure!!.message.orEmpty().contains(field))
+            assertTrue(rec.templateCalls.isEmpty())
+        }
+    }
+
+    @Test fun unsupportedNodeTypeCannotBeRecognizedAsNormal() = runTest {
+        val failure = runCatching {
+            NodeRecognizer(FakeRecognizer()).recognize(PipelineNode(type = "future_check"))
+        }.exceptionOrNull()
+        assertTrue(failure is IllegalStateException)
+        assertTrue(failure!!.message.orEmpty().contains("type 'future_check'"))
+    }
+
+    @Test fun colorAndFeatureModesDispatchToTheirOwnBackendWithExpectedParameters() = runTest {
+        val calls = mutableListOf<Triple<String, Double, Crop?>>()
+        val rec = object : com.aliothmoon.maadroid.engine.limbus.recognize.Recognizer by FakeRecognizer() {
+            override suspend fun colorTemplateMatch(template: String, threshold: Double, crop: Crop?): List<Match> {
+                assertEquals("x", template)
+                calls += Triple("color_template_match", threshold, crop)
+                return listOf(Match(20, 30, .9))
+            }
+            override suspend fun featureMatch(template: String, threshold: Double, crop: Crop?): List<Match> {
+                assertEquals("x", template)
+                calls += Triple("feature_match", threshold, crop)
+                return listOf(Match(20, 30, .9))
+            }
+        }
+        for (mode in listOf("color_template_match", "feature_match")) {
+            assertTrue(NodeRecognizer(rec).recognize(nodeWith("""{"template":"x"}""").copy(recognition = mode)).hit)
+            val explicit = nodeWith("""{"template":"x","threshold":0.9,"mask":[10,20,30,40]}""").copy(recognition = mode)
+            assertEquals(listOf(Match(20, 30, .9)), NodeRecognizer(rec).recognize(explicit).matches)
+        }
+        assertEquals(listOf(
+            Triple("color_template_match", 0.7, null),
+            Triple("color_template_match", 0.9, Crop(10,20,30,40)),
+            Triple("feature_match", 0.7, null),
+            Triple("feature_match", 0.9, Crop(10,20,30,40)),
+        ), calls)
+    }
+
+    @Test fun templateArrayStillUsesFirstMatchingTemplate() = runTest {
+        val rec = recognizerWith("second" to listOf(Match(3, 4, .9)))
+        val node = nodeWith("""{"template":["first","second","third"]}""").copy(recognition = "template_match")
+        assertTrue(NodeRecognizer(rec).recognize(node).hit)
+        assertEquals(listOf("first", "second"), rec.templateCalls)
     }
 }

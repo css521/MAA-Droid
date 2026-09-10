@@ -3,6 +3,7 @@ package com.aliothmoon.maadroid.engine.limbus.pipeline
 import com.aliothmoon.maadroid.engine.limbus.fixtures.LalcV500Fixtures
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -79,6 +80,117 @@ class PipelineRegistryTest {
             )
         }.exceptionOrNull()
         assertNotNull("重名节点必须被拒绝", ex)
+    }
+
+    private fun loadGate(nodeJson: String): PipelineRegistry = PipelineRegistry.load(
+        mapOf("gate.json" to """{
+            "empty": {"interrupt": []},
+            "error_handler": {"interrupt": []},
+            "gate": $nodeJson
+        }"""),
+    )
+
+    private fun rejectsGate(nodeJson: String, field: String): String {
+        val error = assertThrows(IllegalStateException::class.java) { loadGate(nodeJson) }
+        val message = error.message.orEmpty()
+        assertTrue(message, message.contains("节点 gate（gate.json）"))
+        assertTrue(message, message.contains(field))
+        return message
+    }
+
+    @Test fun unsupportedRecognitionIsRejectedEvenWhenDisabledOrInverse() {
+        // Recognizer methods used by actions do not automatically become pipeline modes.
+        for (recognition in listOf("future_match", "pyramid_template_match", "precise_template_match", "ocr", "")) {
+            for (enabled in listOf(false, true)) {
+                for (inverse in listOf(false, true)) {
+                    val message = rejectsGate("""{
+                        "recognition":"$recognition", "enable":$enabled, "inverse":$inverse
+                    }""", "recognition '$recognition'")
+                    assertTrue(message, message.contains("请升级 App"))
+                }
+            }
+        }
+    }
+
+    @Test fun allFourImplementedModesAndKnownNodeTypesRemainLoadable() {
+        for (recognition in listOf("direct", "template_match", "color_template_match", "feature_match")) {
+            for (type in listOf("normal", "basic", "check")) {
+                val gate = loadGate("""{
+                    "type":"$type", "recognition":"$recognition",
+                    "params":{"template":"x","threshold":0.9,"mask":[0,0,1280,720]}
+                }""").require("gate")
+                assertEquals(type, gate.type)
+                assertEquals(recognition, gate.recognition)
+            }
+        }
+    }
+
+    @Test fun unknownNodeTypeCannotSilentlyBecomeNormalRouting() {
+        for (type in listOf("future_check", "Check", "")) {
+            val message = rejectsGate("""{"type":"$type"}""", "type '$type'")
+            assertTrue(message, message.contains("请升级 App"))
+        }
+    }
+
+    @Test fun matchingModesRequireNonEmptyStringTemplates() {
+        val params = listOf(
+            "{}", """{"template":null}""", """{"template":""}""", """{"template":"  "}""",
+            """{"template":42}""", """{"template":false}""", """{"template":[]}""",
+            """{"template":{}}""", """{"template":["x",null]}""", """{"template":["x",42]}""",
+            """{"template":["x",""]}""",
+        )
+        for (recognition in listOf("template_match", "color_template_match", "feature_match")) {
+            for (value in params) rejectsGate(
+                """{"recognition":"$recognition","inverse":true,"params":$value}""", "params.template",
+            )
+        }
+    }
+
+    @Test fun invalidThresholdCannotSilentlyUseDefaultOrBecomeInverseHit() {
+        for (threshold in listOf("null", "true", "{}", "[]", "\"bad\"", "\"NaN\"", "\"Infinity\"", "1e309")) {
+            rejectsGate("""{
+                "recognition":"template_match","inverse":true,
+                "params":{"template":"x","threshold":$threshold}
+            }""", "params.threshold")
+        }
+        for (recognition in listOf("color_template_match", "feature_match")) {
+            for (threshold in listOf(-0.1, 1.1)) rejectsGate("""{
+                "recognition":"$recognition","params":{"template":"x","threshold":$threshold}
+            }""", "params.threshold")
+        }
+    }
+
+    @Test fun malformedMaskCannotSilentlyWidenRecognitionToFullScreen() {
+        for (mask in listOf(
+            "null", "{}", "[]", "[0,0,10]", "[0,0,10,10,99]", "[0,0,0,10]", "[0,0,10,-1]",
+            "[0,0,1.5,10]", "[0,0,2147483648,10]", "[\"NaN\",0,10,10]", "[false,0,10,10]",
+        )) rejectsGate("""{
+            "recognition":"template_match","inverse":true,"params":{"template":"x","mask":$mask}
+        }""", "params.mask")
+    }
+
+    @Test fun ignoredExtensionsAndSupportedParameterFormsArePreserved() {
+        val gate = loadGate("""{
+            "recognition":"template_match", "future_metadata":{"description":"ignored"},
+            "params":{"template":["first","second"],"threshold":"0.9",
+                      "mask":[-10.0,0,1300,720],"future_parameter":{"enabled":true}}
+        }""").require("gate")
+        assertEquals(listOf("first", "second"), gate.templates())
+        assertEquals(0.9, gate.num("threshold")!!, 1e-9)
+        assertNotNull(gate.params["future_parameter"])
+        // Only matching nodes consume these fields; direct actions may use their own schema.
+        loadGate("""{"recognition":"direct","params":{"template":{},"threshold":"action-specific","mask":null}}""")
+        // Grayscale matching accepts signed correlation thresholds; do not narrow its range.
+        loadGate("""{"recognition":"template_match","params":{"template":"x","threshold":-0.5}}""")
+    }
+
+    @Test fun checkTargetsCanStillBeSuppliedAfterLoadingUpstream() {
+        val loaded = PipelineRegistry.load(LalcV500Fixtures.taskFiles())
+        val configured = loaded.withTargetCounts(mapOf("exp_check" to 3, "thread_check" to 0, "mirror_check" to 2))
+        assertEquals(null, loaded.require("exp_check").num("target_count"))
+        assertEquals(3.0, configured.require("exp_check").num("target_count")!!, 0.0)
+        assertEquals(false, configured.require("thread_entry").enable)
+        assertEquals(2.0, configured.require("mirror_check").num("target_count")!!, 0.0)
     }
 
     // ---------- 真实上游用例 ----------

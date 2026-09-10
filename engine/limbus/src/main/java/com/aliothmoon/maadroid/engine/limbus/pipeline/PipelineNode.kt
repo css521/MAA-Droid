@@ -2,7 +2,7 @@ package com.aliothmoon.maadroid.engine.limbus.pipeline
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -81,15 +81,73 @@ data class PipelineNode(
             .getOrDefault(emptyList())
     }
 
+    /** Only validate fields whose semantics this runtime actually consumes. */
+    internal fun compatibilityError(): String? {
+        if (type !in SUPPORTED_TYPES) {
+            return "不支持的节点 type '$type'，请升级 App 后重新加载资源包"
+        }
+        if (recognition !in SUPPORTED_RECOGNITIONS) {
+            return "不支持的 recognition '$recognition'，请升级 App 后重新加载资源包"
+        }
+        if (recognition == RECOGNITION_DIRECT) return null
+
+        // TaskNode.get_param requires a template for all three matching modes. Empty or
+        // malformed templates must not become a MISS that inverse can turn into success.
+        val template = params["template"]
+        val validTemplates = when (template) {
+            is JsonPrimitive -> template.isString && template.content.isNotBlank()
+            is JsonArray -> template.isNotEmpty() && template.all {
+                it is JsonPrimitive && it.isString && it.content.isNotBlank()
+            }
+            else -> false
+        }
+        if (!validTemplates) return "recognition '$recognition' 的 params.template 必须为非空字符串或非空字符串数组"
+
+        if ("threshold" in params) {
+            val threshold = num("threshold")
+            if (threshold == null || !threshold.isFinite()) {
+                return "params.threshold 必须为有限数值，不能回退到默认阈值"
+            }
+            // AdvancedTemplateMatcher rejects this range itself; reject before its failure
+            // could be translated into empty matches. Grayscale keeps its existing range.
+            if (recognition != RECOGNITION_TEMPLATE_MATCH && threshold !in 0.0..1.0) {
+                return "recognition '$recognition' 的 params.threshold 必须在 [0,1] 内"
+            }
+        }
+        if ("mask" in params) {
+            val mask = params["mask"] as? JsonArray
+            val coordinates = mask?.map { (it as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull() }
+            if (coordinates == null || coordinates.size != 4 || coordinates.any {
+                    it == null || !it.isFinite() || it % 1.0 != 0.0 ||
+                        it < Int.MIN_VALUE.toDouble() || it > Int.MAX_VALUE.toDouble()
+                }) {
+                return "params.mask 必须为四个整数 [x,y,width,height]，不能回退到全屏识别"
+            }
+            if (coordinates[2]!! <= 0 || coordinates[3]!! <= 0) {
+                return "params.mask 的 width 和 height 必须大于 0"
+            }
+        }
+        return null
+    }
+
     companion object {
         const val TYPE_NORMAL = "normal"
         const val TYPE_BASIC = "basic"
         const val TYPE_CHECK = "check"
 
+        val SUPPORTED_TYPES = setOf(TYPE_NORMAL, TYPE_BASIC, TYPE_CHECK)
+
         const val RECOGNITION_DIRECT = "direct"
         const val RECOGNITION_TEMPLATE_MATCH = "template_match"
         const val RECOGNITION_COLOR_TEMPLATE_MATCH = "color_template_match"
         const val RECOGNITION_FEATURE_MATCH = "feature_match"
+
+        // Recognizer has other methods for actions; TaskNode.do_recognize and NodeRecognizer
+        // expose only these four modes to pipeline JSON.
+        val SUPPORTED_RECOGNITIONS = setOf(
+            RECOGNITION_DIRECT, RECOGNITION_TEMPLATE_MATCH,
+            RECOGNITION_COLOR_TEMPLATE_MATCH, RECOGNITION_FEATURE_MATCH,
+        )
 
         /** 上游 `create_task_node` 里 interrupt 的缺省值 */
         val DEFAULT_INTERRUPT = listOf("error_handler")

@@ -1,9 +1,7 @@
 package com.aliothmoon.maadroid.engine
 
 import com.aliothmoon.maadroid.engine.arknights.ArknightsEngineProvider
-import com.aliothmoon.maadroid.engine.limbus.LimbusEngine
-import com.aliothmoon.maadroid.engine.limbus.LimbusProfile
-import com.aliothmoon.maadroid.engine.limbus.ui.LimbusUi
+import com.aliothmoon.maadroid.engine.limbus.LimbusEngineProvider
 import timber.log.Timber
 
 /**
@@ -12,8 +10,8 @@ import timber.log.Timber
  * 与提权进程侧的 `MaaDroidRemoteService` 对称：那边装配跨进程的引擎服务，
  * 这边装配应用层的游戏方案。两处都只在 `:app` —— 唯一依赖全部引擎的模块。
  *
- * **接入第三个游戏时只需在这里加一行 [EngineRegistry.register]**，
- * core-* 与既有引擎均不改动。
+ * 新模块实现 provider 并接入构建依赖后，在这里增加 [EngineRegistry.register]。
+ * 通用任务页按注册表装配；需要自有提权服务时另在 MaaDroidRemoteService 注册工厂。
  */
 object EngineSetup {
 
@@ -29,19 +27,4 @@ object EngineSetup {
         done = true
         Timber.i("EngineSetup: engines=%s", EngineRegistry.profiles().map { it.id })
     }
-}
-
-/**
- * 边狱引擎供给。
- *
- * 每次 [createEngine] 都给一个新实例：引擎持有模板 Mat 缓存与设备句柄，
- * 复用会把上一次会话的原生资源带进新会话。
- */
-private object LimbusEngineProvider : EngineProvider {
-    override val profile: GameProfile = LimbusProfile
-
-    override fun createEngine(): AutomationEngine = LimbusEngine()
-
-    /** 边狱自带面板，宿主不认识它们的内部结构 */
-    override val ui: EngineUi = LimbusUi
 }

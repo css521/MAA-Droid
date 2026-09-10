@@ -34,6 +34,8 @@ Gradle 路径与目录对应，例如 `:engine:limbus`、`:core:bridge`。`app` 
 
 `EngineRegistry.createEngine(id)` 只调用 provider 工厂，不缓存运行实例。每个 `EngineSession` 独立持有自己的实例和事件流；订阅事件与后续 `prepare` 必须使用该会话的同一实例，新会话重新创建。资源、模型、native 库的加载放在 `prepare` / `connect`，停止后由会话调用 `release`，不能把可变引擎实例做成跨会话单例。
 
+两个引擎都在各自模块提供 provider；`EngineSetup` 只负责装配。注册时检查游戏 ID、全局资源包 ID、资源归属及目录：不同资源包不能指向相同目录或彼此的父/子目录，`./` 与重复分隔符的别名也不能绕过检查。任何检查失败都保留已有注册内容；同一个 provider 实例重复注册是无操作。注册表允许空资源列表，但通用运行会话当前仍要求主资源包。
+
 两种执行位置各有装配要求：
 
 | | 边狱 / 当前通用引擎路径 | 方舟遗留路径 |
@@ -91,6 +93,14 @@ Gradle 路径与目录对应，例如 `:engine:limbus`、`:core:bridge`。`app` 
 [EngineResourceService](../../../app/src/main/java/com/aliothmoon/maadroid/engine/resource/EngineResourceService.kt) 当前处理带 `upstreamArchive` 的源码 ZIP。首次安装直接使用固定 commit；检查更新时查询 GitHub tags，选择更新的稳定语义版本并固定 SHA。可用的本地安装不需要联网才能再次使用。
 
 [AtomicResourceInstaller](../../../app/src/main/java/com/aliothmoon/maadroid/engine/resource/AtomicResourceInstaller.kt) 限制归档路径、重复项及大小，在相邻暂存目录提取并调用引擎校验；通过后替换活动目录，失败保留或恢复旧版本。安装器生成的逐文件摘要用于校验安装内容与后续完整性，不是上游签名。运行会话持有同一资源包锁，避免任务中途换版。
+
+边狱在激活前同时检查以下运行约束：
+
+- 流水线节点类型、识别方式及模板/阈值/mask 参数。未知识别不会作为“不命中”参与 `inverse`；绕过安装检查的运行时调用也会明确失败。
+- `general + zh`、`general + en` 各自的模板引用，以及实际语言表的字符串类型；英文无翻译表时仍允许使用资源标识。饰品图鉴按递归目录、主题包图鉴按直接子文件检查，保持与页面读取方式一致。
+- PNG 块结构、长度与 CRC；五个 ONNX 的输入/首输出声明、float 类型、形状，以及 OCR 字符表、分类器标签数量与输出类别的对应关系。分类器尺寸/类别取自新包，不锁死旧版数据；未使用的辅助输出允许保留。
+
+这些是安装前的结构与接口校验，不执行 Python，也不加载原生库。它们不证明 PNG 像素能解码、ONNX 算子/权重可推理或画面识别准确；`connect` 时的模型加载和能力检查仍然必要。`LimbusResourceInstallTest` 使用小型合成归档验证拒绝更新后旧目录/manifest 字节不变，真实上游归档与模型另做本地验证，不能混同为手机端流程验收。
 
 当前边狱直接下载 LALC 源码归档，不依赖 Windows 整包重打包 CI 或本仓库 Release。`scripts/pack_engine_resource.py` 只作为离线工具；`scripts/sync_limbus_ui.py` 只检查/导出本地图鉴。新的动作实现、原生库或不兼容资源协议仍需 App 更新。
 

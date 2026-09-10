@@ -46,7 +46,7 @@ implementation(project(":engine:newgame"))
 | `resourcePacks` | 至少一个包，第一个是 `prepare` 和 workspace 的主资源目录 |
 | `capabilities` | 只声明已实现能力；这些值不会自动生成定时、作业、前台设备或设置页接线 |
 
-模块可以直接暴露 provider，将构造保持为轻量操作：
+模块直接暴露 provider，将构造保持为轻量操作。可参考 [LimbusEngineProvider](../../../engine/limbus/src/main/java/com/aliothmoon/maadroid/engine/limbus/LimbusEngineProvider.kt)，UI 与工厂的装配均在引擎模块内：
 
 ```kotlin
 object NewGameProvider : EngineProvider {
@@ -57,6 +57,8 @@ object NewGameProvider : EngineProvider {
 ```
 
 这些类型由新模块实现。随后在 [EngineSetup.install](../../../app/src/main/java/com/aliothmoon/maadroid/engine/EngineSetup.kt) 中显式注册 `EngineRegistry.register(NewGameProvider)`。Application 已调用此装配点；无需新建一套启动服务或 ServiceLoader。
+
+注册会拒绝重复游戏 ID、错误的包归属、重复资源包 ID，以及相同或嵌套的资源目录。失败不会覆盖原游戏，也不会预留部分包名。请为新游戏声明独立目录；不要依靠注册顺序覆盖已有 provider。只有同一个 provider 实例重复注册才保持幂等。
 
 [BackgroundGamesView](../../../app/src/main/java/com/aliothmoon/maadroid/presentation/view/background/BackgroundGamesView.kt) 从注册表生成 tabs，并把非方舟游戏交给 `EngineTaskContent`。名称、任务和面板应通过契约提供，不再添加按新游戏 ID 分支的页面。游戏选择以字符串保存，旧 ID 不再可用时由注册表回退到已注册方案，因此改 ID 也会改变配置归属。
 
@@ -97,6 +99,8 @@ object NewGameProvider : EngineProvider {
 | `verifyInstalledFiles(root)` | 检查文件缺失/损坏、完整性及必要的资源语义；不能只确认目录存在 |
 | `readInstalledVersion` / `invalidateInstalledVersion` | 使用稳定内容版本标识；无效安装返回 null，失效时删除版本标记 |
 | `mapZipEntry` | 旧式平铺 ZIP 的映射接口；源码 ZIP 安装实际调用 `upstreamArchive.mapEntry`，只改前者不会改变源码归档的提取范围 |
+
+兼容性检查要对齐该引擎的真实读取方式：例如分别检查所支持语言的模板、页面图鉴的目录层级、模型输入尺寸与标签/字典对应关系。只检查文件非空，或把各语言图片合并后检查，都可能在激活后才暴露错误。静态模型接口校验不能代替原生加载/试推理；两层应各自保留。用真实 pack 与安装器测试坏更新，断言旧 manifest 和文件未变，同时保留合法资源更新成功的用例。
 
 当前 [EngineResourceService](../../../app/src/main/java/com/aliothmoon/maadroid/engine/resource/EngineResourceService.kt) 要求 manifest 的 `upstream` 包含 `repo`、`tag`、`commit`，以恢复已安装提交。首次安装直接使用固定 commit，更新检查选择更新的稳定语义版本 tag；自定义 feed、预发布版本策略或不同归档结构需要对应的宿主适配，不能仅填写一个任意 URL。
 
