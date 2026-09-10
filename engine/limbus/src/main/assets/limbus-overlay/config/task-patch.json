@@ -12,25 +12,172 @@
     "",
     "本文件由覆盖层随资源安装写入，缺失即纯上游行为；节点名打错会被装载校验拒绝。"
   ],
-
-  "exp_choose_team":        { "recognition": "ocr", "params": { "text": "Details", "mask": [880, 100, 120, 50] } },
-  "thread_choose_team":     { "recognition": "ocr", "params": { "text": "Details", "mask": [880, 100, 120, 50] } },
-  "mirror_choose_team":     { "recognition": "ocr", "params": { "text": "Details", "mask": [880, 100, 120, 50] } },
-  "mirror_ready_to_battle": { "recognition": "ocr", "params": { "text": "Details", "mask": [880, 100, 120, 50] } },
-  "touch_to_start":         { "recognition": "ocr", "params": { "text": "Clear all caches", "mask": [170, 630, 190, 55] } },
-  "mirror_enter_resume":    { "recognition": "ocr", "params": { "text": "Resume", "mask": [570, 370, 150, 60] } },
-
-  "error_cannot_operate_the_game":              { "recognition": "ocr", "params": { "text": "Cannot operate the game" } },
-  "error_new_download_added":                   { "recognition": "ocr", "params": { "text": "new download has been added" } },
-  "error_server_is_under_sceduled_maintenance": { "recognition": "ocr", "params": { "text": "Scheduled Maintenance" } },
-  "error_weekly_record_has_been_reset":         { "recognition": "ocr", "params": { "text": "weekly record has been reset" } },
-  "error_client_is_not_up_to_date":             { "recognition": "ocr", "params": { "text": "Game client is not" } },
-  "error_network_is_unstable":                  { "recognition": "ocr", "params": { "text": "network is unstable" } },
-  "mirror_select_encounter_reward_card":        { "recognition": "ocr", "params": { "text": "Select Encounter Reward Card" } },
-  "mirror_select_event_effect":                 { "recognition": "ocr", "params": { "text": "Select Event Effect" } },
-  "mirror_select_floor_ego_gift2":              { "recognition": "ocr", "params": { "text": "Refuse Gift" } },
-  "event_pass_check":                           { "recognition": "ocr", "params": { "text": "Choose character to perform" } },
-  "mirror_enter_last_week":                     { "recognition": "ocr", "params": { "text": "previous session has expired" } },
-  "mirror_choose_star":                         { "recognition": "ocr", "params": { "text": "Grace of the Star of" } },
-  "mirror_defeat":                              { "recognition": "ocr", "params": { "text": "have been killed" } }
+  "exp_choose_team": {
+    "recognition": "ocr",
+    "params": {
+      "text": "Details",
+      "mask": [
+        880,
+        100,
+        120,
+        50
+      ]
+    }
+  },
+  "thread_choose_team": {
+    "recognition": "ocr",
+    "params": {
+      "text": "Details",
+      "mask": [
+        880,
+        100,
+        120,
+        50
+      ]
+    }
+  },
+  "mirror_choose_team": {
+    "recognition": "ocr",
+    "params": {
+      "text": "Details",
+      "mask": [
+        880,
+        100,
+        120,
+        50
+      ]
+    }
+  },
+  "mirror_ready_to_battle": {
+    "recognition": "ocr",
+    "params": {
+      "text": "Details",
+      "mask": [
+        880,
+        100,
+        120,
+        50
+      ]
+    }
+  },
+  "touch_to_start": {
+    "recognition": "ocr",
+    "params": {
+      "text": "Clear all caches",
+      "mask": [
+        170,
+        630,
+        190,
+        55
+      ]
+    }
+  },
+  "mirror_enter_resume": {
+    "recognition": "ocr",
+    "params": {
+      "text": "Resume",
+      "mask": [
+        570,
+        370,
+        150,
+        60
+      ]
+    }
+  },
+  "error_cannot_operate_the_game": {
+    "recognition": "ocr",
+    "params": {
+      "text": "Cannot operate the game"
+    }
+  },
+  "error_new_download_added": {
+    "recognition": "ocr",
+    "params": {
+      "text": "new download has been added"
+    }
+  },
+  "error_server_is_under_sceduled_maintenance": {
+    "recognition": "ocr",
+    "params": {
+      "text": "Scheduled Maintenance"
+    }
+  },
+  "error_weekly_record_has_been_reset": {
+    "recognition": "ocr",
+    "params": {
+      "text": "weekly record has been reset"
+    }
+  },
+  "error_client_is_not_up_to_date": {
+    "recognition": "ocr",
+    "params": {
+      "text": "Game client is not"
+    }
+  },
+  "error_network_is_unstable": {
+    "recognition": "ocr",
+    "params": {
+      "text": "network is unstable"
+    }
+  },
+  "mirror_select_encounter_reward_card": {
+    "recognition": "ocr",
+    "params": {
+      "text": "Select Encounter Reward Card"
+    }
+  },
+  "mirror_select_event_effect": {
+    "recognition": "ocr",
+    "params": {
+      "text": "Select Event Effect"
+    }
+  },
+  "mirror_select_floor_ego_gift2": {
+    "recognition": "ocr",
+    "params": {
+      "text": "Refuse Gift"
+    }
+  },
+  "event_pass_check": {
+    "recognition": "ocr",
+    "params": {
+      "text": "Choose character to perform"
+    }
+  },
+  "mirror_enter_last_week": {
+    "recognition": "ocr",
+    "params": {
+      "text": "previous session has expired"
+    }
+  },
+  "mirror_choose_star": {
+    "recognition": "ocr",
+    "params": {
+      "text": "Grace of the Star of"
+    }
+  },
+  "mirror_defeat": {
+    "recognition": "ocr",
+    "params": {
+      "text": "have been killed"
+    }
+  },
+  "mirror_enter_dungeon": {
+    "recognition": "ocr",
+    "params": {
+      "text": "Enter",
+      "mask": [
+        1050,
+        440,
+        130,
+        90
+      ]
+    }
+  },
+  "error_download_data": {
+    "recognition": "ocr",
+    "params": {
+      "text": "returned to the title screen"
+    }
+  }
 }
