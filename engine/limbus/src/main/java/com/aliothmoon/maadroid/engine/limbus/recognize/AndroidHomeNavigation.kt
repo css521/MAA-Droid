@@ -23,10 +23,15 @@ internal object AndroidHomeNavigation {
     // 每次 templateMatch 调用之间帧不变（bridge 按内容递增 seq），
     // 同一轮 probe 里多个主页导航判据不需要各自做一遍 17 档多尺度搜索。
     // 这是 39 秒卡顿的根因：error_handler 打转 ~10 轮 × 每轮多个主页判据 × 17 档。
-    private var cachedDriveSeq: Long = -1
+    // 时间窗口缓存：如果上次搜索是 <2 秒前，直接复用。
+    // 为什么不用 frameSeq：bridge 每次 grab 都给新 seq，缓存永远不命中。
+    // 为什么 2 秒安全：这段时间里画面没变（因为没有命中就没有点击），
+    // 17 档搜索 ≈ 300-800ms，而路由里多个候选的间隔 < 100ms。
+    private var cachedDriveTime: Long = 0
     private var cachedDrive: Match? = null
-    private var cachedLabelsSeq: Long = -1
+    private var cachedLabelsTime: Long = 0
     private var cachedLabels: List<TextMatch>? = null
+    private const val CACHE_TTL_MS = 2000L
 
     fun match(
         screen: Mat,
@@ -40,24 +45,29 @@ internal object AndroidHomeNavigation {
         frameSeq: Long = -1,
     ): Match? {
         if (!supports(name) || screen.cols() != 1280 || screen.rows() != 720) return null
-        val drive = if (frameSeq >= 0 && frameSeq == cachedDriveSeq) {
+        val now = System.currentTimeMillis()
+        val drive = if (now - cachedDriveTime < CACHE_TTL_MS) {
             cachedDrive ?: return null
         } else {
             icon(screen, driveTemplate, threshold, checkActive).also {
-                if (frameSeq >= 0) { cachedDriveSeq = frameSeq; cachedDrive = it }
+                cachedDriveTime = now; cachedDrive = it
             } ?: return null
         }
         return when (name) {
             "main_drive_no_text" -> drive
+            // window icon 不缓存——它和 drive 的 template 不同，缓存 drive 的结果不能用。
+            // 但 17 档搜索只对 drive 做（因为 drive 是所有三个路径共同的第一步），
+            // window 的搜索在 drive 命中之后才走，且 window icon 和 drive icon 相邻，
+            // 尺度可以复用 drive 的最佳尺度——但当前 icon() 不支持指定尺度范围，暂搁。
             "main_window_no_text" -> icon(screen, template, threshold, checkActive)
                 ?.takeIf { isWindowBesideDrive(it, drive) }
             else -> {
                 val reader = ocr ?: return null
-                val lbl = if (frameSeq >= 0 && frameSeq == cachedLabelsSeq) {
+                val lbl = if (now - cachedLabelsTime < CACHE_TTL_MS) {
                     cachedLabels ?: emptyList()
                 } else {
                     labels(screen, reader, checkActive).also {
-                        if (frameSeq >= 0) { cachedLabelsSeq = frameSeq; cachedLabels = it }
+                        cachedLabelsTime = now; cachedLabels = it
                     }
                 }
                 confirmedDriveLabel(drive, lbl, language, threshold)

@@ -52,7 +52,7 @@ private const val LAST_PAGE_OFFSET = 14
 /**
  * 队伍列表滑动后的静置时间。上游是 0.5 秒（PC 量），安卓上列表有惯性动画，不够。
  */
-private const val LIST_SETTLE = 1.2
+private const val LIST_SETTLE = 2.0
 
 /** 点选队伍后等阵容载入的时间；ready_to_battle 要读"已选/总数"，读到旧值会误判 */
 private const val TEAM_LOAD = 1.5
@@ -219,6 +219,8 @@ private object ChooseTeamAction : ActionBackend {
             ctx.delay(LIST_SETTLE)
         }
 
+        // 采帧：看翻完后列表停在第几格，用于修正安卓上的滑动距离和格位坐标
+        ctx.recognize.dumpFrame("team_list_after_scroll_$scrollCount")
         click(ctx.input, TEAM_CLICK_POSITIONS[clickIndex].first, TEAM_CLICK_POSITIONS[clickIndex].second)
         // 点完队伍要等罪人阵容真的载入：上游点完即返回，后续 ready_to_battle 会读
         // "已选/总数"（Crop(1130,500,100,50)），读到旧值就会做出错误判断。
