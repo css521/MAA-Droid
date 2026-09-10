@@ -17,6 +17,17 @@ import kotlinx.serialization.json.*
 internal object LimbusResourceManifest {
     const val REPOSITORY = "HSLix/LixAssistantLimbusCompany"
     val directories = listOf("config/task", "config/language", "img", "ai/model", "recognize/models")
+
+    /**
+     * 平台补丁文件，由 APK 内置覆盖层在安装时写入（见 ResourcePackSpec.overlayAssetPrefix）。
+     *
+     * 必须显式列入白名单：它不在 [directories] 任何一项之下 —— 名字是 `config/task-patch.json`
+     * 而白名单前缀是 `config/task/`（带斜杠），差一个斜杠就会被判成「清单外文件」导致安装失败。
+     *
+     * 也**不能**放进 `config/task/`：LimbusEngine.prepare 会把该目录下所有 .json 当流水线
+     * 文件装载，补丁的结构与节点定义不同，会直接解析失败。
+     */
+    const val PIPELINE_PATCH = "config/task-patch.json"
     private val json = Json { prettyPrint = true }
     private val shaPattern = Regex("[0-9a-f]{64}")
     private val routingActions = setOf(
@@ -221,7 +232,8 @@ internal object LimbusResourceManifest {
     }
 
     private fun isResourceFile(path: String): Boolean = isSafeResourcePath(path) &&
-        !path.endsWith(".py", true) && directories.any { path.startsWith("$it/") }
+        !path.endsWith(".py", true) &&
+        (path == PIPELINE_PATCH || directories.any { path.startsWith("$it/") })
 
     private fun resourceFiles(root: File): List<File> = root.walkTopDown().filter { it.isFile &&
         isResourceFile(it.relativeTo(root).invariantSeparatorsPath)

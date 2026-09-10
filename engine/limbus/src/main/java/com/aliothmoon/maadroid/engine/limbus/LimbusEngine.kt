@@ -17,6 +17,7 @@ import com.aliothmoon.maadroid.engine.limbus.pipeline.NodeRecognizer
 import com.aliothmoon.maadroid.engine.limbus.pipeline.PipelineRegistry
 import com.aliothmoon.maadroid.engine.limbus.pipeline.PipelineRunner
 import com.aliothmoon.maadroid.engine.limbus.recognize.LimbusRecognizer
+import com.aliothmoon.maadroid.engine.limbus.resource.LimbusResourceManifest
 import com.aliothmoon.maadroid.engine.limbus.recognize.OnnxClassifier
 import com.aliothmoon.maadroid.engine.limbus.recognize.ocr.PpOcrEngine
 import com.aliothmoon.maadroid.engine.limbus.recognize.ResourcePackTemplateIndex
@@ -506,8 +507,8 @@ class LimbusEngine(
 
         const val PIPELINE_DIR = "config/task"
 
-        /** 平台补丁文件，由覆盖层写入资源目录；缺失即纯上游行为 */
-        const val PIPELINE_PATCH = "config/task-patch.json"
+        /** 平台补丁文件路径，与清单白名单共用同一常量，避免两处不一致 */
+        val PIPELINE_PATCH = LimbusResourceManifest.PIPELINE_PATCH
         const val LANGUAGE_MARKER = "config/language/current"
         const val DEFAULT_LANGUAGE = "zh"
 

@@ -55,6 +55,23 @@ class LimbusResourceManifestTest {
         val required = Json.parseToJsonElement(text).jsonObject.getValue("required_actions").jsonArray.map { it.jsonPrimitive.content }
         if (required.any { it !in setOf("empty", "click", "key", "swipe", "check_out_update") }) "upgrade required" else null
     }
+    /**
+     * 覆盖层写入的平台补丁必须能通过清单校验 —— 否则安装直接失败。
+     *
+     * 真机踩过：补丁叫 `config/task-patch.json`，而白名单前缀是 `config/task/`（带斜杠），
+     * 差一个斜杠就被判成「资源文件缺失或包含清单外文件」，边狱资源根本装不上。
+     * 也不能放进 config/task/ —— 那里所有 .json 都会被当流水线文件装载。
+     */
+    @Test fun `覆盖层写入的平台补丁能进清单并通过校验`() {
+        fixture()
+        write(LimbusResourceManifest.PIPELINE_PATCH, """{"_c":["注释键"],"mirror_choose_team":{"recognition":"ocr","params":{"text":"Details"}}}""")
+        finalizePack()
+        assertNull(LimbusResourceManifest.verify(temp.root) { null })
+        val manifest = Json.parseToJsonElement(File(temp.root, "manifest.json").readText()).jsonObject
+        val paths = manifest.getValue("files").jsonArray.map { it.jsonObject.getValue("path").jsonPrimitive.content }
+        assertTrue(paths.toString(), LimbusResourceManifest.PIPELINE_PATCH in paths)
+    }
+
     @Test fun manifestIsDeterministicAndVerifiesEveryFile() {
         fixture()
         finalizePack()
