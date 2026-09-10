@@ -469,7 +469,8 @@ class LimbusRecognizer(
         }
     }
 
-    private var geometryReported = false
+    /** 已上报过的内容区几何，按结果去重；全黑帧不计入 */
+    private val reportedGeometry = HashSet<String>()
 
     /**
      * 首次出现模板未命中时，把**识别器实际拿到的那一帧**的几何量出来，输出一次。
@@ -487,8 +488,6 @@ class LimbusRecognizer(
      * 只报一次：几何在一次运行内不会变，逐次输出会淹掉日志。
      */
     private fun reportFrameGeometryOnce(screen: Mat, seq: Long, template: String) {
-        if (geometryReported) return
-        geometryReported = true
         val gray = Mat()
         val binary = Mat()
         val points = Mat()
@@ -498,11 +497,17 @@ class LimbusRecognizer(
             // 阈值取 8 而不是 0：黑边并非纯黑，编码与色彩转换会留下个位数残值
             Imgproc.threshold(gray, binary, 8.0, 255.0, Imgproc.THRESH_BINARY)
             Core.findNonZero(binary, points)
-            val box = if (points.empty()) null else Imgproc.boundingRect(points)
+            // 全黑帧不上报也不占额度：启动/加载期画面本来就是黑的，上一版把唯一一次
+            // 上报机会耗在了 frame=118 的加载黑屏上（节点 server_error_occurred_try_again），
+            // 真正有内容的帧再也不报。
+            if (points.empty()) return
+            val box = Imgproc.boundingRect(points)
+            val shape = "${box.x},${box.y} ${box.width}x${box.height}"
+            // 按几何去重：同一形状只报一次，不同形状（转场、弹窗）各报一次
+            if (!reportedGeometry.add(shape)) return
             onDiagnostic(
                 "frame.geometry",
-                "frame=$seq 首次未命中=$template 帧=${screen.cols()}x${screen.rows()} " +
-                    "内容区=" + (box?.let { "${it.x},${it.y} ${it.width}x${it.height}" } ?: "全黑"),
+                "frame=$seq 未命中=$template 帧=${screen.cols()}x${screen.rows()} 内容区=$shape",
             )
         } catch (e: Throwable) {
             onDiagnostic("frame.geometry", "量测失败: ${e.message}")
