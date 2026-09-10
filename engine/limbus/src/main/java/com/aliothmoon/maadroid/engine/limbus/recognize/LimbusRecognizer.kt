@@ -8,6 +8,7 @@ import com.aliothmoon.maadroid.engine.limbus.recognize.ocr.TextBox
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import org.opencv.core.CvType
+import org.opencv.core.Core
 import org.opencv.core.Mat
 import org.opencv.core.Rect
 import org.opencv.imgcodecs.Imgcodecs
@@ -127,6 +128,7 @@ class LimbusRecognizer(
                         screenshotScale = screenshotScale,
                         onMiss = onMiss,
                     )
+                    if (matches.isEmpty()) reportFrameGeometryOnce(screen, frame.seq, template)
                     if (matches.isNotEmpty() || crop != null || maskTemplate != null || screenshotScale != 1.0 ||
                         !AndroidHomeNavigation.supports(template)) return matches
 
@@ -464,6 +466,48 @@ class LimbusRecognizer(
             }
         } finally {
             screen.release()
+        }
+    }
+
+    private var geometryReported = false
+
+    /**
+     * 首次出现模板未命中时，把**识别器实际拿到的那一帧**的几何量出来，输出一次。
+     *
+     * 存在的理由：此前判断画面几何只能靠预览截图，而预览有自身的缩放和黑边，
+     * 拿它量像素连续得出过两个错误结论。这里直接在参与匹配的 Mat 上量：
+     * 非黑像素的外接框就是游戏内容区。
+     *
+     * - 内容区 = `0,0 1280x720` → 满幅，素材失配与几何无关，应查素材本身或阈值
+     * - 内容区 `x>0` 或 `width<1280` → 左右有黑边（宽度方向被letterbox）
+     * - 内容区 `y>0` 或 `height<720` → 上下有黑边
+     * 任一方向有黑边，都意味着 UI 整体缩放且偏移，562 张 PC 素材会集体失配，
+     * 正确修法是一个全局缩放/偏移，而不是逐张重截。
+     *
+     * 只报一次：几何在一次运行内不会变，逐次输出会淹掉日志。
+     */
+    private fun reportFrameGeometryOnce(screen: Mat, seq: Long, template: String) {
+        if (geometryReported) return
+        geometryReported = true
+        val gray = Mat()
+        val binary = Mat()
+        val points = Mat()
+        try {
+            if (screen.channels() == 1) screen.copyTo(gray)
+            else Imgproc.cvtColor(screen, gray, Imgproc.COLOR_BGR2GRAY)
+            // 阈值取 8 而不是 0：黑边并非纯黑，编码与色彩转换会留下个位数残值
+            Imgproc.threshold(gray, binary, 8.0, 255.0, Imgproc.THRESH_BINARY)
+            Core.findNonZero(binary, points)
+            val box = if (points.empty()) null else Imgproc.boundingRect(points)
+            onDiagnostic(
+                "frame.geometry",
+                "frame=$seq 首次未命中=$template 帧=${screen.cols()}x${screen.rows()} " +
+                    "内容区=" + (box?.let { "${it.x},${it.y} ${it.width}x${it.height}" } ?: "全黑"),
+            )
+        } catch (e: Throwable) {
+            onDiagnostic("frame.geometry", "量测失败: ${e.message}")
+        } finally {
+            gray.release(); binary.release(); points.release()
         }
     }
 
