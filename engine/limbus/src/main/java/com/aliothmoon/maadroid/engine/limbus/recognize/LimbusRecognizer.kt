@@ -165,6 +165,33 @@ class LimbusRecognizer(
         return super<Recognizer>.titleScreenStart()
     }
 
+    // ---- 帧复用：路由里连续多个 templateMatch 共享同一帧 ----
+    //
+    // probe 遍历 7 个候选 = 7 次 grab + 7 次 toMat + 7 次 CLAHE+模糊，
+    // 实测每步 100ms 级别，累积到 3~5 秒（对比 MAA 方舟 1~2 秒）。
+    // 但这些调用间隔只有几毫秒，虚拟显示器根本来不及刷新——取到的是同一帧。
+    // 所以缓存上一帧的 Mat，seq 相同时直接复用。
+    //
+    // seq 由 bridge 递增，每次内容更新才变；两个不同帧的 seq 必不同。
+    // 如果 bridge 实现不递增，退化成每次取新帧（原行为），不会错。
+
+    private var cachedFrame: Mat? = null
+    private var cachedFrameSeq: Long = -1
+
+    private suspend fun grabScreen(): Pair<Mat, Long>? {
+        val frame = frames.grab() ?: return null
+        val seq = frame.seq
+        val cached = cachedFrame
+        if (cached != null && seq == cachedFrameSeq) {
+            return cached to seq
+        }
+        cachedFrame?.release()
+        val screen = frame.toMat()
+        cachedFrame = screen
+        cachedFrameSeq = seq
+        return screen to seq
+    }
+
     override suspend fun templateMatch(
         template: String,
         threshold: Double,
@@ -174,53 +201,48 @@ class LimbusRecognizer(
         onMiss: ((Double, Int, Int) -> Unit)?,
     ): List<Match> {
         val tpl = templateOf(template) ?: return emptyList()
-        val frame = frames.grab() ?: return emptyList()
+        val (screen, seq) = grabScreen() ?: return emptyList()
 
-        val screen = frame.toMat()
+        // screen 由 grabScreen 的缓存管理生命周期，不在这里 release
+        captureFrame(screen, seq, template)
+        // crop 语义是裁剪，返回坐标要加回偏移（照抄上游的 mask 语义）
+        val region = crop?.clampTo(screen.cols(), screen.rows())
+        if (crop != null && region == null) return emptyList()
+        val work = if (region == null) screen else Mat(screen, region.toRect())
         try {
-            // 开发模式采集：放在这里而不是失败分支，因为要裁素材的界面也包括现在还正常的
-            captureFrame(screen, frame.seq, template)
-            // crop 语义是裁剪，返回坐标要加回偏移（照抄上游的 mask 语义）
-            val region = crop?.clampTo(screen.cols(), screen.rows())
-            if (crop != null && region == null) return emptyList()
-            val work = if (region == null) screen else Mat(screen, region.toRect())
+            // maskTemplate 是对**模板**取子区域，用于「只比对卡包左上角那块」
+            val templateRegion = maskTemplate?.clampTo(tpl.cols(), tpl.rows())
+            if (maskTemplate != null && templateRegion == null) return emptyList()
+            val effectiveTpl = templateRegion?.let { Mat(tpl, it.toRect()) } ?: tpl
             try {
-                // maskTemplate 是对**模板**取子区域，用于「只比对卡包左上角那块」
-                val templateRegion = maskTemplate?.clampTo(tpl.cols(), tpl.rows())
-                if (maskTemplate != null && templateRegion == null) return emptyList()
-                val effectiveTpl = templateRegion?.let { Mat(tpl, it.toRect()) } ?: tpl
-                try {
-                    val matches = TemplateMatcher.match(
-                        screen = work,
-                        template = effectiveTpl,
-                        threshold = threshold,
-                        offsetX = region?.x ?: 0,
-                        offsetY = region?.y ?: 0,
-                        screenshotScale = screenshotScale,
-                        onMiss = onMiss,
-                    )
-                    if (matches.isEmpty()) reportFrameGeometryOnce(screen, frame.seq, template)
-                    if (matches.isNotEmpty() || crop != null || maskTemplate != null || screenshotScale != 1.0 ||
-                        !AndroidHomeNavigation.supports(template)) return matches
+                val matches = TemplateMatcher.match(
+                    screen = work,
+                    template = effectiveTpl,
+                    threshold = threshold,
+                    offsetX = region?.x ?: 0,
+                    offsetY = region?.y ?: 0,
+                    screenshotScale = screenshotScale,
+                    onMiss = onMiss,
+                )
+                if (matches.isEmpty()) reportFrameGeometryOnce(screen, seq, template)
+                if (matches.isNotEmpty() || crop != null || maskTemplate != null || screenshotScale != 1.0 ||
+                    !AndroidHomeNavigation.supports(template)) return matches
 
-                    val drive = templateOf("main_drive_no_text") ?: return emptyList()
-                    val coroutine = currentCoroutineContext()
-                    val mobile = AndroidHomeNavigation.match(
-                        screen, template, tpl, drive, threshold, gameLanguage, ocr,
-                        checkActive = { coroutine.ensureActive() },
-                    ) ?: return emptyList()
-                    if (warned.add("android_home:$template")) {
-                        onInfo("已识别 Android 主页导航 $template，位置=${mobile.x},${mobile.y}")
-                    }
-                    return listOf(mobile)
-                } finally {
-                    if (effectiveTpl !== tpl) effectiveTpl.release()
+                val drive = templateOf("main_drive_no_text") ?: return emptyList()
+                val coroutine = currentCoroutineContext()
+                val mobile = AndroidHomeNavigation.match(
+                    screen, template, tpl, drive, threshold, gameLanguage, ocr,
+                    checkActive = { coroutine.ensureActive() },
+                ) ?: return emptyList()
+                if (warned.add("android_home:$template")) {
+                    onInfo("已识别 Android 主页导航 $template，位置=${mobile.x},${mobile.y}")
                 }
+                return listOf(mobile)
             } finally {
-                if (work !== screen) work.release()
+                if (effectiveTpl !== tpl) effectiveTpl.release()
             }
         } finally {
-            screen.release()
+            if (work !== screen) work.release()
         }
     }
 
@@ -630,6 +652,9 @@ class LimbusRecognizer(
 
     /** 释放缓存的模板与推理会话。引擎停止或换语言时调用 */
     fun release() {
+        cachedFrame?.release()
+        cachedFrame = null
+        cachedFrameSeq = -1
         templateCache.values.forEach { it?.release() }
         templateCache.clear()
         warned.clear()
