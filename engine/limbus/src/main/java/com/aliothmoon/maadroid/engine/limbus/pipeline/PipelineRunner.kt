@@ -55,6 +55,8 @@ class PipelineRunner(
      */
     private val lastRecognition = HashMap<String, List<Match>>()
     private val disabled = HashSet<String>()
+    /** 每个节点「经 interrupt 回到自身且 next 仍全灭」的连续轮数；next 一命中即清零 */
+    private val interruptLoops = HashMap<String, Int>()
     private var failure: String? = null
 
     /** 上游的 continue_run 事件；置 false 后主循环尽快退出 */
@@ -79,6 +81,7 @@ class PipelineRunner(
         // 与上游一致：先压 get_next 再压 do_action，故动作先执行、随后才路由
         lastRecognition.clear()
         disabled.clear()
+        interruptLoops.clear()
         failure = null
         stack.addLast(Step.Route(entry, start))
         stack.addLast(Step.Action(entry, start))
@@ -186,6 +189,8 @@ class PipelineRunner(
                         "各候选差距: ${next.misses.joinToString("; ")}",
                 )
             }
+            // next 命中即有进展，清掉打转计数
+            interruptLoops.remove(step.name)
             stack.addLast(Step.Route(next.hit, registry.require(next.hit)))
             stack.addLast(Step.Action(next.hit, registry.require(next.hit)))
             rateLimit(step.node, started)
@@ -196,6 +201,29 @@ class PipelineRunner(
         val interrupt = probe(registry.interruptsOf(step.name))
         if (interrupt.hit != null) {
             val node = registry.require(interrupt.hit)
+            // 「next 全灭 + interrupt 接住」是识别失败最常见的走法：上游给几乎每个节点都
+            // 默认挂了 error_handler 作为 interrupt。而 interrupt 处理完要回到本节点重新
+            // 路由，于是 next 一直不中就会原地打转 —— 真机上表现为 error_handler 每两秒
+            // 刷一行、画面不动，且**过去这里一条诊断都不打**，看不出 next 各候选差多少。
+            val loops = interruptLoops.merge(step.name, 1, Int::plus) ?: 1
+            if (interrupt.misses.isEmpty() && next.misses.isNotEmpty() &&
+                (loops == 1 || loops % LOOP_LOG_EVERY == 0)
+            ) {
+                onLog(
+                    "节点 ${step.name} 的 next 全部未命中，由中断 ${interrupt.hit} 接管" +
+                        "（第 $loops 轮）；各候选差距: ${next.misses.joinToString("; ")}",
+                )
+            }
+            if (loops >= MAX_INTERRUPT_LOOPS) {
+                // MAX_STEPS 只防「永远不停」，不防「停不下来的原地打转」：按实测 2.2 秒
+                // 一轮算，8000 步要转约 5 小时才报死循环。这里带着证据尽早失败。
+                failure = "节点 ${step.name} 经中断 ${interrupt.hit} 反复回到自身 $loops 轮仍无进展" +
+                    (if (next.misses.isEmpty()) "" else "；各候选差距: ${next.misses.joinToString("; ")}")
+                onLog("节点 ${step.name} 原地打转 $loops 轮，终止流水线")
+                stack.clear()
+                running = false
+                return
+            }
             // 中断处理完要回到本节点继续路由 —— 先压自身的 Route，它会最后执行
             stack.addLast(Step.Route(step.name, step.node))
             stack.addLast(Step.Route(interrupt.hit, node))
@@ -259,11 +287,17 @@ class PipelineRunner(
         kotlinx.coroutines.delay((seconds * 1000).toLong())
     }
 
-    private companion object {
+    internal companion object {
         /**
          * 步数上限。上游没有这道保险，实际用起来遇到识别持续不中时会无限空转；
          * 这里给一个明确的失败而不是让用户干等。按 rateLimit 1 秒估算约两小时。
          */
         const val MAX_STEPS = 8000
+
+        /** 同一节点经中断反复回到自身、next 始终全灭的容忍轮数 */
+        const val MAX_INTERRUPT_LOOPS = 10
+
+        /** 打转期间每隔几轮复述一次差距，避免每两秒刷一行 */
+        const val LOOP_LOG_EVERY = 5
     }
 }

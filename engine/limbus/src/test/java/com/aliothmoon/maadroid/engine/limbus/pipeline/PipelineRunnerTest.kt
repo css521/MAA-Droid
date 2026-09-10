@@ -188,7 +188,11 @@ class PipelineRunnerTest {
         // 因此 ERR 会重复出现，并最终被步数保险终止。两件事同时被验证：
         // 回归确实发生了，且无限循环不会让用户干等。
         assertTrue("中断后应回到原节点，故 ERR 会重复: ${trace.size} 次", trace.count { it == "ERR" } > 1)
-        assertTrue("自环应被步数保险终止: $reason", reason?.contains("死循环") == true)
+        // 原地打转必须带证据尽早失败，而不是耗到 MAX_STEPS：按真机实测 2.2 秒一轮，
+        // 8000 步要转约 5 小时，用户只能看到 error_handler 刷屏、画面不动。
+        assertTrue("自环应被打转保险终止: $reason", reason?.contains("反复回到自身") == true)
+        assertTrue("应报出打转轮数: $reason", reason?.contains("10 轮") == true)
+        assertEquals(PipelineRunner.MAX_INTERRUPT_LOOPS, trace.count { it == "ERR" })
     }
 
     @Test
