@@ -12,6 +12,14 @@ import java.util.zip.ZipFile
 
 /** Validate in a sibling directory, then replace; interrupted installs keep the last good pack. */
 class AtomicResourceInstaller(
+    /**
+     * 把 APK assets 下指定前缀的素材覆盖层盖到 staging 目录，参数为（前缀, staging）。
+     *
+     * 与 [move] 同样采用注入：本类不持有 Context，读 assets 的职责留给宿主。
+     * 默认空实现，未声明 [ResourcePackSpec.overlayAssetPrefix] 的包完全不受影响。
+     */
+    private val applyOverlay: (String, File) -> Unit = { _, _ -> },
+    /** 放在最后一个参数：调用方习惯用尾随 lambda 注入它（见 EngineResourceInstallTest） */
     private val move: (File, File) -> Boolean = { from, to -> from.renameTo(to) },
 ) {
     fun install(
@@ -77,6 +85,13 @@ class AtomicResourceInstaller(
                         lastReport = now
                     }
                 }
+            }
+            ensureActive()
+            // 覆盖层必须在 finalize 之前：finalize 会写清单并做兼容校验，覆盖后的内容
+            // 才是最终要用的内容。作用在 staging 上，失败不会破坏已装资源。
+            pack.overlayAssetPrefix?.let { prefix ->
+                ensureActive()
+                applyOverlay(prefix, staging)
             }
             ensureActive()
             phaseChanged(ResourceInstallPhase.VERIFYING_FILES)

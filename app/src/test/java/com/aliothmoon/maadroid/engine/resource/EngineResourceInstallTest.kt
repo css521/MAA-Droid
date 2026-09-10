@@ -52,6 +52,40 @@ class EngineResourceInstallTest {
     }
     private fun fails(block: () -> Unit) { try { block(); fail("Expected rejection") } catch (_: IllegalArgumentException) { } catch (_: IllegalStateException) { } catch (_: IOException) { } }
 
+    /**
+     * 覆盖层必须在 finalize 之前生效，且**盖掉**上游同名文件。
+     *
+     * 这条语义是边狱适配的基础：上游 LALC 只自动化 Steam 客户端，部分素材在安卓上完全
+     * 不可用（实测其 details.png 在安卓真帧上真实按钮处只有 0.485），而这类修正必须在
+     * 上游更新之后依然生效。若覆盖发生在 finalize 之后，finalize 校验到的就不是最终内容。
+     */
+    @Test fun overlayOverridesUpstreamBeforeFinalize() {
+        val seenAtFinalize = mutableListOf<String>()
+        val overlayPack = object : ResourcePackSpec by pack {
+            override val overlayAssetPrefix: String? = "test-overlay"
+            override fun finalizeUpstreamInstall(resourceDir: File, revision: ResourceRevision) {
+                seenAtFinalize += File(resourceDir, "config/task/main.json").readText()
+                pack.finalizeUpstreamInstall(resourceDir, revision)
+            }
+        }
+        // 上游写 "bad"，覆盖层改回 "good" —— finalize 校验只接受 "good"，
+        // 所以这个用例同时证明了「覆盖生效」和「覆盖早于 finalize」
+        AtomicResourceInstaller(applyOverlay = { prefix, staging ->
+            assertEquals("test-overlay", prefix)
+            File(staging, "config/task/main.json").writeText("good")
+        }).install(goodArchive("bad"), installed(), overlayPack, first)
+
+        assertEquals(listOf("good"), seenAtFinalize)
+        assertEquals("good", File(installed(), "config/task/main.json").readText())
+    }
+
+    @Test fun overlayIsSkippedWhenPackDeclaresNoPrefix() {
+        var invoked = false
+        AtomicResourceInstaller(applyOverlay = { _, _ -> invoked = true })
+            .install(goodArchive(), installed(), pack, first)
+        assertFalse("未声明前缀的包不应触发覆盖", invoked)
+    }
+
     @Test fun validationFailureKeepsPreviousInstallation() {
         val target = installed()
         val before = pack.readInstalledVersion(target)

@@ -17,6 +17,14 @@ object LimbusResourcePack : ResourcePackSpec {
     override val engineId = EngineIds.LIMBUS
     override val relativeRoot = "engines/limbus"
     override val bundledAssetPrefix: String? = null
+
+    /**
+     * 素材覆盖层：上游 LALC 只自动化 Steam 客户端，部分控件在安卓上完全不同。
+     * 实测上游 details.png 在安卓真帧上，真实按钮处只有 0.485，全图峰值 0.739 还落在
+     * 卡牌美术上，且多尺度 0.8~1.3 全扫都过不了阈值——这类修正必须在上游更新后依然生效，
+     * 所以放覆盖层而不是改上游拷贝。同一份素材也留在 engine/limbus/overlay/ 供离线审计。
+     */
+    override val overlayAssetPrefix: String? = "limbus-overlay"
     override val requiresPrivilegedDelivery = false
     override val upstreamArchive = UpstreamArchive(
         repository = LimbusResourceManifest.REPOSITORY,

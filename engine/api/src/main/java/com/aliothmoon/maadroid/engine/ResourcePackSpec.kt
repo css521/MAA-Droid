@@ -35,6 +35,19 @@ interface ResourcePackSpec {
     /** Null preserves the engine's existing updater (for example MAA / MirrorChyan). */
     val upstreamArchive: UpstreamArchive? get() = null
 
+    /**
+     * APK assets 下的**素材覆盖层**前缀；null 表示不覆盖。
+     *
+     * 上游归档解包后、[finalizeUpstreamInstall] 之前，安装器会把该前缀下的文件按相对路径
+     * 盖到 staging 目录上。存在的理由：上游素材可能是为另一个平台截的
+     * （边狱的上游 LALC 只自动化 Steam 客户端，部分控件在安卓上完全不同），
+     * 而这类修正必须**在上游更新后依然生效**——放在覆盖层里，上游怎么更新都不会被冲掉，
+     * 且只需装「上游素材在本平台不适用」的那几张，不是整套重做。
+     *
+     * 与 [bundledAssetPrefix] 的区别：那个是「该包的初始内容」，这个是「盖在上游之上的修正」。
+     */
+    val overlayAssetPrefix: String? get() = null
+
     /** Validate an extracted source archive and write its installed manifest, or throw. */
     fun finalizeUpstreamInstall(resourceDir: File, revision: ResourceRevision) {
         error("$packId does not support source archive installation")

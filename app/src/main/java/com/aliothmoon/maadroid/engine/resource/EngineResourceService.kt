@@ -23,7 +23,11 @@ class EngineResourceService internal constructor(
     private val installer: AtomicResourceInstaller = AtomicResourceInstaller(),
 ) {
     constructor(context: Context, httpClient: HttpClientHelper, downloader: ResourceDownloader) :
-        this(EngineDataRoot.of(context.applicationContext), HttpResourceTransport(httpClient, downloader))
+        this(
+            EngineDataRoot.of(context.applicationContext),
+            HttpResourceTransport(httpClient, downloader),
+            AtomicResourceInstaller(applyOverlay = assetOverlayApplier(context.applicationContext)),
+        )
 
     private val flows = ConcurrentHashMap<String, MutableStateFlow<EngineResourceState>>()
     fun state(pack: ResourcePackSpec): StateFlow<EngineResourceState> = mutableState(pack).asStateFlow()
@@ -214,4 +218,41 @@ private class HttpResourceTransport(
 
     override suspend fun download(url: String, progress: (DownloadProgress) -> Unit): File =
         downloader.downloadToTempFile(url, progress).getOrThrow()
+}
+
+/**
+ * 从 APK assets 读素材覆盖层并盖到目标目录。
+ *
+ * 上游素材可能是为另一个平台截的——边狱的上游 LALC 只自动化 Steam 客户端，部分控件在
+ * 安卓上完全不同（实测其 details.png 在安卓真帧上真实位置只有 0.485，全图峰值落在卡牌
+ * 美术上）。这类修正必须在上游更新后依然生效，所以放在覆盖层里而不是改上游拷贝。
+ *
+ * 路径同样过 [isSafeResourcePath]：assets 虽由本包提供，但覆盖的是即将启用的资源目录，
+ * 校验成本极低，没有理由在这里放松。
+ */
+private fun assetOverlayApplier(context: Context): (String, File) -> Unit = { prefix, target ->
+    val assets = context.assets
+    fun copyRecursively(assetPath: String, relative: String) {
+        // list() 返回空既可能是文件也可能是空目录，故用能否 open 来区分
+        val children = runCatching { assets.list(assetPath) }.getOrNull() ?: emptyArray()
+        if (children.isEmpty()) {
+            require(isSafeResourcePath(relative)) { "Unsafe overlay path: $relative" }
+            val dest = File(target, relative)
+            check(dest.parentFile?.let { it.isDirectory || it.mkdirs() } == true) {
+                "Cannot create overlay directory for $relative"
+            }
+            assets.open(assetPath).use { input ->
+                dest.outputStream().buffered().use { output -> input.copyTo(output) }
+            }
+            return
+        }
+        for (child in children) {
+            copyRecursively("$assetPath/$child", if (relative.isEmpty()) child else "$relative/$child")
+        }
+    }
+    runCatching { copyRecursively(prefix, "") }.onFailure {
+        // 覆盖层出问题不该让整次安装失败：上游内容本身仍是可用的，
+        // 缺覆盖只会让那几个素材回到"上游原样"，表现为识别不中而非崩溃。
+        throw IOException("素材覆盖层应用失败: ${it.message}", it)
+    }
 }
