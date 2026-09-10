@@ -67,6 +67,7 @@ class NodeRecognizer(
 ) {
 
     suspend fun recognize(node: PipelineNode): RecognizeOutcome {
+        val t0 = System.nanoTime()
         // Defend callers that construct/copy a node without going through registry.load.
         node.compatibilityError()?.let { reason ->
             val message = "流水线节点识别失败：$reason"
@@ -117,6 +118,10 @@ class NodeRecognizer(
 
         val hit = if (node.inverse) !raw.hit else raw.hit
         val finalHit = node.enable && hit
+        val ms = (System.nanoTime() - t0) / 1_000_000
+        if (ms > 200) {
+            onUnknownRecognition("perf: ${node.action}/${node.recognition} ${ms}ms hit=$finalHit tpl=${node.templates().firstOrNull()}")
+        }
         // inverse 节点「识别不中」就是命中，此时那份 miss 不是失败原因，别往上报
         return RecognizeOutcome(
             hit = finalHit,
