@@ -11,7 +11,6 @@ import org.opencv.core.CvType
 import org.opencv.core.Core
 import org.opencv.core.Mat
 import org.opencv.core.Rect
-import org.opencv.core.Size
 import org.opencv.imgcodecs.Imgcodecs
 import org.opencv.imgproc.Imgproc
 import java.io.File
@@ -56,8 +55,17 @@ class LimbusRecognizer(
     // 采集而非「失败时落盘」：要裁素材的界面也包括现在还正常的那些，而失败帧
     // 往往是转场中间的糊图，不适合当素材源。
 
-    /** 上一张已采集帧的缩略指纹，用于判断画面是否真的变了 */
-    private var lastCaptureFingerprint: Mat? = null
+    /**
+     * 已采集过的素材名。首次访问时把目录里已有的文件名装进来，
+     * 这样重启 App、重跑任务都不会把同一个界面再采一遍。
+     */
+    private val knownTags: MutableSet<String> by lazy {
+        val existing = captureDir?.listFiles { f -> f.isFile && f.extension == "png" }
+            ?.map { it.nameWithoutExtension }
+            ?: emptyList()
+        capturedCount = existing.size
+        existing.toMutableSet()
+    }
 
     private var capturedCount = 0
 
@@ -70,35 +78,26 @@ class LimbusRecognizer(
     private fun captureFrame(screen: Mat, seq: Long, tag: String) {
         val base = captureDir ?: return
         if (capturedCount >= MAX_CAPTURES) return
-        val small = Mat()
+        val safeTag = tag.replace(Regex("[^A-Za-z0-9_.-]"), "_").take(48)
+        // 按素材名去重，**且跨运行生效**（knownTags 惰性装载目录里已有的文件名）。
+        // 只靠帧间差不够：识别器每次 connect 都重建，计数与指纹归零，于是每跑一次任务
+        // 就把开头那几屏重采一遍——实测 5 次运行采了 78 张，其中只有 17 个不同界面。
+        //
+        // 刻意不再叠加帧间差判断：那会让素材名在「画面与上次相同」时被白白消耗掉，
+        // 之后该素材真正所在的界面就永远采不到了。素材名本身就是够好的主键，
+        // 同一屏被多个素材名各存一份也无害——反而能看出那一屏在找哪些判据。
+        if (safeTag in knownTags) return
         try {
-            Imgproc.resize(screen, small, Size(64.0, 36.0), 0.0, 0.0, Imgproc.INTER_AREA)
-            if (small.channels() > 1) Imgproc.cvtColor(small, small, Imgproc.COLOR_BGR2GRAY)
-            val previous = lastCaptureFingerprint
-            if (previous != null) {
-                val diff = Mat()
-                try {
-                    Core.absdiff(small, previous, diff)
-                    // 均值差阈值：低于此值视为同一画面。取 6 是为了容忍动画与呼吸灯，
-                    // 又不至于把「同一页不同弹窗」当成同一张。
-                    if (Core.mean(diff).`val`[0] < CAPTURE_DIFF_THRESHOLD) return
-                } finally {
-                    diff.release()
-                }
-            }
             if (!base.isDirectory && !base.mkdirs()) return
-            val safeTag = tag.replace(Regex("[^A-Za-z0-9_.-]"), "_").take(48)
-            val file = File(base, "${capturedCount.toString().padStart(2, '0')}_${seq}_$safeTag.png")
+            val file = File(base, "$safeTag.png")
             if (!Imgcodecs.imwrite(file.absolutePath, screen)) return
+            // 只有真的写成功才登记，否则这个素材名会被永久跳过
+            knownTags += safeTag
             capturedCount++
-            lastCaptureFingerprint?.release()
-            lastCaptureFingerprint = small.clone()
             // 绝对路径必须进日志：导出器万一没收集到这棵树，也能照路径手动取
             onDiagnostic("frame.capture", "第 $capturedCount 张 frame=$seq ${file.absolutePath}")
         } catch (e: Throwable) {
             onDiagnostic("frame.capture", "采集失败: ${e.message}")
-        } finally {
-            small.release()
         }
     }
 
@@ -632,9 +631,6 @@ class LimbusRecognizer(
 
         /** 开发模式采集帧数上限，避免写满存储 */
         const val MAX_CAPTURES = 60
-
-        /** 缩略图均值差低于此值视为同一画面 */
-        const val CAPTURE_DIFF_THRESHOLD = 6.0
 
         const val MODEL_MIRROR_LEGEND = "mirror_legend"
         const val MODEL_MIRROR_PATH = "mirror_path"
