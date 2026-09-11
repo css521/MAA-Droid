@@ -199,12 +199,20 @@ private object SelectFloorEgoGiftAction : ActionBackend {
         var selectOrders = preferWithoutOwned + acquireWithoutOwned + acquireWithOwned
 
         if (selectOrders.isEmpty()) {
-            // 全都没认出来时退到模板匹配兜底，仍认不出就放弃本次选择
+            // OCR 没认出任何饰品名或 Acquire 标记（安卓上花体字/美术字 OCR 极不稳定，
+            // 实测读出 "cmeraiu ciytra" 这类乱码）。退到模板匹配兜底，点第一个可选项。
+            // 不能反复重试同一帧——花体字不会因为多读一次就变好，只会浪费时间。
             val fallback = ctx.recognize.templateMatch("acquire_ego_gift")
-            if (fallback.isEmpty()) {
-                ctx.log("跨层选 EGO 识别异常：连 Acquire E.G.O Gift 模板都认不出")
-            } else {
+            if (fallback.isNotEmpty()) {
+                ctx.log("饰品名 OCR 失败，退到模板兜底点第一个可选项")
                 click(ctx.input, fallback[0].x, fallback[0].y + FLOOR_GIFT_CLICK_DY)
+                ctx.delay(0.5)
+            } else {
+                // 模板也匹配不上（安卓上 acquire_ego_gift 只有 0.587~0.636）。
+                // 直接点第一个饰品的位置：上游三列布局，第一列中心约 x=300。
+                // 宁可选错也不要反复空转——每次重试同一帧只会得到同样的乱码。
+                ctx.log("OCR 与模板均失败，直接点第一个饰品位置")
+                click(ctx.input, 300, 210)
                 ctx.delay(0.5)
             }
             click(ctx.input, 1130, 580)

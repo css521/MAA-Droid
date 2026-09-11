@@ -81,12 +81,20 @@ private fun WorkspaceContent(config: LimbusWorkspaceConfig, change: (LimbusWorks
                     DropdownMenuItem(text = { Text("导入 / 导出配置") }, onClick = { more = false; transfer = true })
                     DropdownMenuItem(text = { Text("清理采集帧与日志") }, onClick = {
                         more = false
-                        // 采集帧存在 Maa/debug/limbus/frames/，清掉后下次运行会重新采集全部界面
-                        val frames = root?.let { java.io.File(it, "debug/limbus/frames") }
+                        // root 是资源包目录（engines/limbus），不是 Maa 根目录。
+                        // 采集帧和诊断日志在 Maa/debug/ 下——沿 root 向上找名为 Maa 的祖先。
+                        var maaRoot: java.io.File? = null
+                        var cursor = root
+                        while (cursor != null) {
+                            if (cursor.name == "Maa") { maaRoot = cursor; break }
+                            cursor = cursor.parentFile
+                        }
+                        val frames = maaRoot?.let { java.io.File(it, "debug/limbus/frames") }
                         val count = frames?.listFiles()?.count { it.isFile && it.extension == "png" } ?: 0
                         frames?.listFiles()?.forEach { if (it.isFile && it.extension == "png") it.delete() }
-                        // 清理边狱的诊断日志（events.log 等），避免旧日志混在新数据里
-                        val diag = root?.parentFile?.let { java.io.File(it, "diagnostics") }
+                        // 诊断日志在 Maa 同级的 diagnostics/（DiagnosticStore 的位置）
+                        val diag = maaRoot?.parentFile?.let { java.io.File(it, "diagnostics") }
+                            ?: root?.parentFile?.let { java.io.File(it, "diagnostics") }
                         val logCount = diag?.walkTopDown()?.count { it.isFile && it.delete() } ?: 0
                         clearToast = "已清理 $count 张采集帧、$logCount 条诊断日志"
                     })

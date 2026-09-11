@@ -121,26 +121,18 @@ class LimbusEngine(
             ?: throw IllegalStateException("资源包缺少 $PIPELINE_DIR 目录")
         require(files.isNotEmpty()) { "$PIPELINE_DIR 下没有流水线 JSON" }
 
-        // 平台补丁：把部分文字判据从 template_match 改成 ocr。上游素材来自 Steam 客户端，
-        // 在安卓上大面积失配（实测 details.png 在真实按钮处只有 0.485），而两个客户端显示的是
-        // 同一串文字 —— OCR 读字不读像素，不受字体渲染与 UI 缩放差异影响。
-        // 补丁文件由覆盖层随资源安装写入，只覆盖具名字段，上游流程更新仍照常生效。
-        // 每次 prepare 都写入当前版本的补丁——确保旧版本残留的补丁不会继续生效。
-        // 此前只在 AtomicResourceInstaller 安装时覆盖，但换 APK 后如果资源没重装，
-        // 旧补丁就残留在设备上（真机实测：旧版 21 个 OCR 补丁导致 7 个 error_handler
-        // 候选全走 OCR，每个 1~5 秒，累积出 30~80 秒卡顿）。
-        val patchFile = File(resourceDir, PIPELINE_PATCH)
-        patchFile.parentFile?.mkdirs()
-        patchFile.writeText(EMBEDDED_PATCH)
-        val patches = if (!patchFile.isFile) emptyMap() else runCatching {
-            Json.parseToJsonElement(patchFile.readText()).jsonObject
-                // 下划线前缀是注释键。JSON 不支持注释，而这个文件需要写清"为什么这么改"，
-                // 故约定 _ 开头的键跳过。不过滤的话它的值（数组）会让 jsonObject 抛异常，
-                // 继而被 runCatching 吞掉，**所有补丁一起静默失效**。
+        // 平台补丁：把部分文字判据从 template_match 改成 ocr。
+        // **不写文件**——写文件会改变资源目录的 hash，verifyInstalledFiles 判定资源损坏，
+        // 每次停止再启动都触发重新下载。直接在内存里解析内嵌常量。
+        // 磁盘上的旧补丁文件（如有）忽略——EMBEDDED_PATCH 是唯一的真实来源。
+        val patches = runCatching {
+            Json.parseToJsonElement(EMBEDDED_PATCH).jsonObject
                 .filterKeys { !it.startsWith("_") }
                 .mapValues { it.value.jsonObject }
-        }.onFailure { warn("流水线补丁解析失败，按纯上游运行: ${it.message}") }.getOrDefault(emptyMap())
+        }.onFailure { warn("内嵌补丁解析失败: ${it.message}") }.getOrDefault(emptyMap())
         if (patches.isNotEmpty()) info("已应用流水线补丁 ${patches.size} 个节点")
+        // 删掉磁盘上残留的旧补丁文件，避免 verifyInstalledFiles 报"包含清单外文件"
+        File(resourceDir, PIPELINE_PATCH).let { if (it.isFile) it.delete() }
 
         val loaded = PipelineRegistry.load(files, patches)
 
