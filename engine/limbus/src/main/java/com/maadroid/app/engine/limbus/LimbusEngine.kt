@@ -95,6 +95,10 @@ class LimbusEngine(
 
     @Volatile private var diagnosticSink: EngineDiagnosticSink? = null
     override fun setDiagnosticSink(sink: EngineDiagnosticSink?) { diagnosticSink = sink }
+
+    /** 「设置 → 调试模式」的值；控制采集画面帧与 perf 计时这类只对排查有用的输出 */
+    @Volatile private var debugMode: Boolean = false
+    override fun setDebugMode(enabled: Boolean) { debugMode = enabled }
     private fun trace(phase: String, detail: String = "") {
         try {
             // DiagnosticStore bounds/redacts persisted text; also cap work passed to any sink.
@@ -386,7 +390,7 @@ class LimbusEngine(
         config: JsonLimbusConfig,
         tasks: List<QueuedTask>,
     ): Boolean {
-        val nodeRecognizer = NodeRecognizer(rec) { warn(it) }
+        val nodeRecognizer = NodeRecognizer(rec, { warn(it) }, perfEnabled = debugMode)
         val taskRun = LimbusTaskRun(
             registry = reg,
             tasks = tasks.associate { it.id to requireNotNull(LimbusTask.ofType(it.type)) },
@@ -517,7 +521,10 @@ class LimbusEngine(
             cursor = cursor.parentFile
         }
         val root = debugRoot ?: File(resourceDir.parentFile ?: resourceDir, "debug/limbus")
-        val enabled = BuildConfig.DEBUG || File(root, CAPTURE_MARKER).isFile
+        // 由「设置 → 调试模式」控制，不用 BuildConfig.DEBUG —— 那样必须分发 debug 与
+        // release 两种包，而用户手上的正式包遇到问题时反而开不了采集。
+        // 标记文件保留作为免开设置的现场手段。
+        val enabled = debugMode || File(root, CAPTURE_MARKER).isFile
         if (!enabled) return null
         val frames = File(root, "frames")
         info("开发模式：采集素材底片到 ${frames.absolutePath}")
@@ -537,7 +544,7 @@ class LimbusEngine(
          * 10 个但资源没重装，旧补丁残留导致 7 个弹窗候选全走 OCR（每个 1~5 秒），
          * error_handler 打转 10 轮累积到 30~80 秒卡顿。
          */
-        const val EMBEDDED_PATCH = """{"exp_choose_team":{"recognition":"ocr","params":{"text":"Details","mask":[880,100,120,50]}},"thread_choose_team":{"recognition":"ocr","params":{"text":"Details","mask":[880,100,120,50]}},"mirror_choose_team":{"recognition":"ocr","params":{"text":"Details","mask":[880,100,120,50]}},"mirror_ready_to_battle":{"recognition":"ocr","params":{"text":"Details","mask":[880,100,120,50]}},"touch_to_start":{"recognition":"ocr","params":{"text":"Clear all caches","mask":[170,630,190,55]}},"mirror_enter_resume":{"recognition":"ocr","params":{"text":"Resume","mask":[570,370,150,60]}},"mirror_enter_dungeon":{"recognition":"ocr","params":{"text":"Enter","mask":[1050,440,130,90]}},"check_enkephalin":{"params":{"post_delay":2.5}},"event_entry_dark":{"params":{"post_delay":2.5}},"event_entry":{"params":{"post_delay":2.5}}}"""
+        const val EMBEDDED_PATCH = """{"exp_choose_team":{"recognition":"ocr","params":{"text":"Details","mask":[880,100,120,50]}},"thread_choose_team":{"recognition":"ocr","params":{"text":"Details","mask":[880,100,120,50]}},"mirror_choose_team":{"recognition":"ocr","params":{"text":"Details","mask":[880,100,120,50]}},"mirror_ready_to_battle":{"recognition":"ocr","params":{"text":"Details","mask":[880,100,120,50]}},"touch_to_start":{"recognition":"ocr","params":{"text":"Clear all caches","mask":[170,630,190,55]}},"mirror_enter_resume":{"recognition":"ocr","params":{"text":"Resume","mask":[570,370,150,60]}},"mirror_enter_dungeon":{"recognition":"ocr","params":{"text":"Enter","mask":[1050,440,130,90]}},"check_enkephalin":{"params":{"post_delay":2.5}},"event_entry_dark":{"params":{"post_delay":2.5}},"event_entry":{"params":{"post_delay":2.5}},"mirror_event_dark":{"params":{"threshold":0.85}}}"""
 
         /**
          * 坐标覆盖表：`"原x,原y"` → `[新x, 新y]`。

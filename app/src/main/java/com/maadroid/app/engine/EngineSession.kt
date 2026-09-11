@@ -24,6 +24,13 @@ class EngineSession(
     private val resources: EngineResourceService,
     private val runMode: RunMode,
     private val serviceProvider: suspend (suspend (RemoteService) -> Unit) -> Unit,
+    /**
+     * 「设置 → 调试模式」的当前值。取函数而非快照：会话可能跨越用户改设置的时刻。
+     *
+     * 引擎据此决定是否采集画面帧、输出识别耗时等排查用输出。用设置而不是
+     * BuildConfig.DEBUG，这样正式包遇到问题也能开诊断，不必分发两种包。
+     */
+    private val debugMode: () -> Boolean = { false },
 ) {
     private var deviceSession: EngineDeviceSession? = null
     private val resourceLeases = mutableListOf<Closeable>()
@@ -97,6 +104,7 @@ class EngineSession(
             }
             val activeEngine = getOrCreateEngine() ?: error("无法创建引擎 $engineId")
             activeEngine.setDiagnosticSink { phase, detail -> trace(phase, detail) }
+            activeEngine.setDebugMode(debugMode())
             trace("engine.prepare")
             activeEngine.prepare(EngineResources(profile, directories)).getOrThrow()
             var connected = false

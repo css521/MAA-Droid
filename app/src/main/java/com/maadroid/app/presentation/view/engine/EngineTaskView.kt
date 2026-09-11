@@ -154,6 +154,7 @@ fun EngineTaskContent(
                         serviceProvider = { block ->
                             RemoteServiceManager.useRemoteService { service -> block(service) }
                         },
+                        debugMode = { settings.debugMode.value },
                     )
                 },
             )

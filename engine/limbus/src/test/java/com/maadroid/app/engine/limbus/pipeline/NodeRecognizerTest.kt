@@ -186,7 +186,7 @@ class NodeRecognizerTest {
                 val rec = FakeRecognizer()
                 val node = PipelineNode(recognition = "some_future_recognition", inverse = inverse, enable = enabled)
 
-                val failure = runCatching { NodeRecognizer(rec) { warnings += it }.recognize(node) }.exceptionOrNull()
+                val failure = runCatching { NodeRecognizer(rec, onUnknownRecognition = { warnings += it }).recognize(node) }.exceptionOrNull()
 
                 assertTrue(failure is IllegalStateException)
                 assertTrue(failure!!.message.orEmpty().contains("some_future_recognition"))

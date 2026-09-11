@@ -214,6 +214,22 @@ class PipelineRunner(
                         "（第 $loops 轮）；各候选差距: ${next.misses.joinToString("; ")}",
                 )
             }
+            // 打转到一半时先试一次通用恢复，而不是直接判死。
+            //
+            // 打转的典型原因是"画面确实在某个已知界面，但判据擦边够不上阈值"——
+            // 真机实测 mirror_circle_center 卡死那次，18 个候选里 mirror_event_dark
+            // 峰值 0.859 而阈值 0.9，只差 0.041。这种情况下按 ESC 回上一层往往就能
+            // 走到一个判据能认出的界面，比整轮任务失败好得多。
+            //
+            // back_to_init_page 是上游的通用恢复动作，它自己会处理各类未知界面
+            // （标题页、领奖弹窗、战斗中、镜牢内…），且带自己的重试上限。
+            if (loops == RECOVERY_AT_LOOP && registry[RECOVERY_NODE] != null) {
+                onLog("节点 ${step.name} 打转 $loops 轮，先尝试通用恢复（$RECOVERY_NODE）")
+                stack.addLast(Step.Route(step.name, step.node))
+                stack.addLast(Step.Action(RECOVERY_NODE, registry.require(RECOVERY_NODE)))
+                rateLimit(step.node, started)
+                return
+            }
             if (loops >= MAX_INTERRUPT_LOOPS) {
                 // MAX_STEPS 只防「永远不停」，不防「停不下来的原地打转」：按实测 2.2 秒
                 // 一轮算，8000 步要转约 5 小时才报死循环。这里带着证据尽早失败。
@@ -296,6 +312,12 @@ class PipelineRunner(
 
         /** 同一节点经中断反复回到自身、next 始终全灭的容忍轮数 */
         const val MAX_INTERRUPT_LOOPS = 10
+
+        /** 打转到第几轮时插入一次通用恢复；留足后续轮数以便恢复后仍有机会重新路由 */
+        const val RECOVERY_AT_LOOP = 5
+
+        /** 通用恢复节点：上游的 back_to_init_page，自己会处理各类未知界面并带重试上限 */
+        const val RECOVERY_NODE = "back_to_init_page"
 
         /** 打转期间每隔几轮复述一次差距，避免每两秒刷一行 */
         const val LOOP_LOG_EVERY = 5

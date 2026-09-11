@@ -26,6 +26,17 @@ interface AutomationEngine {
     fun setDiagnosticSink(sink: EngineDiagnosticSink?) {}
 
     /**
+     * 调试模式开关，由宿主按「设置 → 调试模式」的值传入。
+     *
+     * 引擎据此决定是否输出诊断细节、采集画面帧等只对排查有用、对普通使用是噪声的行为。
+     * 用它而不是 `BuildConfig.DEBUG`：那样必须分发 debug 与 release 两种包，
+     * 而用户手上的正式包遇到问题时反而开不了诊断。
+     *
+     * 默认 false —— 未实现的引擎按「非调试」运行。
+     */
+    fun setDebugMode(enabled: Boolean) {}
+
+    /**
      * 装载资源（模板图 / 流水线 / 模型）。按 [ResourcePackSpec] 从集合取得各包路径。
      * [EngineResources] 只表达路径；资源内容与兼容性校验由装载流程负责。
      */

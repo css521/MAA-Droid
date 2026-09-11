@@ -64,6 +64,11 @@ data class TemplateMiss(
 class NodeRecognizer(
     private val recognizer: Recognizer,
     private val onUnknownRecognition: (String) -> Unit = {},
+    /**
+     * 是否输出识别耗时。由「设置 → 调试模式」驱动：这些行只对排查慢在哪里有用，
+     * 平时会把执行日志刷满（一轮任务数百次识别）。
+     */
+    private val perfEnabled: Boolean = false,
 ) {
 
     suspend fun recognize(node: PipelineNode): RecognizeOutcome {
@@ -119,7 +124,7 @@ class NodeRecognizer(
         val hit = if (node.inverse) !raw.hit else raw.hit
         val finalHit = node.enable && hit
         val ms = (System.nanoTime() - t0) / 1_000_000
-        if (ms > 200) {
+        if (perfEnabled && ms > 200) {
             onUnknownRecognition("perf: ${node.action}/${node.recognition} ${ms}ms hit=$finalHit tpl=${node.templates().firstOrNull()}")
         }
         // inverse 节点「识别不中」就是命中，此时那份 miss 不是失败原因，别往上报
