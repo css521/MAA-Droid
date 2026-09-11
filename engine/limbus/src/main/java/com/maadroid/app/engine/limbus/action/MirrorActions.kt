@@ -467,9 +467,13 @@ private object ShopReplacePurchaseAction : ActionBackend {
     private suspend fun tryReplaceSkill(ctx: ActionContext, replaceMap: JsonObject?): Boolean {
         if (replaceMap.isNullOrEmpty()) return false
 
-        val nameOcr = ctx.recognize.detectText(Crop(535, 320, 165, 50))
+        val nameOcr = ctx.recognize.detectText(SKILL_REPLACE_NAME_REGION)
         if (nameOcr.isEmpty()) {
-            ctx.log("替换技能的罪人名识别异常，跳过技能替换")
+            // 用户现场观察：这一行出现时面板仍开着、替换也没发生 —— 所以不是
+            // 「面板已关闭」的正常终止，而是取字区域真的读不到东西。
+            // 把区域打进日志，下一轮就能对着真帧确认是框错位置还是切在文字上。
+            ctx.log("罪人名 OCR 读不到内容（区域 ${SKILL_REPLACE_NAME_REGION}），跳过技能替换")
+            ctx.recognize.dumpFrame("skill_replace_panel")
             return false
         }
         val detected = nameOcr[0].text
@@ -803,6 +807,14 @@ private const val NODES_PER_COLUMN = 3
  * （"You have not selected an E.G.O Gift yet. Continue without choosing?"），
  * 流水线不认识那个弹窗，会卡死在上面。
  */
+/**
+ * 技能替换面板上罪人名的取字区域。上游 PC 坐标，安卓上未经真帧验证。
+ *
+ * 真机实测这里读不到内容（用户现场确认：面板仍开着、替换未发生），
+ * 所以不是「面板已关闭」的正常情况。待 skill_replace_panel 采帧后据实测修正。
+ */
+private val SKILL_REPLACE_NAME_REGION = Crop(535, 320, 165, 50)
+
 private val GIFT_SELECT_BUTTON = 1139 to 579
 private val GIFT_REFUSE_BUTTON = 949 to 579
 
