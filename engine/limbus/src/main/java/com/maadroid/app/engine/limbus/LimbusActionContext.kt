@@ -38,7 +38,30 @@ internal class LimbusActionContext(
 
     override suspend fun delay(seconds: Double) {
         if (seconds <= 0) return
-        kotlinx.coroutines.delay((seconds * 1000).toLong())
+        kotlinx.coroutines.delay((seconds * 1000 * delayScale).toLong())
+    }
+
+    companion object {
+        /**
+         * 全局等待倍率，作用于全部 106 处 `ctx.delay`。
+         *
+         * 上游 LALC 的等待时长是在 Windows 客户端上调的——那里 UI 动画短、响应快。
+         * 安卓客户端动画更长，虚拟显示器还有额外延迟，于是上游"够用"的等待普遍偏短。
+         * 已知实例：队伍列表滑动（0.5→2.0）、编队点完（0→1.5）、事件转场（1→2.5）、
+         * 领奖点击（只等网络→+1.5）。
+         *
+         * 逐个调是没完的（106 处），所以给一个总闸门：设备上偏慢就整体放大，
+         * 不用为每处新发现的等待重新打包。个别处仍可用具名常量单独覆盖
+         * （见 BattleActions.LIST_SETTLE / UtilActions.REWARD_SETTLE）。
+         *
+         * 默认 1.0 保持与上游一致；由 [LimbusEngine] 在 prepare 时按配置设置。
+         */
+        @Volatile
+        var delayScale: Double = 1.0
+            set(value) {
+                // 0 会让所有等待失效、导致大面积误操作；过大则一轮任务跑不完
+                field = value.coerceIn(0.5, 5.0)
+            }
     }
 
     override fun counterOf(nodeName: String): Int = counters[nodeName] ?: 0

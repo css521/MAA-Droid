@@ -148,6 +148,7 @@ class LimbusEngine(
         InputHelper.applyCoordinateOverrides(coords)
         if (coords.isNotEmpty()) info("已应用坐标覆盖 ${coords.size} 处")
 
+
         // 不碰磁盘上的任何文件——无论是写入还是删除，都会破坏 verifyInstalledFiles 的 hash 校验。
         // 旧补丁文件（如有）在磁盘上无害：它不会被加载（EMBEDDED_PATCH 是唯一来源），
         // 也不会被清单校验拒绝（它已在清单的白名单里，见 LimbusResourceManifest.PIPELINE_PATCH）。
@@ -316,6 +317,14 @@ class LimbusEngine(
         val mergedConfig = mergeConfigs(tasks)
         val language = mergedConfig.str("other_task", "language", loadedLanguage)
         val config = mergedConfig.withLanguage(requireNotNull(resourceDir), language)
+
+        // 全局等待倍率。上游的等待时长是在 Windows 客户端上调的，安卓上普遍偏短
+        // （已知：队伍滑动、编队、事件转场、领奖点击都要放大）。逐个调是没完的（106 处
+        // ctx.delay），所以给一个总闸门。用整数百分比（100 = 1.0×）避免给 LimbusConfig
+        // 加 double 读法；实现里会 clamp 到 0.5~5.0。
+        val scalePercent = config.int("other_task", "delay_scale_percent", 100)
+        LimbusActionContext.delayScale = scalePercent / 100.0
+        if (scalePercent != 100) info("等待倍率 ${scalePercent}%")
         val effectiveRegistry = reg.withEnabled(enableOverrides).withAndroidMailEntry().withTargetCounts(
             listOf("exp", "thread", "mirror").associate { "${it}_check" to config.int(it, "check_node_target_count", 1) },
         )
