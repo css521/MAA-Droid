@@ -1,11 +1,11 @@
 import com.android.build.api.dsl.LibraryExtension
-import com.aliothmoon.maadroid.buildlogic.PrepareMaaNativeLibrariesTask
+import com.maadroid.app.buildlogic.PrepareMaaNativeLibrariesTask
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.library)
-    id("com.aliothmoon.maadroid.asset-manifest")
+    id("com.maadroid.app.asset-manifest")
 }
 
 val localProperties = Properties().apply {
@@ -24,7 +24,7 @@ val nativeAbis: List<String> = if (abiRaw.equals("all", ignoreCase = true)) {
 }
 
 android {
-    namespace = "com.aliothmoon.maadroid.engine.arknights"
+    namespace = "com.maadroid.app.engine.arknights"
     compileSdk = 37
     ndkVersion = "29.0.13113456"
 

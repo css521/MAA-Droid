@@ -33,8 +33,8 @@ println("[core-bridge][ABI] ${nativeAbis.joinToString()}  LTO=$nativeLto")
 
 android {
     // namespace 只用于生成 R 与解析 manifest 相对类名；模块内 Kotlin/Java 包名
-    // 沿用 com.aliothmoon.maadroid.*，这样 app 侧 import 无需改动
-    namespace = "com.aliothmoon.maadroid.corebridge"
+    // 沿用 com.maadroid.app.*，这样 app 侧 import 无需改动
+    namespace = "com.maadroid.app.corebridge"
     compileSdk = 37
 
     defaultConfig {

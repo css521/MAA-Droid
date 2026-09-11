@@ -1,0 +1,200 @@
+package com.maadroid.app.presentation.navigation
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavController
+import com.maadroid.app.constant.Routes
+import com.maadroid.app.data.preferences.AppSettingsManager
+import com.maadroid.app.data.background.BackgroundImageStore
+import com.maadroid.app.ui.components.consumeAllPointerEvents
+import com.maadroid.app.presentation.pip.LocalIsInPip
+import com.maadroid.app.presentation.view.background.BackgroundGamesView
+import com.maadroid.app.presentation.view.engine.LocalEnginePreviewNavigation
+import com.maadroid.app.presentation.view.home.HomeView
+import com.maadroid.app.presentation.view.settings.SettingsView
+import com.maadroid.app.presentation.viewmodel.BackgroundTaskViewModel
+import com.maadroid.app.remote.EngineIds
+import com.maadroid.app.schedule.ui.ScheduleListView
+import com.maadroid.app.ui.theme.LocalReduceMotion
+import com.maadroid.app.ui.theme.MaaBackgroundHost
+import com.maadroid.app.ui.theme.MaaMotion
+import com.maadroid.app.ui.theme.MaxBackgroundBlur
+import com.maadroid.app.ui.theme.ProvideColorScheme
+import com.maadroid.app.ui.theme.toGlass
+import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
+import kotlin.math.abs
+
+
+@Composable
+fun MainScreen(
+    modifier: Modifier = Modifier,
+    navController: NavController,
+    backgroundTaskViewModel: BackgroundTaskViewModel,
+    hostTaskActive: Boolean,
+    canStartEngineTask: () -> Boolean,
+    onViewAnnouncement: () -> Unit = {},
+    onViewOnboarding: () -> Unit = {},
+    visible: Boolean = true,
+    fullscreen: Boolean = false,
+) {
+    val pagerState = rememberPagerState(pageCount = { BottomNavTab.all.size })
+    val scope = rememberCoroutineScope()
+    val reduceMotion = LocalReduceMotion.current
+    val chromeHidden = fullscreen || LocalIsInPip.current ||
+        LocalEnginePreviewNavigation.current?.fullscreenEngineId != null
+    val appSettings: AppSettingsManager = koinInject()
+
+    // targetPage：点击/滑动一旦确定目标即生效，停稳后等于 currentPage。
+    // animateScrollToPage 内部走 MutatorMutex，连续调用时后者自动接管，无需手动取消。
+    fun goToPage(index: Int, animate: Boolean = true) {
+        if (index !in BottomNavTab.all.indices || index == pagerState.targetPage) return
+        scope.launch {
+            if (!animate) {
+                pagerState.scrollToPage(index)
+                return@launch
+            }
+            val distance = abs(index - pagerState.currentPage).coerceAtLeast(1)
+            pagerState.animateScrollToPage(
+                page = index,
+                animationSpec = tween(
+                    durationMillis = MaaMotion.pagerDuration(distance, reduceMotion),
+                    easing = MaaMotion.Emphasized,
+                ),
+            )
+        }
+    }
+
+    // 非首页 Tab 按返回键先回到首页；全屏由 BackgroundTaskView 自行处理。
+    BackHandler(enabled = visible && !chromeHidden && pagerState.targetPage != 0) {
+        goToPage(0)
+    }
+
+    // 主 Tab 路由是空占位不能 navigate，只能先 pop 回主界面再滑 pager
+    fun surfaceToTab(tab: BottomNavTab, animate: Boolean = true) {
+        navController.popBackStack(Routes.HOME, false)
+        goToPage(BottomNavTab.all.indexOf(tab), animate)
+    }
+
+    // 定时任务触发时自动浮出后台任务页
+    // （恢复旧导航 navigate(BACKGROUND){popUpTo(HOME)} 的“自动浮出后台页”语义）。
+    val pendingNavigateRequestId by backgroundTaskViewModel.pendingNavigateRequestId.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingNavigateRequestId) {
+        if (pendingNavigateRequestId != null) {
+            // 现有定时任务属于方舟，不能停留在上次浏览的其它游戏页。
+            appSettings.setCurrentGameId(EngineIds.ARKNIGHTS)
+            surfaceToTab(BottomNavTab.BACKGROUND)
+            backgroundTaskViewModel.onNavigateForScheduledLaunch()
+        }
+    }
+
+    // 子页面的「回到主界面并切 Tab」请求
+    val mainTabNavigator: MainTabNavigator = koinInject()
+    val mainTabRequest by mainTabNavigator.request.collectAsStateWithLifecycle()
+    LaunchedEffect(mainTabRequest) {
+        mainTabRequest?.let { request ->
+            // 当前程序化 BACKGROUND 入口来自方舟引导 / 任务修复；底栏点击保留游戏选择。
+            if (request.tab == BottomNavTab.BACKGROUND) {
+                appSettings.setCurrentGameId(EngineIds.ARKNIGHTS)
+            }
+            surfaceToTab(request.tab, request.animate)
+            mainTabNavigator.consume()
+        }
+    }
+
+    // 自定义图片背景（仅四个主 Tab 生效）：启用时切换玻璃配色并在 Scaffold 之下绘制背景图。
+    val backgroundStore: BackgroundImageStore = koinInject()
+    val backgroundImage by backgroundStore.imageBitmap.collectAsStateWithLifecycle()
+    val backgroundImageAlpha by appSettings.customBackgroundImageAlpha.collectAsStateWithLifecycle()
+    val backgroundScrim by appSettings.customBackgroundScrim.collectAsStateWithLifecycle()
+    val backgroundBlur by appSettings.customBackgroundBlur.collectAsStateWithLifecycle()
+
+    val scaffoldContent: @Composable () -> Unit = {
+        Scaffold(
+            modifier = modifier,
+            bottomBar = {
+                if (visible && !chromeHidden) {
+                    AppBottomNavigation(
+                        currentRoute = BottomNavTab.all[pagerState.targetPage].route,
+                        onTabSelected = { tab -> goToPage(BottomNavTab.all.indexOf(tab)) },
+                    )
+                }
+            },
+        ) { paddingValues ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = paddingValues.calculateBottomPadding())
+                    .graphicsLayer {
+                        // 隐藏时跳过绘制但保留组合树，避免 HorizontalPager 状态丢失
+                        alpha = if (visible) 1f else 0f
+                    },
+            ) {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                    key = { BottomNavTab.all[it].route },
+                    userScrollEnabled = visible && !chromeHidden,
+                ) { page ->
+                    when (BottomNavTab.all[page]) {
+                        BottomNavTab.HOME -> HomeView(navController = navController)
+                        BottomNavTab.BACKGROUND -> BackgroundGamesView(
+                            backgroundTaskViewModel = backgroundTaskViewModel,
+                            isActivePage = visible && pagerState.targetPage == page,
+                            fullscreen = fullscreen,
+                            hostTaskActive = hostTaskActive,
+                            canStartEngineTask = canStartEngineTask,
+                        )
+
+                        BottomNavTab.SCHEDULE -> ScheduleListView(navController = navController)
+                        BottomNavTab.SETTINGS -> SettingsView(
+                            navController = navController,
+                            onViewAnnouncement = onViewAnnouncement,
+                            onViewOnboarding = onViewOnboarding,
+                        )
+                    }
+                }
+
+                // 隐藏（子页面叠加其上）时吞掉所有指针，防止横滑切走主 Tab / 点击穿透到底层页。
+                if (!visible) {
+                    Box(Modifier
+                        .matchParentSize()
+                        .consumeAllPointerEvents())
+                }
+            }
+        }
+    }
+
+    val image = backgroundImage
+    if (image != null) {
+        val baseScheme = MaterialTheme.colorScheme
+        val glassScheme = remember(baseScheme) { baseScheme.toGlass() }
+        ProvideColorScheme(glassScheme) {
+            MaaBackgroundHost(
+                image = image,
+                imageAlpha = backgroundImageAlpha / 100f,
+                scrimColor = baseScheme.background,
+                scrimAlpha = backgroundScrim / 100f,
+                blurRadius = MaxBackgroundBlur * (backgroundBlur / 100f),
+                content = scaffoldContent,
+            )
+        }
+    } else {
+        scaffoldContent()
+    }
+}

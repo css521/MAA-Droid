@@ -5,8 +5,8 @@ plugins {
 }
 
 android {
-    // 包名沿用 com.aliothmoon.maadroid.*，app 侧 import 无需改动
-    namespace = "com.aliothmoon.maadroid.coreremote"
+    // 包名沿用 com.maadroid.app.*，app 侧 import 无需改动
+    namespace = "com.maadroid.app.coreremote"
     compileSdk = 37
 
     defaultConfig {

@@ -1,0 +1,89 @@
+package com.maadroid.app
+
+import java.io.File
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class PersistentUiTextContractTest {
+
+    @Test
+    fun persistentUiMessages_useResourceBackedUiTextInsteadOfRawStringState() {
+        val failures = TARGETS.mapNotNull { target ->
+            val file = resolveSourceFile(target.relativePath)
+            val matches = target.forbiddenPatterns.filter { pattern ->
+                pattern.containsMatchIn(file.readText())
+            }
+            if (matches.isEmpty()) null else {
+                val details = matches.joinToString { it.pattern }
+                "${target.relativePath}: $details"
+            }
+        }
+
+        assertTrue(
+            "Persistent UI message state must use resource-backed UiText models instead of raw String fields:\n${failures.joinToString("\n")}",
+            failures.isEmpty()
+        )
+    }
+
+    /** 统一走 [TestSources]：模块目录名不写死，挪模块时不必回来改 */
+    private fun resolveSourceFile(relativePath: String): File =
+        TestSources.resolve(relativePath)
+
+    private data class TargetFile(
+        val relativePath: String,
+        val forbiddenPatterns: List<Regex>,
+    )
+
+    companion object {
+        private val TARGETS = listOf(
+            TargetFile(
+                "src/main/java/com/maadroid/app/presentation/state/HomeUiState.kt",
+                forbiddenPatterns = listOf(
+                    Regex("""serviceStatusText\s*:\s*String"""),
+                    Regex("""runModeUnsupportedMessage\s*:\s*String"""),
+                ),
+            ),
+            TargetFile(
+                "src/main/java/com/maadroid/app/presentation/view/panel/FloatingPanelState.kt",
+                forbiddenPatterns = listOf(
+                    Regex("""title\s*:\s*String"""),
+                    Regex("""message\s*:\s*String"""),
+                    Regex("""confirmText\s*:\s*String"""),
+                    Regex("""dismissText\s*:\s*String\?"""),
+                ),
+            ),
+            TargetFile(
+                "src/main/java/com/maadroid/app/presentation/viewmodel/ToolboxViewModel.kt",
+                forbiddenPatterns = listOf(
+                    Regex("""statusMessage\s*:\s*StateFlow<String>"""),
+                    Regex("""MutableStateFlow\(\"\"\)"""),
+                ),
+            ),
+            TargetFile(
+                "src/main/java/com/maadroid/app/presentation/viewmodel/CopilotViewModel.kt",
+                forbiddenPatterns = listOf(
+                    Regex("""statusMessage\s*:\s*String\s*="""),
+                ),
+            ),
+            TargetFile(
+                "src/main/java/com/maadroid/app/presentation/viewmodel/MiniGameDelegate.kt",
+                forbiddenPatterns = listOf(
+                    Regex("""statusMessage\s*:\s*String\s*="""),
+                ),
+            ),
+            TargetFile(
+                "src/main/java/com/maadroid/app/schedule/ui/ScheduleEditViewModel.kt",
+                forbiddenPatterns = listOf(
+                    Regex("""errorMessage\s*:\s*String\?"""),
+                ),
+            ),
+            TargetFile(
+                "src/main/java/com/maadroid/app/presentation/viewmodel/SettingsViewModel.kt",
+                forbiddenPatterns = listOf(
+                    Regex("""MutableStateFlow<String\?>\(null\)"""),
+                    Regex("""StateFlow<String\?>"""),
+                ),
+            ),
+        )
+    }
+}

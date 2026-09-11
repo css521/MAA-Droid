@@ -208,7 +208,7 @@ libMaaCore.so → JNA AsstApiCallback → MaaCoreServiceImpl
 
 ## Correlating With Code
 
-包根：`app/src/main/java/com/aliothmoon/maadroid/`（下表相对该根，除非写了 `app/src/...`）。
+包根：`app/src/main/java/com/maadroid/app/`（下表相对该根，除非写了 `app/src/...`）。
 
 | 区域 | 路径 | 作用 |
 |------|------|------|

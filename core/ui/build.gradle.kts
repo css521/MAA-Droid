@@ -1,11 +1,11 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.compose)
-    id("com.aliothmoon.maadroid.i18n-verify")
+    id("com.maadroid.app.i18n-verify")
 }
 
 android {
-    namespace = "com.aliothmoon.maadroid.ui"
+    namespace = "com.maadroid.app.ui"
     compileSdk = 37
 
     defaultConfig {

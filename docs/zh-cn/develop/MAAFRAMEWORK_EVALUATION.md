@@ -61,8 +61,8 @@ LALC 的 Windows 输入实现也不能因为 Framework 支持 Agent 就直接在
 
 ## MaaFwApp 取舍
 
-可复用或参考其 [Kotlin/JNA 声明](https://github.com/Aliothmoon/MaaFwApp/blob/f4f6f220e21e3a1b7b0cf5df4bdbe0ec04c668f7/app/src/main/java/com/aliothmoon/maafw/maa/MaaFrameworkLibrary.kt)、
-[MaaRunner 装载与绑定顺序](https://github.com/Aliothmoon/MaaFwApp/blob/f4f6f220e21e3a1b7b0cf5df4bdbe0ec04c668f7/app/src/main/java/com/aliothmoon/maafw/remote/MaaRunner.kt)。
+可复用或参考其 [Kotlin/JNA 声明](https://github.com/Aliothmoon/MaaFwApp/blob/f4f6f220e21e3a1b7b0cf5df4bdbe0ec04c668f7/app/src/main/java/com/maadroid/maafw/maa/MaaFrameworkLibrary.kt)、
+[MaaRunner 装载与绑定顺序](https://github.com/Aliothmoon/MaaFwApp/blob/f4f6f220e21e3a1b7b0cf5df4bdbe0ec04c668f7/app/src/main/java/com/maadroid/maafw/remote/MaaRunner.kt)。
 其 JNA 声明尚未覆盖这里需要的 CustomController 和 custom-action 注册接口。
 Framework 文档标记外部 Java 绑定停留在旧 v3，不能直接假定其支持当前 ABI。
 
@@ -87,7 +87,7 @@ Framework 文档标记外部 Java 绑定停留在旧 v3，不能直接假定其�
    继续使用暂存、兼容检查与安装机制；停止当前任务并确认释放后再切换资源。
 
 对应代码：[现有桥接分发](../../../core/bridge/src/main/native/bridge_input.cpp)、
-[当前 native 兼容检查](../../../build-logic/src/main/kotlin/com/aliothmoon/maadroid/buildlogic/NativeRuntimeCompatibility.kt)、
+[当前 native 兼容检查](../../../build-logic/src/main/kotlin/com/maadroid/app/buildlogic/NativeRuntimeCompatibility.kt)、
 [Framework 图像输入](https://github.com/MaaXYZ/MaaFramework/blob/00356a68c1ef7864b1adbdfbcf86da9017f2a61e/source/Common/MaaBuffer.cpp#L258)、
 [资源 hash 实现](https://github.com/MaaXYZ/MaaFramework/blob/00356a68c1ef7864b1adbdfbcf86da9017f2a61e/source/MaaFramework/Resource/ResourceMgr.cpp#L185)。
 

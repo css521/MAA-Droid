@@ -1,0 +1,73 @@
+package com.maadroid.app.engine.limbus.recognize
+
+import com.maadroid.app.engine.Frame
+import com.maadroid.app.engine.FrameSource
+import com.maadroid.app.engine.limbus.action.ActionOutcome
+import com.maadroid.app.engine.limbus.action.ActionRegistry
+import com.maadroid.app.engine.limbus.action.FakeConfig
+import com.maadroid.app.engine.limbus.action.FakeTemplateIndex
+import com.maadroid.app.engine.limbus.action.LuxcavationActions
+import com.maadroid.app.engine.limbus.action.TestActionContext
+import com.maadroid.app.engine.limbus.recognize.ocr.PpOcrEngine
+import java.io.File
+import java.nio.ByteBuffer
+import kotlinx.coroutines.runBlocking
+import org.opencv.imgcodecs.Imgcodecs
+
+/** Real user-image/model/action replay. Does not assert a game transition after the recorded input. */
+object ExpStageNativeTest {
+    @JvmStatic fun main(args: Array<String>) = runBlocking {
+        require(args.size == 3) { "usage: <OpenCV JNI> <LALC resource root> <test resources/ocr>" }
+        System.load(File(args[0]).absolutePath)
+        LuxcavationActions.registerAll()
+        for (name in listOf("exp-stage-linear.png", "exp-stage-nearest.png", "exp-stage-125359.png")) {
+            val screen = Imgcodecs.imread(File(args[2], name).absolutePath)
+            require(screen.cols() == 1280 && screen.rows() == 720)
+            val pixels = ByteArray(1280 * 720 * 3).also { screen.get(0, 0, it) }
+            var grabs = 0L
+            val source = object : FrameSource {
+                override suspend fun grab() = Frame(1280, 720, 3840, ++grabs,
+                    ByteBuffer.allocateDirect(pixels.size).apply { put(pixels); flip() })
+                override fun close() = Unit
+            }
+            val diagnostics = mutableListOf<String>()
+            val reader = requireNotNull(PpOcrEngine.load(File(args[1]), ::println))
+            val recognizer = LimbusRecognizer(source, FakeTemplateIndex(), { null }, ocr = reader,
+                onDiagnostic = { phase, detail -> diagnostics += "$phase $detail" })
+            try {
+                val crop = Crop(250, 180, 1000, 50)
+                if (name == "exp-stage-125359.png") {
+                    // This later attachment is a 542x305 preview, not the logged 1280x720 OCR frame.
+                    // Only 08 survives the downsampling; never infer its neighbouring card numbers.
+                    val eight = recognizer.findExpStage("08")
+                    check(eight.size == 1 && eight.single().x in 660..705) { "Preview anchor: $eight" }
+                    check(recognizer.findExpStage("09").isEmpty()) { "Guessed an unreadable card number" }
+                    println("PASS low-resolution preview: 08 recognized, unreadable 09 remains uncertain; ${diagnostics.last()}")
+                    continue
+                }
+                for ((stage, range) in listOf("07" to 320..360, "08" to 660..705, "09" to 1005..1045)) {
+                    val before = grabs
+                    val matches = recognizer.findExpStage(stage)
+                    check(grabs == before + 1) { "Fallback read a different frame" }
+                    check(matches.size == 1 && matches.single().x in range) { "$name $stage: $matches; ${diagnostics.lastOrNull()}" }
+                }
+                check(diagnostics.any { "target=09" in it && "size=1280x720 stride=3840" in it && "hits=1" in it })
+                check(recognizer.findText("109", crop).isEmpty())
+                check(recognizer.findExpStage("109").isEmpty())
+                check(recognizer.findText("09", Crop(250, 300, 1000, 50)).isEmpty())
+                check(recognizer.findText("09", crop, threshold = 1.0).isEmpty()) { "Fallback lowered confidence" }
+
+                for ((mode, y) in listOf("enter" to 480, "skip battle" to 515)) {
+                    val ctx = TestActionContext(recognize = recognizer,
+                        config = FakeConfig().put("exp", "exp_stage", "09").put("exp", "luxcavation_mode", mode))
+                    check(ActionRegistry["exp_select_stage"]!!.execute(ctx) == ActionOutcome.Continue)
+                    val click = ctx.fakeInput.clicks().single()
+                    check(click.first in 1015..1055 && click.second == y) { "Wrong card/button: $click" }
+                    check(ctx.slept.isEmpty()) { "Visible stage should not trigger a swipe" }
+                    println("PASS $name $mode: 09 -> input $click")
+                }
+                println("PASS $name: 07/08/09, same-frame fallback, numeric boundary, mask and confidence; ${diagnostics.first { "target=09" in it }}")
+            } finally { recognizer.release(); screen.release() }
+        }
+    }
+}

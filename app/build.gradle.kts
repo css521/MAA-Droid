@@ -9,7 +9,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.kotlin.parcelize)
     alias(libs.plugins.ksp)
-    id("com.aliothmoon.maadroid.i18n-verify")
+    id("com.maadroid.app.i18n-verify")
 }
 
 val localProperties = Properties().apply {
@@ -94,14 +94,14 @@ println("[native] LTO=$nativeLto")
 println("[Java Version] ${System.getProperty("java.version")}")
 
 android {
-    namespace = "com.aliothmoon.maadroid"
+    namespace = "com.maadroid.app"
     compileSdk = 37
 
 
     defaultConfig {
         // 永久改为与 namespace 一致。此前保留旧值是为兼容 MAA-Meow 老用户；
         // 现明确以 MAA-Droid 身份发布，老用户视为全新安装（数据不迁移）。
-        applicationId = "com.aliothmoon.maadroid"
+        applicationId = "com.maadroid.app"
         minSdk = 28
         targetSdk = 36
         versionCode = gitVersionCode
@@ -113,7 +113,7 @@ android {
         // MaaCoreVersion 尚在宿主，保留兼容字段；版本由方舟模块从 .maaversion 导出。
         buildConfigField(
             "String", "MAA_CORE_VERSION",
-            "com.aliothmoon.maadroid.engine.arknights.BuildConfig.MAA_CORE_VERSION",
+            "com.maadroid.app.engine.arknights.BuildConfig.MAA_CORE_VERSION",
         )
 
         buildConfigField("String", "APP_UPDATE_GITHUB_OWNER", buildConfigString(appUpdateProperty("maa.appUpdate.githubOwner")))
@@ -363,7 +363,7 @@ androidComponents {
                 "Generate achievement string-resource lookup (avoids Resources.getIdentifier)"
             group = "build"
             stringsFile.set(layout.projectDirectory.file("src/main/res/values/strings.xml"))
-            packageName.set("com.aliothmoon.maadroid.data.achievement")
+            packageName.set("com.maadroid.app.data.achievement")
         }
         variant.sources.kotlin?.addGeneratedSourceDirectory(genTask) { it.outputDir }
     }

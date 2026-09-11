@@ -8,7 +8,7 @@
 - **版权**：Copyright 2018 Genymobile
 - **许可证**：[Apache License 2.0](../../../LICENSE-Apache-2.0)
 - **原始代码**：[server/src/main/java/com/genymobile/scrcpy](https://github.com/Genymobile/scrcpy/tree/master/server/src/main/java/com/genymobile/scrcpy)
-- **本项目中的位置**：[`core/bridge/src/main/java/com/aliothmoon/maadroid/third/`](../../../core/bridge/src/main/java/com/aliothmoon/maadroid/third/)
+- **本项目中的位置**：[`core/bridge/src/main/java/com/maadroid/app/third/`](../../../core/bridge/src/main/java/com/maadroid/app/third/)
 
 ### 用途
 
@@ -39,7 +39,7 @@
 
 以下是相对于 scrcpy 原始代码的主要修改：
 
-- 调整包名从 `com.genymobile.scrcpy` 至 `com.aliothmoon.maadroid.third`
+- 调整包名从 `com.genymobile.scrcpy` 至 `com.maadroid.app.third`
 - 移除了与屏幕录制、视频编码、音频采集相关的代码，仅保留系统服务反射封装部分
 - 新增 `ActivityManager`、`SurfaceControl`、`StatusBarManager`、`PowerManager` 等封装类
 - `DisplayManager` 增加了 `createNewVirtualDisplay()` 方法，用于创建独立虚拟显示器
@@ -53,7 +53,7 @@
 - **项目地址**：[MaaAssistantArknights](https://github.com/MaaAssistantArknights/MaaAssistantArknights)
 - **许可证**：[AGPL-3.0](https://www.gnu.org/licenses/agpl-3.0.html)
 - **使用方式**：通过 [setup_maa_core.py](../../../scripts/setup_maa_core.py) 下载预编译产物（`libMaaCore.so`、其依赖库及资源文件），运行时由 JNA 动态加载。
-- **桥接位置**：[engine/arknights/core](../../../engine/arknights/src/main/java/com/aliothmoon/maadroid/engine/arknights/core) 与该模块的 [AIDL](../../../engine/arknights/src/main/aidl/com/aliothmoon/maadroid)。
+- **桥接位置**：[engine/arknights/core](../../../engine/arknights/src/main/java/com/maadroid/app/engine/arknights/core) 与该模块的 [AIDL](../../../engine/arknights/src/main/aidl/com/maadroid/app)。
 
 当前脚本的下载目标已改为 `engine/arknights/src/main/assets/MaaSync/MaaResource` 和 `engine/arknights/src/main/jniLibs/<abi>`。资源 manifest 插件、MaaCore 版本字段及生成 JNI 目录的任务也由[方舟模块构建声明](../../../engine/arknights/build.gradle.kts)持有；APK 内前缀仍为 `MaaSync/MaaResource`，运行时仍沿用现有资源更新和投递链路。这些路径说明当前代码与打包归属；完整 APK 的兼容性仍需构建和设备验证。方舟任务配置、业务回调和面板尚未全部迁入引擎模块。
 
@@ -67,7 +67,7 @@
 
 ### 一、资源直接复用（不修改）
 
-`engine/limbus` 通过 [LimbusResourcePack](../../../engine/limbus/src/main/java/com/aliothmoon/maadroid/engine/limbus/LimbusResourcePack.kt) 声明上游固定提交的源码 ZIP；安装器只提取以下目录并校验文件。上游 Python 源码只在暂存目录作为动作声明文本检查，安装完成前删除，不在 Android 上执行。
+`engine/limbus` 通过 [LimbusResourcePack](../../../engine/limbus/src/main/java/com/maadroid/app/engine/limbus/LimbusResourcePack.kt) 声明上游固定提交的源码 ZIP；安装器只提取以下目录并校验文件。上游 Python 源码只在暂存目录作为动作声明文本检查，安装完成前删除，不在 Android 上执行。
 
 | 上游路径 | 内容 |
 |---|---|
@@ -77,7 +77,7 @@
 | `lalc_backend/ai/model/` | 三个 ONNX 分类模型（mirror_legend / mirror_path / skill_icon） |
 | `lalc_backend/recognize/models/` | OCR 检测与识别模型 |
 
-执行资源和 UI 图鉴共用这份下载资源，不依赖本仓库 Release 或额外图鉴下载源。[LimbusCatalog](../../../engine/limbus/src/main/java/com/aliothmoon/maadroid/engine/limbus/ui/LimbusCatalog.kt) 从 `img/general/ego_gifts`、`img/general/theme_packs` 和中文饰品语言表生成图鉴；罪人及星光图片也从 `img/general` 读取。APK 已移除原来复制的批量 PNG 与 `catalog.json`。缺资源时显示下载提示，用户配置独立保存；同一路径更新后按 manifest revision 刷新图鉴和图片。
+执行资源和 UI 图鉴共用这份下载资源，不依赖本仓库 Release 或额外图鉴下载源。[LimbusCatalog](../../../engine/limbus/src/main/java/com/maadroid/app/engine/limbus/ui/LimbusCatalog.kt) 从 `img/general/ego_gifts`、`img/general/theme_packs` 和中文饰品语言表生成图鉴；罪人及星光图片也从 `img/general` 读取。APK 已移除原来复制的批量 PNG 与 `catalog.json`。缺资源时显示下载提示，用户配置独立保存；同一路径更新后按 manifest revision 刷新图鉴和图片。
 
 [sync_limbus_ui.py](../../../scripts/sync_limbus_ui.py) 现仅检查本地资源并可导出诊断 JSON，不向 APK 复制图鉴。[pack_engine_resource.py](../../../scripts/pack_engine_resource.py) 是离线打包工具；其中旧的 Release feed 描述不是当前 App 的下载协议。当前链路以 `LimbusResourcePack` 和宿主 `EngineResourceService` 为准。
 
@@ -85,7 +85,7 @@
 
 ### 二、代码移植（衍生作品）
 
-以下路径相对于 [Limbus 引擎源码目录](../../../engine/limbus/src/main/java/com/aliothmoon/maadroid/engine/limbus)。移植代码保留 LALC 的 AGPL v3 许可；上游路径相对于其仓库：
+以下路径相对于 [Limbus 引擎源码目录](../../../engine/limbus/src/main/java/com/maadroid/app/engine/limbus)。移植代码保留 LALC 的 AGPL v3 许可；上游路径相对于其仓库：
 
 | 本仓库 | 移植自上游 |
 |---|---|
@@ -111,8 +111,8 @@
 | 上游路径 | 本仓库中的对应位置 |
 |---|---|
 | `module/resource_sync/manifest.py` | [pack_engine_resource.py](../../../scripts/pack_engine_resource.py) 的 `path` / `sha256` / `size` 清单设计说明 |
-| `module/automation/input_handlers/simulator/simulator_control.py` | [KeyMap.kt](../../../engine/limbus/src/main/java/com/aliothmoon/maadroid/engine/limbus/action/KeyMap.kt) 的按键参考说明 |
-| `module/game_and_screen/screen.py` 及素材目录布局 | [LimbusProfile.kt](../../../engine/limbus/src/main/java/com/aliothmoon/maadroid/engine/limbus/LimbusProfile.kt) 的显示规格参考说明 |
+| `module/automation/input_handlers/simulator/simulator_control.py` | [KeyMap.kt](../../../engine/limbus/src/main/java/com/maadroid/app/engine/limbus/action/KeyMap.kt) 的按键参考说明 |
+| `module/game_and_screen/screen.py` 及素材目录布局 | [LimbusProfile.kt](../../../engine/limbus/src/main/java/com/maadroid/app/engine/limbus/LimbusProfile.kt) 的显示规格参考说明 |
 
 AALC 的素材、字体和模型未被选为当前资源下载源。其跨平台目录布局本身不能证明 LALC 模板在 Android 上的识别效果；分辨率、语言、画面差异及输入行为仍需实机验证。
 
@@ -128,4 +128,4 @@ AALC 的素材、字体和模型未被选为当前资源下载源。其跨平台
 
 MaaCore 下载产物还含 `libopencv_world4.so` 等上游原生依赖，它们与边狱声明的 `org.opencv:opencv:4.11.0` AAR 是不同产物，不能用 AAR 的版本推断 MaaCore 内部 OpenCV 的版本。ONNX Runtime 的库许可与上游模型文件的许可属于不同内容。OpenCV、JNA 及 MaaCore 预编译产物所含其他组件也保留各自声明，不能因本项目使用 AGPL 而改写其许可证。
 
-MaaCore 与 Java/JNI 可能同时依赖 `libonnxruntime.so`。[PrepareMaaNativeLibrariesTask](../../../build-logic/src/main/kotlin/com/aliothmoon/maadroid/buildlogic/PrepareMaaNativeLibrariesTask.kt) 在生成打包目录前检查 MaaCore、其他依赖库和 `libonnxruntime4j_jni.so` 与选定 AAR 中运行库的符号兼容性；验证后从生成目录排除重复的 ORT 库，保留原始下载文件。不能用随意 `pickFirst` 替代该检查，也不能将编译声明的版本当作任意上游 MaaCore 二进制均兼容的保证。
+MaaCore 与 Java/JNI 可能同时依赖 `libonnxruntime.so`。[PrepareMaaNativeLibrariesTask](../../../build-logic/src/main/kotlin/com/maadroid/app/buildlogic/PrepareMaaNativeLibrariesTask.kt) 在生成打包目录前检查 MaaCore、其他依赖库和 `libonnxruntime4j_jni.so` 与选定 AAR 中运行库的符号兼容性；验证后从生成目录排除重复的 ORT 库，保留原始下载文件。不能用随意 `pickFirst` 替代该检查，也不能将编译声明的版本当作任意上游 MaaCore 二进制均兼容的保证。

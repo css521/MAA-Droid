@@ -1,0 +1,417 @@
+package com.maadroid.app.presentation.view.panel
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.maadroid.app.R
+import com.maadroid.app.data.model.AwardConfig
+import com.maadroid.app.data.model.DepotMaintainConfig
+import com.maadroid.app.data.model.FightConfig
+import com.maadroid.app.data.model.InfrastConfig
+import com.maadroid.app.data.model.MallConfig
+import com.maadroid.app.data.model.ReclamationConfig
+import com.maadroid.app.data.model.RecruitConfig
+import com.maadroid.app.data.model.RoguelikeConfig
+import com.maadroid.app.data.model.TaskChainNode
+import com.maadroid.app.data.model.TaskParamProvider
+import com.maadroid.app.data.model.TaskProfile
+import com.maadroid.app.data.model.TaskTypeInfo
+import com.maadroid.app.data.model.UserDataUpdateConfig
+import com.maadroid.app.data.model.WakeUpConfig
+import com.maadroid.app.ui.components.ITextField
+import com.maadroid.app.presentation.view.panel.depot.DepotMaintainConfigPanel
+import com.maadroid.app.presentation.view.panel.fight.FightConfigPanel
+import com.maadroid.app.presentation.view.panel.mall.MallConfigPanel
+import com.maadroid.app.presentation.view.panel.roguelike.RoguelikeConfigPanel
+import com.maadroid.app.presentation.view.panel.userdata.UserDataUpdateConfigPanel
+
+@Composable
+fun TaskConfigPanel(
+    selectedNode: TaskChainNode?,
+    isEditMode: Boolean,
+    isAddingTask: Boolean,
+    isProfileMode: Boolean,
+    profiles: List<TaskProfile>,
+    activeProfileId: String,
+    clientType: String,
+    onConfigChange: (TaskParamProvider) -> Unit,
+    onAddNode: (TaskTypeInfo) -> Unit,
+    onRemoveNode: (String) -> Unit,
+    onDuplicateNode: (String) -> Unit,
+    onRenameNode: (String, String) -> Unit,
+    onSwitchProfile: (String) -> Unit,
+    onRenameProfile: (String, String) -> Unit,
+    onDuplicateProfile: (String) -> Unit,
+    onDeleteProfile: (String) -> Unit,
+    onCreateProfile: () -> Unit,
+    onReorderProfile: (Int, Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(modifier = modifier) {
+        when {
+            // 配置管理模式
+            isProfileMode -> {
+                ProfileManagementPanel(
+                    profiles = profiles,
+                    activeProfileId = activeProfileId,
+                    onSwitch = onSwitchProfile,
+                    onRename = onRenameProfile,
+                    onDuplicate = onDuplicateProfile,
+                    onDelete = onDeleteProfile,
+                    onCreate = onCreateProfile,
+                    onReorder = onReorderProfile
+                )
+            }
+            // 编辑模式：正在新增任务
+            isEditMode && isAddingTask -> {
+                TaskGalleryView(onAddNode = onAddNode)
+            }
+
+            // 编辑模式：已选中任务
+            isEditMode && selectedNode != null -> {
+                TaskManagementView(
+                    node = selectedNode,
+                    onRename = { onRenameNode(selectedNode.id, it) },
+                    onDuplicate = { onDuplicateNode(selectedNode.id) },
+                    onRemove = { onRemoveNode(selectedNode.id) })
+            }
+
+            // 编辑模式：未选中
+            isEditMode -> {
+                EmptyStateHint(
+                    title = stringResource(R.string.panel_config_empty_edit_title),
+                    descriptions = listOf(
+                        stringResource(R.string.panel_config_empty_edit_desc_primary),
+                        stringResource(R.string.panel_config_empty_edit_desc_add)
+                    )
+                )
+            }
+
+            // 普通模式：已选中任务
+            // key(node.id)：切任务时销毁并重建配置面板，避免复用同一 composition/输入框节点，
+            // 导致焦点残留跳转，以及各任务的 remember 状态（展开态/Tab/滚动/输入缓冲）互相串台
+            !isEditMode && selectedNode != null -> key(selectedNode.id) {
+                val cfg = selectedNode.config
+                Box(modifier = Modifier.fillMaxSize()) {
+                    when (cfg) {
+                        is WakeUpConfig -> WakeUpConfigPanel(
+                            config = cfg, onConfigChange = onConfigChange
+                        )
+
+                        is RecruitConfig -> RecruitConfigPanel(
+                            config = cfg, onConfigChange = onConfigChange
+                        )
+
+                        is InfrastConfig -> InfrastConfigPanel(
+                            config = cfg, onConfigChange = onConfigChange
+                        )
+
+                        is FightConfig -> FightConfigPanel(
+                            config = cfg, clientType = clientType, onConfigChange = onConfigChange
+                        )
+
+                        is MallConfig -> MallConfigPanel(
+                            config = cfg, onConfigChange = onConfigChange
+                        )
+
+                        is AwardConfig -> AwardConfigPanel(
+                            config = cfg, onConfigChange = onConfigChange
+                        )
+
+                        is RoguelikeConfig -> RoguelikeConfigPanel(
+                            config = cfg, onConfigChange = onConfigChange
+                        )
+
+                        is ReclamationConfig -> ReclamationConfigPanel(
+                            config = cfg, onConfigChange = onConfigChange
+                        )
+
+                        is UserDataUpdateConfig -> UserDataUpdateConfigPanel(
+                            config = cfg, onConfigChange = onConfigChange
+                        )
+
+                        is DepotMaintainConfig -> DepotMaintainConfigPanel(
+                            config = cfg, onConfigChange = onConfigChange
+                        )
+                    }
+                }
+            }
+
+            // 普通模式：未选中
+            else -> {
+                EmptyStateHint(
+                    title = stringResource(R.string.panel_config_empty_view_title),
+                    descriptions = listOf(stringResource(R.string.panel_config_empty_view_desc))
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyStateHint(
+    title: String, descriptions: List<String>, showReorderHint: Boolean = true
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp)
+    ) {
+        Spacer(modifier = Modifier.height(48.dp)) // 固定顶部高度，防止切换标题时跳变
+
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.ExtraBold
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        descriptions.forEach { desc ->
+            HintItem(Icons.Default.Info, desc)
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        if (showReorderHint) {
+            HintItem(Icons.Default.Info, stringResource(R.string.panel_config_reorder_hint))
+        }
+    }
+}
+
+@Composable
+private fun HintItem(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier
+                .size(18.dp)
+                .padding(top = 2.dp),
+            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            lineHeight = 22.sp
+        )
+    }
+}
+
+@Composable
+private fun TaskGalleryView(onAddNode: (TaskTypeInfo) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(12.dp)
+    ) {
+        Text(
+            stringResource(R.string.panel_config_select_type),
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(bottom = 12.dp)
+        ) {
+            items(TaskTypeInfo.entries) { typeInfo ->
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier.clickable { onAddNode(typeInfo) }) {
+                    Box(
+                        modifier = Modifier.padding(12.dp), contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = taskTypeLabel(typeInfo),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TaskManagementView(
+    node: TaskChainNode, onRename: (String) -> Unit, onDuplicate: () -> Unit, onRemove: () -> Unit
+) {
+    var text by remember(node.id) { mutableStateOf(node.name) }
+    val typeDisplayName = taskTypeInfoForConfig(node.config)?.let { taskTypeLabel(it) }
+        ?: stringResource(R.string.panel_config_unknown_task_type)
+
+    val trimmedText = text.trim()
+    val isError = trimmedText.isEmpty()
+    val isTooLong = text.length > 20
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                shape = RoundedCornerShape(4.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.panel_config_editing_badge),
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = typeDisplayName,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        ITextField(
+            value = text,
+            onValueChange = { newText ->
+                text = newText
+                val name = newText.trim()
+                if (name.isNotEmpty() && name.length <= 20 && name != node.name) {
+                    onRename(name)
+                }
+            },
+            label = stringResource(R.string.panel_config_task_name_label),
+            shape = RoundedCornerShape(4.dp),
+            modifier = Modifier.fillMaxWidth(),
+            supportingText = {
+                if (isError) {
+                    Text(stringResource(R.string.panel_config_name_empty))
+                } else if (isTooLong) {
+                    Text(stringResource(R.string.panel_config_name_too_long))
+                }
+            },
+            outlineColor = if (isError || isTooLong) MaterialTheme.colorScheme.error else null
+        )
+
+        // 字数统计在 ITextField 下方展示，因为 ITextField 内部目前可能不支持 trailingIcon（取决于具体实现）
+        Text(
+            text = "${text.length}/20",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (isTooLong) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp),
+            textAlign = TextAlign.End
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        OutlinedButton(
+            onClick = onDuplicate,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(4.dp)
+        ) {
+            Icon(
+                Icons.Default.ContentCopy,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(stringResource(R.string.panel_config_duplicate_task))
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        OutlinedButton(
+            onClick = onRemove,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = MaterialTheme.colorScheme.error
+            ),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.6f)),
+            shape = RoundedCornerShape(4.dp)
+        ) {
+            Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(stringResource(R.string.panel_config_delete_task))
+        }
+    }
+}
+
+private fun taskTypeInfoForConfig(config: TaskParamProvider): TaskTypeInfo? {
+    return TaskTypeInfo.entries.firstOrNull { it.defaultConfig()::class == config::class }
+}
+
+@Composable
+private fun taskTypeLabel(typeInfo: TaskTypeInfo): String {
+    return when (typeInfo) {
+        TaskTypeInfo.WAKE_UP -> stringResource(R.string.panel_task_type_wake_up)
+        TaskTypeInfo.RECRUITING -> stringResource(R.string.panel_task_type_recruiting)
+        TaskTypeInfo.BASE -> stringResource(R.string.panel_task_type_base)
+        TaskTypeInfo.COMBAT -> stringResource(R.string.panel_task_type_combat)
+        TaskTypeInfo.MALL -> stringResource(R.string.panel_task_type_mall)
+        TaskTypeInfo.MISSION -> stringResource(R.string.panel_task_type_mission)
+        TaskTypeInfo.AUTO_ROGUELIKE -> stringResource(R.string.panel_task_type_auto_roguelike)
+        TaskTypeInfo.RECLAMATION -> stringResource(R.string.panel_task_type_reclamation)
+        TaskTypeInfo.USER_DATA_UPDATE -> stringResource(R.string.panel_task_type_user_data_update)
+        TaskTypeInfo.DEPOT_MAINTAIN -> stringResource(R.string.panel_task_type_depot_maintain)
+    }
+}

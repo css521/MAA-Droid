@@ -7,4 +7,4 @@
     android:canRetrieveWindowContent="false"
     android:description="@string/accessibility_helper_service_description"
     android:notificationTimeout="100"
-    android:settingsActivity="com.aliothmoon.maadroid.MainActivity" />
+    android:settingsActivity="com.maadroid.app.MainActivity" />

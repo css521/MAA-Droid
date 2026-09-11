@@ -15,7 +15,7 @@
       "id": "legacy-wakeup",
       "name": "开始唤醒",
       "config": {
-        "type": "com.aliothmoon.maadroid.data.model.WakeUpConfig",
+        "type": "com.maadroid.app.data.model.WakeUpConfig",
         "clientType": "Bilibili",
         "startGameEnabled": false
       }

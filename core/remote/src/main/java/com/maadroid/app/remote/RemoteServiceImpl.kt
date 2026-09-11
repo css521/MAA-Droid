@@ -1,0 +1,573 @@
+package com.maadroid.app.remote
+
+import android.content.Intent
+import android.graphics.Bitmap
+import android.os.Build
+import android.os.ParcelFileDescriptor
+import android.os.IBinder
+import android.os.Process
+import android.os.SharedMemory
+import android.system.Os
+import android.view.Surface
+import com.maadroid.app.ITouchEventCallback
+import com.maadroid.app.IEngineDeviceSession
+import com.maadroid.app.RemoteService
+import com.maadroid.app.bridge.NativeBridgeLib
+import com.maadroid.app.constant.DefaultDisplayConfig
+import com.maadroid.app.constant.DisplayMode
+import com.maadroid.app.input.InputControlUtils
+import com.maadroid.app.remote.internal.ActivityUtils
+import com.maadroid.app.remote.internal.CoreDataStore
+import com.maadroid.app.remote.internal.GameAudioMuteController
+import com.maadroid.app.remote.internal.FrameChannel
+import com.maadroid.app.remote.internal.EngineDeviceSessionHost
+import com.maadroid.app.remote.internal.GameFpsMonitor
+import com.maadroid.app.remote.internal.GestureRecorder
+import com.maadroid.app.remote.internal.PermissionGrantHelper
+import com.maadroid.app.remote.internal.PowerController
+import com.maadroid.app.remote.internal.PrimaryDisplayManager
+import com.maadroid.app.remote.internal.RemoteUtils
+import com.maadroid.app.remote.internal.ScreenManager
+import com.maadroid.app.remote.internal.UserDirProbe
+import com.maadroid.app.remote.internal.VirtualDisplayManager
+import com.maadroid.app.remote.internal.WakeUnlockController
+import com.maadroid.app.remote.internal.XmsfFirewall
+import com.maadroid.app.third.FakeContext
+import com.maadroid.app.third.Ln
+import com.maadroid.app.third.wrappers.ServiceManager
+import com.maadroid.app.third.Workarounds
+import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.system.exitProcess
+
+/**
+ * 提权进程的服务实现，游戏无关。
+ *
+ * 引擎不在此装配 —— core-remote 不允许依赖 engine-*，否则依赖方向倒挂。
+ * 由 `:app`（唯一依赖全部引擎的模块）继承本类并在其 init 中调用
+ * [RemoteEngineRegistry.register] 装上各引擎工厂，再把子类名作为 `--class=` 传给 launcher。
+ */
+open class RemoteServiceImpl : RemoteService.Stub() {
+
+    companion object {
+        private const val TAG = "RemoteService"
+        private const val HEARTBEAT_INTERVAL_MS = 5_000L
+
+        @JvmStatic
+        fun performEmergencyCleanup() {
+            Ln.i("$TAG: performEmergencyCleanup triggered")
+            runCatching {
+                GameAudioMuteController.restoreAll()
+                XmsfFirewall.restoreIfNeeded()
+                PowerController.destroy()
+                ScreenManager.destroy()
+                RemoteEngineRegistry.closeAll()
+            }.onFailure {
+                Ln.e("$TAG: Emergency cleanup failed: ${it.message}")
+            }
+        }
+    }
+
+    init {
+        RemoteBootTrace.mark("CTOR_START")
+        Runtime.getRuntime().addShutdownHook(Thread {
+            runCatching { performEmergencyCleanup() }
+        }.apply { name = "remote-shutdown-hook" })
+    }
+
+    private val virtualDisplayMode = AtomicInteger(DisplayMode.PRIMARY)
+    private val appPid = AtomicInteger(0)
+    private val destroyed = AtomicBoolean(false)
+    /** 同一进程内 setup 幂等：成功后再调直接返回 OK，失败则下次重试 */
+    private var setup = false
+    @Volatile private var deviceSetup = false
+    private val coreData = CoreDataStore()
+
+    init {
+        // ctor 必须轻量：重活放 setup()，attach 前零阻塞
+        // Root 下放开 umask，core 与本进程写的文件对 shell 可读写（切回 Shizuku 后还能追加）；父目录 0771 挡住其他 App
+        if (Process.myUid() != Process.SHELL_UID) runCatching { Os.umask(0) }
+        Workarounds.apply()
+        startHeartbeatWatchdog()
+        Ln.i("$TAG: RemoteServiceImpl created (lightweight ctor)")
+        RemoteBootTrace.mark("CTOR_DONE")
+    }
+
+    override fun destroy() {
+        if (!destroyed.compareAndSet(false, true)) {
+            return
+        }
+        Ln.i("$TAG: destroy()")
+        InputControlUtils.setTouchCallback(null)
+        GameFpsMonitor.stop()
+        // 共享内存是实例持有的，performEmergencyCleanup 是静态方法拿不到，故在此释放
+        runCatching { frameChannel.close() }
+        performEmergencyCleanup()
+        exitProcess(0)
+    }
+
+    override fun exit() = destroy()
+
+    /**
+     * 按 engineId 转交引擎 binder。本类不认识任何具体引擎 —— 引擎由 `:app` 在提权进程
+     * 入口处注册进 [RemoteEngineRegistry]，这里只做查表，从而支持多游戏共存。
+     */
+    override fun getEngineService(engineId: String?): IBinder? =
+        engineId?.let { RemoteEngineRegistry.get(it) }
+
+    override fun version(): String {
+        return """
+            ==== Build Info ====
+            BridgeInfo: ${NativeBridgeLib.ping()}
+            Engines: ${RemoteEngineRegistry.versionSummary()}
+            =====================
+        """.trimIndent()
+    }
+
+    override fun pid(): Int = Process.myPid()
+
+    /** Common Android boot without creating any engine or touching its resource directory. */
+    @Synchronized
+    override fun setupDevice(): Int {
+        if (deviceSetup) return SetupResult.OK
+        restoreDeviceState()
+        Ln.i("NativeBridgeLib ping ${NativeBridgeLib.ping()}")
+        finishDeviceSetup()
+        return SetupResult.OK
+    }
+
+    private fun restoreDeviceState() {
+        if (deviceSetup) return
+        runCatching { XmsfFirewall.ensureRestored() }
+            .onFailure { Ln.w("XmsFw boot restore failed: ${it.message}") }
+    }
+
+    private fun finishDeviceSetup() {
+        if (deviceSetup) return
+        PermissionGrantHelper.disablePhantomProcessKiller()
+        deviceSetup = true
+    }
+
+    @Synchronized
+    override fun setup(userDir: String?, isDebug: Boolean): Int {
+        if (setup) return SetupResult.OK
+        RemoteBootTrace.mark("SETUP_BEGIN")
+        // 清上一实例可能残留的断网规则，同步执行先于业务 AIDL
+        restoreDeviceState()
+        RemoteBootTrace.mark("SETUP_XMSF_RESTORED")
+        // 不可访问的路径进 AsstSetUserDir 会 abort 整个进程（#227），这里只报告，换到哪由用户在设置里决定
+        val dir = File(userDir.orEmpty())
+        val probeFailure = UserDirProbe.probe(dir)
+        if (probeFailure != null) {
+            Ln.e("$TAG: setup failed - userDir inaccessible: $probeFailure (uid=${Process.myUid()} sdk=${Build.VERSION.SDK_INT})")
+            RemoteBootTrace.mark("SETUP_USER_DIR_INACCESSIBLE", probeFailure)
+            return SetupResult.ERR_USER_DIR_INACCESSIBLE
+        }
+        RemoteBootTrace.bindUserDir(dir)
+        Ln.i("NativeBridgeLib ping ${NativeBridgeLib.ping()}")
+        // 引擎自己完成初始化：core-remote 不认识任何引擎，故不能在此直接调 MaaCore
+        RemoteEngineRegistry.setupAll(dir)?.let { err ->
+            Ln.e("$TAG: setup failed - $err")
+            return SetupResult.ERR_SET_USER_DIR
+        }
+        finishDeviceSetup()
+        setup = true
+        RemoteBootTrace.mark("SETUP_DONE")
+        return SetupResult.OK
+    }
+
+    override fun test(map: MutableMap<String, String>) {
+    }
+
+    // ---- 独立数据目录 ----
+
+    override fun ensureCoreResources(apkPath: String?, stamp: String?): Boolean {
+        if (apkPath.isNullOrBlank() || stamp.isNullOrBlank()) return false
+        val start = System.currentTimeMillis()
+        val ok = coreData.ensureResources(File(apkPath), stamp)
+        Ln.i("$TAG: ensureCoreResources stamp=$stamp ok=$ok in ${System.currentTimeMillis() - start}ms")
+        return ok
+    }
+
+    override fun applyCoreHotUpdate(zip: ParcelFileDescriptor?): Boolean {
+        zip ?: return false
+        val ok = ParcelFileDescriptor.AutoCloseInputStream(zip).use { coreData.applyHotUpdate(it) }
+        Ln.i("$TAG: applyCoreHotUpdate ok=$ok version=${coreData.resourceVersion()}")
+        return ok
+    }
+
+    override fun getCoreResourceVersion(): String = coreData.resourceVersion()
+
+    override fun putCoreFile(relPath: String?, src: ParcelFileDescriptor?): Boolean {
+        if (relPath == null || src == null) {
+            src?.close()
+            return false
+        }
+        return ParcelFileDescriptor.AutoCloseInputStream(src).use { coreData.putFile(relPath, it) }
+            .also { if (!it) Ln.w("$TAG: putCoreFile rejected: $relPath") }
+    }
+
+    override fun listCoreDebugFiles(): MutableList<String> = coreData.listDebugFiles().toMutableList()
+
+    override fun openCoreDebugFile(relPath: String?): ParcelFileDescriptor? {
+        val file = relPath?.let(coreData::debugFile) ?: return null
+        return runCatching { ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY) }.getOrNull()
+    }
+
+    override fun clearCoreData(): Boolean = coreData.clear().also { Ln.i("$TAG: clearCoreData ok=$it") }
+
+    override fun screencap(width: Int, height: Int) {
+    }
+
+    override fun captureFramePng(dirPath: String?): String? {
+        if (dirPath.isNullOrBlank()) {
+            Ln.w("$TAG: captureFramePng - blank dirPath")
+            return null
+        }
+        val bitmap = NativeBridgeLib.getFrameBufferBitmap() ?: run {
+            Ln.w("$TAG: captureFramePng - no frame available")
+            return null
+        }
+        return try {
+            val dir = File(dirPath).apply { mkdirs() }
+            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())
+            val file = File(dir, "screenshot_$timestamp.png")
+            val ok = FileOutputStream(file).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+            if (!ok) {
+                Ln.e("$TAG: captureFramePng - PNG compress failed")
+                file.delete()
+                return null
+            }
+            Ln.i("$TAG: captureFramePng saved ${file.absolutePath}")
+            file.absolutePath
+        } catch (e: Exception) {
+            Ln.e("$TAG: captureFramePng error: ${e.message}")
+            null
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
+    override fun setForcedDisplaySize(width: Int, height: Int): Boolean {
+        return ScreenManager.setForcedDisplaySize(width, height)
+    }
+
+    override fun clearForcedDisplaySize(): Boolean {
+        return ScreenManager.clearForcedDisplaySize()
+    }
+
+    override fun grantPermissions(request: PermissionGrantRequest): PermissionStateInfo {
+        val packageName = request.packageName
+        val uid = if (request.uid > 0) request.uid
+        else RemoteUtils.getAppUid(packageName).takeIf { it > 0 } ?: request.uid
+        val p = request.permissions
+
+        with(PermissionGrantHelper) {
+            return PermissionStateInfo(
+                accessibilityPermission = if (p and PermissionGrantRequest.PERM_ACCESSIBILITY != 0) grantAccessibilityService(
+                    request.accessibilityServiceId
+                ) else false,
+                floatingWindowPermission = if (p and PermissionGrantRequest.PERM_FLOATING_WINDOW != 0) grantFloatingWindowPermission(
+                    packageName,
+                    uid
+                ) else false,
+                notificationPermission = if (p and PermissionGrantRequest.PERM_NOTIFICATION != 0) grantNotificationPermission(
+                    packageName,
+                    uid
+                ) else false,
+                batteryOptimizationExempt = if (p and PermissionGrantRequest.PERM_BATTERY != 0) grantBatteryOptimizationExemption(
+                    packageName
+                ) else false,
+                storagePermission = if (p and PermissionGrantRequest.PERM_STORAGE != 0) grantStoragePermission(
+                    packageName,
+                    uid
+                ) else false,
+                backgroundUnrestricted = if (p and PermissionGrantRequest.PERM_BACKGROUND != 0) grantBackgroundUnrestricted(
+                    packageName,
+                    uid
+                ) else false,
+            )
+        }
+    }
+
+    override fun setMonitorSurface(surface: Surface?) = deviceSessions.legacy {
+        Ln.i("$TAG: setMonitorSurface(${surface != null})")
+        VirtualDisplayManager.setMonitorSurface(surface)
+        NativeBridgeLib.setPreviewSurface(surface)
+    }
+
+    override fun setTouchCallback(callback: ITouchEventCallback?) {
+        Ln.i("$TAG: setTouchCallback(${callback != null})")
+        InputControlUtils.setTouchCallback(callback)
+    }
+
+    // ---- 帧通道：供跑在 App 进程的 Kotlin 引擎取帧 ----
+
+    private val frameChannel = FrameChannel()
+    private val deviceSessions = EngineDeviceSessionHost(frameChannel)
+
+    override fun openDeviceSession(
+        owner: IBinder, mode: Int, width: Int, height: Int, dpi: Int,
+    ): IEngineDeviceSession {
+        check(deviceSetup) { "请先调用 setupDevice" }
+        return deviceSessions.open(owner, mode, width, height, dpi)
+    }
+
+    override fun openFrameChannel(width: Int, height: Int): SharedMemory? =
+        deviceSessions.legacy { frameChannel.open(width, height) }
+
+    override fun grabFrame(): LongArray? = frameChannel.grab()
+
+    override fun closeFrameChannel() = frameChannel.close()
+
+    /**
+     * 按键注入。与 touch 一样只在虚拟显示器模式下生效 —— 前台模式由用户自己操作，
+     * 注入按键会与真人输入打架。
+     */
+    override fun keyDown(keyCode: Int) = deviceSessions.legacy {
+        if (virtualDisplayMode.get() == DisplayMode.PRIMARY) return@legacy
+        val displayId = VirtualDisplayManager.getDisplayId()
+        if (displayId != DefaultDisplayConfig.DISPLAY_NONE) {
+            InputControlUtils.keyDown(keyCode, displayId)
+        }
+    }
+
+    /** 强停游戏进程，供 engine-api 的 DeviceControl.stopApp 使用 */
+    override fun forceStopApp(packageName: String?) = deviceSessions.legacy {
+        if (packageName.isNullOrBlank()) return@legacy
+        runCatching { ServiceManager.getActivityManager().forceStopPackage(packageName) }
+            .onFailure { Ln.e("$TAG: forceStopApp($packageName) failed: ${it.message}") }
+        Unit
+    }
+
+    override fun keyUp(keyCode: Int) = deviceSessions.legacy {
+        if (virtualDisplayMode.get() == DisplayMode.PRIMARY) return@legacy
+        val displayId = VirtualDisplayManager.getDisplayId()
+        if (displayId != DefaultDisplayConfig.DISPLAY_NONE) {
+            InputControlUtils.keyUp(keyCode, displayId)
+        }
+    }
+
+    override fun touchDown(x: Int, y: Int, contact: Int) = deviceSessions.legacy {
+        if (virtualDisplayMode.get() == DisplayMode.PRIMARY) return@legacy
+        val displayId = VirtualDisplayManager.getDisplayId()
+        if (displayId != DefaultDisplayConfig.DISPLAY_NONE) {
+            InputControlUtils.down(x, y, contact, displayId)
+        }
+    }
+
+    override fun touchMove(x: Int, y: Int, contact: Int) = deviceSessions.legacy {
+        if (virtualDisplayMode.get() == DisplayMode.PRIMARY) return@legacy
+        val displayId = VirtualDisplayManager.getDisplayId()
+        if (displayId != DefaultDisplayConfig.DISPLAY_NONE) {
+            InputControlUtils.move(x, y, contact, displayId)
+        }
+    }
+
+    override fun touchUp(x: Int, y: Int, contact: Int) = deviceSessions.legacy {
+        if (virtualDisplayMode.get() == DisplayMode.PRIMARY) return@legacy
+        val displayId = VirtualDisplayManager.getDisplayId()
+        if (displayId != DefaultDisplayConfig.DISPLAY_NONE) {
+            InputControlUtils.up(x, y, contact, displayId)
+        }
+    }
+
+    override fun touchCancel() = deviceSessions.legacy {
+        if (virtualDisplayMode.get() == DisplayMode.PRIMARY) return@legacy
+        val displayId = VirtualDisplayManager.getDisplayId()
+        if (displayId != DefaultDisplayConfig.DISPLAY_NONE) {
+            InputControlUtils.cancel(displayId)
+        }
+    }
+
+    override fun setDisplayPower(on: Boolean) {
+        PowerController.setDisplayPower(on)
+    }
+
+    override fun startVirtualDisplay(): Int = deviceSessions.legacy {
+        Ln.i("$TAG: startVirtualDisplay() ${virtualDisplayMode.get()}")
+        return@legacy when (virtualDisplayMode.get()) {
+            DisplayMode.PRIMARY -> PrimaryDisplayManager.start()
+            DisplayMode.BACKGROUND -> VirtualDisplayManager.start().also { displayId ->
+                if (displayId != DefaultDisplayConfig.DISPLAY_NONE) {
+                    PowerController.startUserActivityKeepAlive(displayId)
+                }
+            }
+
+            else -> DefaultDisplayConfig.DISPLAY_NONE
+        }
+    }
+
+    override fun stopVirtualDisplay() = deviceSessions.legacy {
+        Ln.i("$TAG: stopVirtualDisplay() ${virtualDisplayMode.get()}")
+        when (virtualDisplayMode.get()) {
+            DisplayMode.PRIMARY -> PrimaryDisplayManager.stop()
+            DisplayMode.BACKGROUND -> {
+                GameFpsMonitor.stop()
+                PowerController.stopUserActivityKeepAlive()
+                VirtualDisplayManager.stop()
+            }
+        }
+        GameAudioMuteController.restoreAll()
+    }
+
+    override fun getGameFps(): Float = GameFpsMonitor.currentFps()
+
+    override fun setPlayAudioOpAllowed(packageName: String?, isAllowed: Boolean): Boolean {
+        if (packageName.isNullOrBlank()) return false
+        val ok = GameAudioMuteController.setMuted(packageName, muted = !isAllowed)
+        if (!ok) {
+            Ln.w("$TAG: setPlayAudioOpAllowed($packageName, allowed=$isAllowed) failed")
+        }
+        return ok
+    }
+
+    override fun isAppAlive(packageName: String): Int {
+        return try {
+            val process = Runtime.getRuntime().exec(arrayOf("pidof", packageName))
+            val exitCode = process.waitFor()
+            val output = process.inputStream.bufferedReader().readText().trim()
+            val errorOutput = process.errorStream.bufferedReader().readText().trim()
+            when (exitCode) {
+                0 if output.isNotEmpty() -> AppAliveStatus.ALIVE
+                1 if output.isEmpty() && errorOutput.isEmpty() -> AppAliveStatus.DEAD
+                else -> {
+                    Ln.w(
+                        "$TAG: isAppAlive unexpected result for $packageName: exitCode=$exitCode, stdout=$output, stderr=$errorOutput"
+                    )
+                    AppAliveStatus.UNKNOWN
+                }
+            }
+        } catch (e: Exception) {
+            Ln.w("isAppAlive check failed for $packageName", e)
+            AppAliveStatus.UNKNOWN
+        }
+    }
+
+    override fun heartbeat(pid: Int) {
+        appPid.set(pid)
+        Ln.i("$TAG: heartbeat received, app pid=$pid")
+    }
+
+    override fun isAppOnVirtualDisplay(packageName: String): Boolean {
+        val targetDisplayId = VirtualDisplayManager.getDisplayId()
+        if (targetDisplayId == DefaultDisplayConfig.DISPLAY_NONE) return true
+        val onDisplay = ActivityUtils.isAppOnDisplay(packageName, targetDisplayId)
+        // 游戏不是 MAA Droid 拉起的（未启用自动启动）时，这里是首次得知它在虚拟屏上
+        if (onDisplay) GameFpsMonitor.ensureStarted(packageName)
+        return onDisplay
+    }
+
+    override fun moveAppToVirtualDisplay(packageName: String): Boolean = deviceSessions.legacy {
+        val targetDisplayId = VirtualDisplayManager.getDisplayId()
+        if (targetDisplayId == DefaultDisplayConfig.DISPLAY_NONE) {
+            Ln.w("$TAG: moveAppToVirtualDisplay: no active virtual display")
+            return@legacy false
+        }
+        Ln.i("$TAG: moveAppToVirtualDisplay($packageName) -> display $targetDisplayId")
+        return@legacy ActivityUtils.repinAppToDisplay(packageName, targetDisplayId)
+    }
+
+    /** @return [com.maadroid.app.constant.WakeUnlockResult] */
+    override fun unlock(credential: String?): Int =
+        WakeUnlockController.unlock(credential.orEmpty())
+
+    /** @return [com.maadroid.app.constant.WakeUnlockResult] */
+    override fun lockAndSleep(): Int = WakeUnlockController.lockAndSleep()
+
+    /** @return [com.maadroid.app.constant.WakeUnlockResult] */
+    override fun testUnlock(credential: String?): Int =
+        WakeUnlockController.testUnlock(credential.orEmpty())
+
+    /** @return [com.maadroid.app.constant.WakeUnlockResult] */
+    override fun unlockWithGesture(gestureJson: String?): Int =
+        WakeUnlockController.unlockWithGesture(gestureJson.orEmpty())
+
+    /** @return [com.maadroid.app.constant.WakeUnlockResult] */
+    override fun testUnlockGesture(gestureJson: String?): Int =
+        WakeUnlockController.testUnlockGesture(gestureJson.orEmpty())
+
+    override fun startGestureRecord(timeoutMs: Int) = GestureRecorder.start(timeoutMs)
+
+    /** @return [com.maadroid.app.domain.models.GestureRecordResult] 的 JSON */
+    override fun pollGestureRecord(): String = GestureRecorder.poll()
+
+    override fun cancelGestureRecord() = GestureRecorder.cancel()
+
+    override fun isPackageInstalled(packageName: String): Boolean {
+        return try {
+            FakeContext.get().packageManager.getPackageInfo(packageName, 0)
+            true
+        } catch (e: Exception) {
+            Ln.w("$TAG: isPackageInstalled: $packageName not found", e)
+            false
+        }
+    }
+
+    override fun startActivity(intent: Intent): Boolean = deviceSessions.legacy {
+        return@legacy ActivityUtils.startActivity(intent)
+    }
+
+    override fun setForceFullscreenOnVirtualDisplay(enabled: Boolean) {
+        Ln.i("$TAG: setForceFullscreenOnVirtualDisplay($enabled)")
+        ActivityUtils.forceFullscreenOnVirtualDisplay = enabled
+    }
+
+    override fun setPackageNetworkingEnabled(packageName: String?, enabled: Boolean): Boolean {
+        if (packageName.isNullOrBlank()) return false
+        return XmsfFirewall.setNetworkingEnabled(packageName, enabled)
+    }
+
+    override fun setVirtualDisplayResolution(width: Int, height: Int, dpi: Int) = deviceSessions.legacy {
+        Ln.i("$TAG: setVirtualDisplayResolution(${width}x${height}, dpi=$dpi)")
+        VirtualDisplayManager.setResolution(width, height, dpi)
+    }
+
+    override fun setVirtualDisplayMode(mode: Int): Boolean = deviceSessions.legacy {
+        when (mode) {
+            DisplayMode.PRIMARY -> {
+                VirtualDisplayManager.stop()
+                virtualDisplayMode.set(mode)
+                return@legacy true
+            }
+
+            DisplayMode.BACKGROUND -> {
+                PrimaryDisplayManager.stop()
+                virtualDisplayMode.set(mode)
+                return@legacy true
+            }
+        }
+        return@legacy false
+    }
+
+    private fun startHeartbeatWatchdog() {
+        Thread {
+            while (!destroyed.get()) {
+                try {
+                    Thread.sleep(HEARTBEAT_INTERVAL_MS)
+                } catch (_: InterruptedException) {
+                    return@Thread
+                }
+                val pid = appPid.get()
+                if (pid <= 0) {
+                    continue
+                }
+                if (!File("/proc/$pid").exists()) {
+                    Ln.w("$TAG: app process (pid=$pid) no longer exists, destroying remote service")
+                    destroy()
+                    return@Thread
+                }
+            }
+        }.apply {
+            name = "remote-heartbeat-watchdog"
+            isDaemon = true
+        }.start()
+    }
+}

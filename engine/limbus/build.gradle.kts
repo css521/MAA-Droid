@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "com.aliothmoon.maadroid.engine.limbus"
+    namespace = "com.maadroid.app.engine.limbus"
     compileSdk = 37
 
     defaultConfig {

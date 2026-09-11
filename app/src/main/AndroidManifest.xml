@@ -79,18 +79,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
             <intent-filter>
-                <action android:name="com.aliothmoon.maadroid.action.LAUNCH_PROFILE" />
-                <action android:name="com.aliothmoon.maadroid.action.SHOW_SCHEDULE_EXECUTION" />
+                <action android:name="com.maadroid.app.action.LAUNCH_PROFILE" />
+                <action android:name="com.maadroid.app.action.SHOW_SCHEDULE_EXECUTION" />
 
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
 
         <!--
-            原有 com.aliothmoon.maameow/.MainActivity 的兼容别名已随永久改名移除。
+            原有 com.maadroid.app.maameow/.MainActivity 的兼容别名已随永久改名移除。
             外部自动化（MacroDroid / Tasker）请改用新组件与 action：
-              -a com.aliothmoon.maadroid.action.LAUNCH_PROFILE
-              -n com.aliothmoon.maadroid/.MainActivity
+              -a com.maadroid.app.action.LAUNCH_PROFILE
+              -n com.maadroid.app/.MainActivity
             见 docs/*/develop/AUTOMATION.md。
         -->
 
@@ -111,7 +111,7 @@
             android:name=".schedule.receiver.ScheduleReceiver"
             android:exported="true">
             <intent-filter>
-                <action android:name="com.aliothmoon.maadroid.SCHEDULE_TRIGGER" />
+                <action android:name="com.maadroid.app.SCHEDULE_TRIGGER" />
             </intent-filter>
         </receiver>
 

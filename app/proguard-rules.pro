@@ -5,12 +5,12 @@
 -keepattributes Signature,InnerClasses,EnclosingMethod,*Annotation*
 
 # JNI RegisterNatives
--keep class com.aliothmoon.maadroid.bridge.NativeBridgeLib {
+-keep class com.maadroid.app.bridge.NativeBridgeLib {
     native <methods>;
 }
 
 # libbridge FindClass + GetStaticMethodID
--keep class com.aliothmoon.maadroid.maa.DriverClass {
+-keep class com.maadroid.app.maa.DriverClass {
     public static boolean startApp(java.lang.String, int, boolean);
     public static boolean touchDown(int, int, int, int);
     public static boolean touchMove(int, int, int, int);
@@ -23,23 +23,23 @@
 
 # Shizuku / Root 按类名拉起
 # 提权进程反射实例化的引擎装配子类（父类 RemoteServiceImpl 在 core-remote）
--keep class com.aliothmoon.maadroid.remote.MaaDroidRemoteService { <init>(); }
--keep class com.aliothmoon.maadroid.remote.LogcatCaptureServiceImpl { <init>(); }
--keep class com.aliothmoon.maadroid.root.RootServiceStarter {
+-keep class com.maadroid.app.remote.MaaDroidRemoteService { <init>(); }
+-keep class com.maadroid.app.remote.LogcatCaptureServiceImpl { <init>(); }
+-keep class com.maadroid.app.root.RootServiceStarter {
     public static void main(java.lang.String[]);
 }
--keep class com.aliothmoon.maadroid.root.RootUserService { *; }
--keep class com.aliothmoon.maadroid.root.RootServiceBootstrapProvider { *; }
+-keep class com.maadroid.app.root.RootUserService { *; }
+-keep class com.maadroid.app.root.RootServiceBootstrapProvider { *; }
 
 # AIDL
--keep class com.aliothmoon.maadroid.RemoteService { *; }
--keep class com.aliothmoon.maadroid.RemoteService$Stub { *; }
--keep class com.aliothmoon.maadroid.ILogcatService { *; }
--keep class com.aliothmoon.maadroid.ILogcatService$Stub { *; }
--keep class com.aliothmoon.maadroid.ITouchEventCallback { *; }
--keep class com.aliothmoon.maadroid.ITouchEventCallback$Stub { *; }
--keep class com.aliothmoon.maadroid.remote.PermissionGrantRequest { *; }
--keep class com.aliothmoon.maadroid.remote.PermissionStateInfo { *; }
+-keep class com.maadroid.app.RemoteService { *; }
+-keep class com.maadroid.app.RemoteService$Stub { *; }
+-keep class com.maadroid.app.ILogcatService { *; }
+-keep class com.maadroid.app.ILogcatService$Stub { *; }
+-keep class com.maadroid.app.ITouchEventCallback { *; }
+-keep class com.maadroid.app.ITouchEventCallback$Stub { *; }
+-keep class com.maadroid.app.remote.PermissionGrantRequest { *; }
+-keep class com.maadroid.app.remote.PermissionStateInfo { *; }
 
 -keepclasseswithmembernames class * {
     native <methods>;
@@ -66,8 +66,8 @@
 -dontwarn org.jcodings.**
 
 # FakeContext / ShellContentResolver：acquireProvider 等对编译期不可见，R8 当死代码删掉
--keep class com.aliothmoon.maadroid.third.FakeContext { *; }
--keep class com.aliothmoon.maadroid.third.FakeContext$* { *; }
+-keep class com.maadroid.app.third.FakeContext { *; }
+-keep class com.maadroid.app.third.FakeContext$* { *; }
 -keepclassmembers class * extends android.content.ContentResolver {
     *** acquireProvider(...);
     *** acquireUnstableProvider(...);
@@ -80,7 +80,7 @@
 -keep class com.xzakota.hyper.notification.** { *; }
 
 # 落盘 Enum.name / valueOf
--keepclassmembers enum com.aliothmoon.maadroid.** {
+-keepclassmembers enum com.maadroid.app.** {
     <fields>;
     public static **[] values();
     public static ** valueOf(java.lang.String);

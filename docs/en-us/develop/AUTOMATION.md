@@ -41,8 +41,8 @@ A Profile ID is a fixed UUID, for example: `3f4a1b2c-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 
 ```bash
 am start \
-  -a com.aliothmoon.maadroid.action.LAUNCH_PROFILE \
-  -n com.aliothmoon.maadroid/.MainActivity \
+  -a com.maadroid.app.action.LAUNCH_PROFILE \
+  -n com.maadroid.app/.MainActivity \
   --es extra_profile_id "YOUR_PROFILE_ID"
 ```
 
@@ -50,8 +50,8 @@ am start \
 
 ```bash
 am start \
-  -a com.aliothmoon.maadroid.action.LAUNCH_PROFILE \
-  -n com.aliothmoon.maadroid/.MainActivity \
+  -a com.maadroid.app.action.LAUNCH_PROFILE \
+  -n com.maadroid.app/.MainActivity \
   --es extra_profile_id "YOUR_PROFILE_ID" \
   --ez extra_force_start true
 ```
@@ -69,7 +69,7 @@ am start \
 2. Action -> **Shell Script**, and enter:
 
    ```
-   am start -a com.aliothmoon.maadroid.action.LAUNCH_PROFILE -n com.aliothmoon.maadroid/.MainActivity --es extra_profile_id "YOUR_PROFILE_ID"
+   am start -a com.maadroid.app.action.LAUNCH_PROFILE -n com.maadroid.app/.MainActivity --es extra_profile_id "YOUR_PROFILE_ID"
    ```
 
 3. Enable **Use Root**
@@ -81,7 +81,7 @@ am start \
 2. Enter the command:
 
    ```
-   am start -a com.aliothmoon.maadroid.action.LAUNCH_PROFILE -n com.aliothmoon.maadroid/.MainActivity --es extra_profile_id "YOUR_PROFILE_ID"
+   am start -a com.maadroid.app.action.LAUNCH_PROFILE -n com.maadroid.app/.MainActivity --es extra_profile_id "YOUR_PROFILE_ID"
    ```
 
 3. Enable **Use Root**

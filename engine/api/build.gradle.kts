@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.aliothmoon.maadroid.engineapi"
+    namespace = "com.maadroid.app.engineapi"
     compileSdk = 37
 
     defaultConfig {

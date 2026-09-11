@@ -8,7 +8,7 @@
 
 先固定实际 Android 包名、目标分辨率/DPI、支持的语言、资源来源及许可。上游桌面截图或相似目录结构不能证明 Android 模板可以直接使用，应先验证取帧尺寸、画面内容及一组最小识别/输入动作。
 
-当前最直接的路线是在 App 进程执行业务，通过 [DeviceHandle](../../../engine/api/src/main/java/com/aliothmoon/maadroid/engine/AutomationEngine.kt) 使用提权服务提供的帧、输入和应用控制。OpenCV / ONNX Runtime 等 Android Java/JNI 库采用此路线。只有确需自有提权引擎服务时，才增加本模块 AIDL、代理与 `RemoteEngineFactory`，见第 6 步。
+当前最直接的路线是在 App 进程执行业务，通过 [DeviceHandle](../../../engine/api/src/main/java/com/maadroid/app/engine/AutomationEngine.kt) 使用提权服务提供的帧、输入和应用控制。OpenCV / ONNX Runtime 等 Android Java/JNI 库采用此路线。只有确需自有提权引擎服务时，才增加本模块 AIDL、代理与 `RemoteEngineFactory`，见第 6 步。
 
 `EngineDeviceSession.open` 当前只接受后台运行模式，不要给尚无适配的新引擎承诺前台运行。资源包可以是零个、一个或多个；宿主把全部目录按包 ID 传入 `EngineResources`，引擎按自己声明的包读取，无需猜测主目录或把不同包合并到一个目录。
 
@@ -32,7 +32,7 @@ implementation(project(":engine:newgame"))
 
 ## 3. 实现 profile、UI 与 provider
 
-[GameProfile](../../../engine/api/src/main/java/com/aliothmoon/maadroid/engine/GameProfile.kt) 中各字段都要由实际游戏需求确定：
+[GameProfile](../../../engine/api/src/main/java/com/maadroid/app/engine/GameProfile.kt) 中各字段都要由实际游戏需求确定：
 
 | 字段 | 实施要求 |
 |---|---|
@@ -43,7 +43,7 @@ implementation(project(":engine:newgame"))
 | `resourcePacks` | 声明全部所需资源包；纯输入等不需要外部资源的引擎可为空，多个包使用独立目录和包 ID |
 | `capabilities` | 只声明已实现能力；这些值不会自动生成定时、作业、前台设备或设置页接线 |
 
-模块直接暴露 provider，将构造保持为轻量操作。可参考 [LimbusEngineProvider](../../../engine/limbus/src/main/java/com/aliothmoon/maadroid/engine/limbus/LimbusEngineProvider.kt)，UI 与工厂的装配均在引擎模块内：
+模块直接暴露 provider，将构造保持为轻量操作。可参考 [LimbusEngineProvider](../../../engine/limbus/src/main/java/com/maadroid/app/engine/limbus/LimbusEngineProvider.kt)，UI 与工厂的装配均在引擎模块内：
 
 ```kotlin
 object NewGameProvider : EngineProvider {
@@ -53,15 +53,15 @@ object NewGameProvider : EngineProvider {
 }
 ```
 
-这些类型由新模块实现。随后在 [EngineSetup.install](../../../app/src/main/java/com/aliothmoon/maadroid/engine/EngineSetup.kt) 中显式注册 `EngineRegistry.register(NewGameProvider)`。Application 已调用此装配点；无需新建一套启动服务或 ServiceLoader。
+这些类型由新模块实现。随后在 [EngineSetup.install](../../../app/src/main/java/com/maadroid/app/engine/EngineSetup.kt) 中显式注册 `EngineRegistry.register(NewGameProvider)`。Application 已调用此装配点；无需新建一套启动服务或 ServiceLoader。
 
 注册会拒绝重复游戏 ID、错误的包归属、重复资源包 ID，以及相同或嵌套的资源目录。失败不会覆盖原游戏，也不会预留部分包名。请为新游戏声明独立目录；不要依靠注册顺序覆盖已有 provider。只有同一个 provider 实例重复注册才保持幂等。
 
-[BackgroundGamesView](../../../app/src/main/java/com/aliothmoon/maadroid/presentation/view/background/BackgroundGamesView.kt) 从注册表生成 tabs，并把非方舟游戏交给 `EngineTaskContent`。名称、任务和面板应通过契约提供，不再添加按新游戏 ID 分支的页面。游戏选择以字符串保存，旧 ID 不再可用时由注册表回退到已注册方案，因此改 ID 也会改变配置归属。
+[BackgroundGamesView](../../../app/src/main/java/com/maadroid/app/presentation/view/background/BackgroundGamesView.kt) 从注册表生成 tabs，并把非方舟游戏交给 `EngineTaskContent`。名称、任务和面板应通过契约提供，不再添加按新游戏 ID 分支的页面。游戏选择以字符串保存，旧 ID 不再可用时由注册表回退到已注册方案，因此改 ID 也会改变配置归属。
 
 ## 4. 选择任务页配置形式
 
-[EngineUi](../../../engine/api/src/main/java/com/aliothmoon/maadroid/engine/EngineUi.kt) 支持两种形式，宿主优先使用 `workspace`。
+[EngineUi](../../../engine/api/src/main/java/com/maadroid/app/engine/EngineUi.kt) 支持两种形式，宿主优先使用 `workspace`。
 
 | 形式 | 需要实现的内容 | 宿主行为 |
 |---|---|---|
@@ -77,9 +77,9 @@ object NewGameProvider : EngineProvider {
 
 `Content` 的 `resources: EngineResources` 包含当前游戏声明的资源路径，不是“资源已安装”的标志。用 `resources.directory(MyCatalogPack)` 选择对应包，缺目录/缺版本时提供下载引导；多资源包的界面可分别读取模型说明、图鉴等内容，不再依赖 `resourcePacks.first()`。
 
-[EngineTaskStore](../../../app/src/main/java/com/aliothmoon/maadroid/engine/EngineTaskStore.kt) 在 DataStore 的 `engine.<id>.tasks` 下保存参数与 workspace JSON；资源目录不是配置存储目录。升级配置结构应保留原 ID 和字段语义，并提供迁移测试。
+[EngineTaskStore](../../../app/src/main/java/com/maadroid/app/engine/EngineTaskStore.kt) 在 DataStore 的 `engine.<id>.tasks` 下保存参数与 workspace JSON；资源目录不是配置存储目录。升级配置结构应保留原 ID 和字段语义，并提供迁移测试。
 
-写入这里的配置会自动纳入 [ConfigBackupManager](../../../app/src/main/java/com/aliothmoon/maadroid/data/preferences/ConfigBackupManager.kt) 的 v2 `engineTasks` 备份，无需为新游戏添加备份分支。宿主按持久化键导出，即使当前未注册该引擎也保留其原始 JSON envelope；普通编辑保留 envelope 顶层未知字段。参数和 workspace 是不透明的 JSON 字符串，引擎自己负责编辑、迁移时保留其中仍需兼容的业务字段；不要把 envelope 的保留规则扩大为整个备份文件的未知字段保证。
+写入这里的配置会自动纳入 [ConfigBackupManager](../../../app/src/main/java/com/maadroid/app/data/preferences/ConfigBackupManager.kt) 的 v2 `engineTasks` 备份，无需为新游戏添加备份分支。宿主按持久化键导出，即使当前未注册该引擎也保留其原始 JSON envelope；普通编辑保留 envelope 顶层未知字段。参数和 workspace 是不透明的 JSON 字符串，引擎自己负责编辑、迁移时保留其中仍需兼容的业务字段；不要把 envelope 的保留规则扩大为整个备份文件的未知字段保证。
 
 导入只整条替换备份中包含的引擎，未包含的本地引擎不变，包含项不与本地旧 envelope 逐字段合并。普通 v1 文件缺少 `engineTasks`，因此不会清空新游戏配置；若 v1 显式包含引擎数据，仍会导入。请同时覆盖 v2 往返、未知引擎/字段和旧 v1 导入，不要依赖当前 provider 列表筛掉未来或暂未安装的游戏数据。
 
@@ -95,7 +95,7 @@ object NewGameProvider : EngineProvider {
 
 ## 5. 实现资源包与更新
 
-参考 [ResourcePackSpec](../../../engine/api/src/main/java/com/aliothmoon/maadroid/engine/ResourcePackSpec.kt)、[UpstreamArchive](../../../engine/api/src/main/java/com/aliothmoon/maadroid/engine/UpstreamArchive.kt) 和 [LimbusResourcePack](../../../engine/limbus/src/main/java/com/aliothmoon/maadroid/engine/limbus/LimbusResourcePack.kt)。不要直接复用边狱的 pack ID、仓库或动作兼容表。
+参考 [ResourcePackSpec](../../../engine/api/src/main/java/com/maadroid/app/engine/ResourcePackSpec.kt)、[UpstreamArchive](../../../engine/api/src/main/java/com/maadroid/app/engine/UpstreamArchive.kt) 和 [LimbusResourcePack](../../../engine/limbus/src/main/java/com/maadroid/app/engine/limbus/LimbusResourcePack.kt)。不要直接复用边狱的 pack ID、仓库或动作兼容表。
 
 | 实现点 | 当前安装器的约定 |
 |---|---|
@@ -109,17 +109,17 @@ object NewGameProvider : EngineProvider {
 
 兼容性检查要对齐该引擎的真实读取方式：例如分别检查所支持语言的模板、页面图鉴的目录层级、模型输入尺寸与标签/字典对应关系。只检查文件非空，或把各语言图片合并后检查，都可能在激活后才暴露错误。静态模型接口校验不能代替原生加载/试推理；两层应各自保留。用真实 pack 与安装器测试坏更新，断言旧 manifest 和文件未变，同时保留合法资源更新成功的用例。
 
-当前 [EngineResourceService](../../../app/src/main/java/com/aliothmoon/maadroid/engine/resource/EngineResourceService.kt) 要求 manifest 的 `upstream` 包含 `repo`、`tag`、`commit`，以恢复已安装提交。首次安装直接使用固定 commit，更新检查选择更新的稳定语义版本 tag；自定义 feed、预发布版本策略或不同归档结构需要对应的宿主适配，不能仅填写一个任意 URL。
+当前 [EngineResourceService](../../../app/src/main/java/com/maadroid/app/engine/resource/EngineResourceService.kt) 要求 manifest 的 `upstream` 包含 `repo`、`tag`、`commit`，以恢复已安装提交。首次安装直接使用固定 commit，更新检查选择更新的稳定语义版本 tag；自定义 feed、预发布版本策略或不同归档结构需要对应的宿主适配，不能仅填写一个任意 URL。
 
 `upstreamArchive == null` 的包不会经此通用服务自动安装。`bundledAssetPrefix` 和 `requiresPrivilegedDelivery` 也不会单独生成安装或提权投递流程；方舟目前使用自己的旧链路。如果新游戏采用这种方式，要完成自己的安装接线，并在 `prepare` 前确保目录可读。
 
-宿主的 [EngineResourceCard](../../../app/src/main/java/com/aliothmoon/maadroid/presentation/view/engine/EngineResourceCard.kt) 会为源码归档包显示资源状态及操作。安装在 [AtomicResourceInstaller](../../../app/src/main/java/com/aliothmoon/maadroid/engine/resource/AtomicResourceInstaller.kt) 的暂存目录中完成，校验通过后才激活；任务和更新通过同一 `ResourcePackLocks` 互斥。不要绕过服务直接覆盖正在运行的资源。
+宿主的 [EngineResourceCard](../../../app/src/main/java/com/maadroid/app/presentation/view/engine/EngineResourceCard.kt) 会为源码归档包显示资源状态及操作。安装在 [AtomicResourceInstaller](../../../app/src/main/java/com/maadroid/app/engine/resource/AtomicResourceInstaller.kt) 的暂存目录中完成，校验通过后才激活；任务和更新通过同一 `ResourcePackLocks` 互斥。不要绕过服务直接覆盖正在运行的资源。
 
 需要图鉴时，优先由同包的语言表和图片生成。参考 `LimbusCatalog` / `LimbusArtwork`：缺资源提供下载引导，仍允许配置不依赖图鉴的任务；读取图片与扫描目录放在 IO 线程；缓存至少绑定安装 revision。`File` 路径不变不代表内容不变，不能用一次 `remember(root)` 永久保存图鉴。
 
 ## 6. 实现会话独立的执行生命周期
 
-[AutomationEngine](../../../engine/api/src/main/java/com/aliothmoon/maadroid/engine/AutomationEngine.kt) 的实例由会话持有。`EngineRegistry.createEngine(id)` 不缓存运行实例，provider 每次应返回一个独立实例；同一会话的事件订阅、准备和执行则共用该实例。不要返回可变的单例引擎，也不要在 `createEngine()` 时下载资源、加载模型或启动游戏。
+[AutomationEngine](../../../engine/api/src/main/java/com/maadroid/app/engine/AutomationEngine.kt) 的实例由会话持有。`EngineRegistry.createEngine(id)` 不缓存运行实例，provider 每次应返回一个独立实例；同一会话的事件订阅、准备和执行则共用该实例。不要返回可变的单例引擎，也不要在 `createEngine()` 时下载资源、加载模型或启动游戏。
 
 | 方法/事件 | 必须完成的行为 |
 |---|---|
@@ -131,7 +131,7 @@ object NewGameProvider : EngineProvider {
 | `release()` | 在停止后释放本实例的模型和缓存；下一会话使用新实例，不擅自结束其他会话 |
 | `EngineEvent` | 用 `Log`、`Task`、`Failure` 报告过程。任务终止需发 `AllTasksFinished(success)`，包括失败终态；仅发 `Failure` 不会触发当前宿主自动结束会话 |
 
-[DeviceIo](../../../engine/api/src/main/java/com/aliothmoon/maadroid/engine/DeviceIo.kt) 的帧为 BGR 三通道，按 `stride` 读取。共享缓冲只在本次 `grab` 到下次 `grab` 之间有效，需要跨帧保留时复制。耗时识别和循环应支持协程取消；手势和按键在 `finally` 中成对释放。不要自行创建另一个虚拟显示器或重启提权服务。
+[DeviceIo](../../../engine/api/src/main/java/com/maadroid/app/engine/DeviceIo.kt) 的帧为 BGR 三通道，按 `stride` 读取。共享缓冲只在本次 `grab` 到下次 `grab` 之间有效，需要跨帧保留时复制。耗时识别和循环应支持协程取消；手势和按键在 `finally` 中成对释放。不要自行创建另一个虚拟显示器或重启提权服务。
 
 `EngineResources` 只冻结包 ID 到路径的映射，不冻结磁盘内容；运行时的全部资源锁由会话持续持有，直到确认停止并释放引擎。各包仍独立安装/更新，多包版本间若有依赖，需要引擎在 `prepare` 中验证，不能假设多个上游会同步发布。无资源引擎仍需实现 `prepare`，可完成自身初始化后返回成功，不要伪造一个空目录来满足接口。
 
@@ -140,8 +140,8 @@ object NewGameProvider : EngineProvider {
 如果确需在提权进程运行自有引擎服务：
 
 1. 在新模块持有专属 AIDL、服务实现和 App 侧 `AutomationEngine` 代理；保留 consumer rules 所需的 Binder/JNI 入口。
-2. 实现 [RemoteEngineFactory](../../../core/bridge/src/main/java/com/aliothmoon/maadroid/remote/RemoteEngineRegistry.kt) 的 `engineId`、`create`，及必要的 setup / close / version 回调。
-3. 只在 [MaaDroidRemoteService](../../../app/src/main/java/com/aliothmoon/maadroid/remote/MaaDroidRemoteService.kt) 注册工厂；通过游戏无关的 `getEngineService(id)` 获得 Binder。App 内执行的引擎无需此注册。
+2. 实现 [RemoteEngineFactory](../../../core/bridge/src/main/java/com/maadroid/app/remote/RemoteEngineRegistry.kt) 的 `engineId`、`create`，及必要的 setup / close / version 回调。
+3. 只在 [MaaDroidRemoteService](../../../app/src/main/java/com/maadroid/app/remote/MaaDroidRemoteService.kt) 注册工厂；通过游戏无关的 `getEngineService(id)` 获得 Binder。App 内执行的引擎无需此注册。
 4. 验证实际部署目录、native 库、进程死亡清理与远端停止语义。方舟的 JNA/AIDL、`ArknightsEngine` 与会话测试可作桥接参考；其宿主资源适配、旧任务页和业务回调接线仍属方舟专用，不能直接复制为新引擎的完整启动模板。
 
 ## 7. 验证接入闭环
@@ -150,12 +150,12 @@ object NewGameProvider : EngineProvider {
 
 | 验证对象 | 现有参考 |
 |---|---|
-| 模块依赖、游戏 ID / 资源隔离 | [ModuleBoundaryContractTest](../../../core/remote/src/test/java/com/aliothmoon/maadroid/ModuleBoundaryContractTest.kt)、[MultiEngineContractTest](../../../app/src/test/java/com/aliothmoon/maadroid/engine/MultiEngineContractTest.kt) |
-| 配置重载、旧数据迁移、任务顺序 | [EngineTaskSelectionTest](../../../app/src/test/java/com/aliothmoon/maadroid/engine/EngineTaskSelectionTest.kt)、本引擎的 workspace 测试 |
-| 多游戏备份、未知字段与草稿、异常/取消回滚 | [EngineTaskStoreTest](../../../app/src/test/java/com/aliothmoon/maadroid/engine/EngineTaskStoreTest.kt)、[MultiEngineConfigBackupTest](../../../app/src/test/java/com/aliothmoon/maadroid/data/preferences/MultiEngineConfigBackupTest.kt) |
-| 缺文件、未知动作、坏 ZIP、取消与旧资源恢复 | [EngineResourceInstallTest](../../../app/src/test/java/com/aliothmoon/maadroid/engine/resource/EngineResourceInstallTest.kt)、本引擎 manifest 测试 |
-| 重复启动、失败/停止收尾、设备归属 | [EngineTaskViewModelTest](../../../app/src/test/java/com/aliothmoon/maadroid/presentation/viewmodel/EngineTaskViewModelTest.kt)、[EngineDeviceSessionTest](../../../app/src/test/java/com/aliothmoon/maadroid/engine/EngineDeviceSessionTest.kt)、[EngineExecutionCoordinatorTest](../../../engine/api/src/test/java/com/aliothmoon/maadroid/engine/EngineExecutionCoordinatorTest.kt) |
-| 多包目录传递、部分失败/取消、无资源任务 | [EngineSessionLifecycleTest](../../../app/src/test/java/com/aliothmoon/maadroid/engine/EngineSessionLifecycleTest.kt)、[EngineResourcesTest](../../../engine/api/src/test/java/com/aliothmoon/maadroid/engine/EngineResourcesTest.kt) |
+| 模块依赖、游戏 ID / 资源隔离 | [ModuleBoundaryContractTest](../../../core/remote/src/test/java/com/maadroid/app/ModuleBoundaryContractTest.kt)、[MultiEngineContractTest](../../../app/src/test/java/com/maadroid/app/engine/MultiEngineContractTest.kt) |
+| 配置重载、旧数据迁移、任务顺序 | [EngineTaskSelectionTest](../../../app/src/test/java/com/maadroid/app/engine/EngineTaskSelectionTest.kt)、本引擎的 workspace 测试 |
+| 多游戏备份、未知字段与草稿、异常/取消回滚 | [EngineTaskStoreTest](../../../app/src/test/java/com/maadroid/app/engine/EngineTaskStoreTest.kt)、[MultiEngineConfigBackupTest](../../../app/src/test/java/com/maadroid/app/data/preferences/MultiEngineConfigBackupTest.kt) |
+| 缺文件、未知动作、坏 ZIP、取消与旧资源恢复 | [EngineResourceInstallTest](../../../app/src/test/java/com/maadroid/app/engine/resource/EngineResourceInstallTest.kt)、本引擎 manifest 测试 |
+| 重复启动、失败/停止收尾、设备归属 | [EngineTaskViewModelTest](../../../app/src/test/java/com/maadroid/app/presentation/viewmodel/EngineTaskViewModelTest.kt)、[EngineDeviceSessionTest](../../../app/src/test/java/com/maadroid/app/engine/EngineDeviceSessionTest.kt)、[EngineExecutionCoordinatorTest](../../../engine/api/src/test/java/com/maadroid/app/engine/EngineExecutionCoordinatorTest.kt) |
+| 多包目录传递、部分失败/取消、无资源任务 | [EngineSessionLifecycleTest](../../../app/src/test/java/com/maadroid/app/engine/EngineSessionLifecycleTest.kt)、[EngineResourcesTest](../../../engine/api/src/test/java/com/maadroid/app/engine/EngineResourcesTest.kt) |
 
 在 Android 上再完成：无资源时配置并下载 → 首次启动取到正确帧 → 运行最小真实任务 → 停止并再次启动 → 切换页面/预览 → 检查更新并确认同路径的新图鉴生效。覆盖两种权限后端中实际支持的一种或两种，记录 ABI 与设备条件。检查另一游戏正在运行或准备资源时，新的启动/资源操作是否按既有准入规则拒绝，且没有影响原会话。
 

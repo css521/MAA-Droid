@@ -4,7 +4,7 @@ plugins {
 android{
     compileSdk = 36
 
-    namespace = "com.aliothmoon.hidden_api"
+    namespace = "com.maadroid.app.hidden_api"
 
     defaultConfig {
         minSdk = 27

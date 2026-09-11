@@ -5,7 +5,7 @@
 ## 接入 API
 
 ```kotlin
-import com.aliothmoon.maadroid.diagnostics.AppDiagnostics
+import com.maadroid.app.diagnostics.AppDiagnostics
 
 AppDiagnostics.initialize(context)
 AppDiagnostics.record("limbus", "native.init.before")
@@ -68,7 +68,7 @@ native trace 可能需要 Android 12 / API 31，厂商也可能不提供。内�
 可在仓库根目录运行专项 JVM 测试，不调用 Gradle，也不下载依赖：
 
 ```sh
-python3 app/src/test/java/com/aliothmoon/maadroid/diagnostics/run_jvm_tests.py
+python3 app/src/test/java/com/maadroid/app/diagnostics/run_jvm_tests.py
 ```
 
 脚本使用缓存的 Kotlin 2.4.10、JUnit 4.13.2 和 JDK 17，编译/运行产物仅写入临时目录，结束后删除。`DIAGNOSTIC_JAVA` 可指定 Java 可执行文件，`DIAGNOSTIC_JAR_CACHE` 可指定依赖缓存目录。

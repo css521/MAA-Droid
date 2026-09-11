@@ -3,7 +3,7 @@ plugins {
 }
 
 android {
-    namespace = "com.aliothmoon.maadroid.common"
+    namespace = "com.maadroid.app.common"
     compileSdk = 37
 
     defaultConfig {

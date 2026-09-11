@@ -8,7 +8,7 @@ This project includes code from the following open-source projects, distributed 
 - **Copyright**: Copyright 2018 Genymobile
 - **License**: [Apache License 2.0](../../../LICENSE-Apache-2.0)
 - **Original source**: [server/src/main/java/com/genymobile/scrcpy](https://github.com/Genymobile/scrcpy/tree/master/server/src/main/java/com/genymobile/scrcpy)
-- **Location in this project**: [`app/src/main/java/com/aliothmoon/maadroid/third/`](../../../app/src/main/java/com/aliothmoon/maadroid/third/)
+- **Location in this project**: [`app/src/main/java/com/maadroid/app/third/`](../../../app/src/main/java/com/maadroid/app/third/)
 
 ### Purpose
 
@@ -38,7 +38,7 @@ This code is used to construct an Android `Context` inside the Shizuku user-serv
 
 The following are the main changes relative to the original scrcpy source:
 
-- Renamed the package from `com.genymobile.scrcpy` to `com.aliothmoon.maadroid.third`
+- Renamed the package from `com.genymobile.scrcpy` to `com.maadroid.app.third`
 - Removed code related to screen recording, video encoding, and audio capture, keeping only the system-service reflection wrappers
 - Added `ActivityManager`, `SurfaceControl`, `StatusBarManager`, `PowerManager`, and other wrappers
 - Added `createNewVirtualDisplay()` to `DisplayManager` to create an independent virtual display
