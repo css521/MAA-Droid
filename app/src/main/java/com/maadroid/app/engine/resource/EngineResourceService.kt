@@ -112,13 +112,13 @@ class EngineResourceService internal constructor(
         var page = 1
         while (true) {
             val result = transport.tags("${source.tagsUrl}&page=$page")
-            revisions += GitHubResourceTags.parse(result.body)
+            revisions += GitHubResourceTags.parse(result.body, source.tagPrefix)
             if (!result.hasNext) break
             check(++page <= 20) { "上游标签页数超出限制，无法确认最新稳定版本" }
         }
-        val latest = GitHubResourceTags.latest(revisions) ?: error("上游没有可用的稳定语义版本标签")
+        val latest = GitHubResourceTags.latest(revisions, source.tagPrefix) ?: error("上游没有可用的稳定语义版本标签")
         val current = readRevision(pack, target) ?: source.initialRevision
-        val compared = GitHubResourceTags.compare(latest.tag, current.tag)
+        val compared = GitHubResourceTags.compare(latest.tag, current.tag, source.tagPrefix)
         require(compared != 0 || latest.commit == current.commit) { "上游稳定标签的 SHA 已改变，拒绝覆盖已固定的提交" }
         return latest.takeIf { compared > 0 }
     }

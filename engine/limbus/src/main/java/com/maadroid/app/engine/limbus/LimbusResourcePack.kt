@@ -27,11 +27,16 @@ object LimbusResourcePack : ResourcePackSpec {
     override val overlayAssetPrefix: String? = "limbus-overlay"
     override val requiresPrivilegedDelivery = false
     override val upstreamArchive = UpstreamArchive(
+        // 资源包从本仓库的 Release 下载（CI limbus-resource.yml 自动跟随上游 tag 重打包），
+        // 约 43 MB，而不是从上游整仓库 zip 的 ~100 MB。
         repository = LimbusResourceManifest.REPOSITORY,
-        initialRevision = ResourceRevision("v5.0.0", "431b432e22f0b0da08b95d7c478fa213be20b3e8"),
+        initialRevision = ResourceRevision("limbus-resource-v5.0.0", "431b432e22f0b0da08b95d7c478fa213be20b3e8"),
         resourcePrefix = "lalc_backend",
         directories = LimbusResourceManifest.directories,
         inspectionSuffixes = listOf(".py"),
+        releaseAssetUrl = "https://github.com/css521/MAA-Droid/releases/download/{tag}/{tag}.zip",
+        tagsRepository = "css521/MAA-Droid",
+        tagPrefix = "limbus-resource-",
     )
 
     override fun finalizeUpstreamInstall(resourceDir: File, revision: ResourceRevision) =

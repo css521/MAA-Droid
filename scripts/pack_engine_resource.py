@@ -347,7 +347,10 @@ def main() -> int:
     zip_path = os.path.join(args.out, zip_name)
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for e in entries:
-            zf.write(sources[e["path"]], e["path"])
+            # 加前缀让 zip 格式与 GitHub codeload 一致（根目录 + resourcePrefix），
+            # 这样 UpstreamArchive.mapEntry 不用改。根目录用 tag 作为名字。
+            zip_prefix = f"{tag or 'resource'}/{cfg['resource_root']}/"
+            zf.write(sources[e["path"]], zip_prefix + e["path"])
 
     manifest = {
         "schema_version": SCHEMA_VERSION,
