@@ -69,8 +69,8 @@ static JNINativeMethod gMethods[] = {
         {"copyLatestFrame",       "(Ljava/nio/ByteBuffer;[J)I",  reinterpret_cast<void *>(nativeCopyLatestFrame)},
 };
 
-static constexpr char kNativeBridgeClass[] = "com/aliothmoon/maadroid/bridge/NativeBridgeLib";
-static constexpr char kDriverClass[] = "com/aliothmoon/maadroid/maa/DriverClass";
+static constexpr char kNativeBridgeClass[] = "com/maadroid/app/bridge/NativeBridgeLib";
+static constexpr char kDriverClass[] = "com/maadroid/app/maa/DriverClass";
 
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
     (void) reserved;
