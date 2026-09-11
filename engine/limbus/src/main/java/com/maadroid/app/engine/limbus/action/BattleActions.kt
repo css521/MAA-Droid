@@ -37,17 +37,35 @@ private val TEAM_ORDER_MAP = mapOf(
     "Gregor" to (940 to 440),
 )
 
-private val TEAM_CLICK_POSITIONS = listOf(
-    130 to 315, 130 to 355, 130 to 390, 130 to 430, 130 to 465, 130 to 500
-)
+/**
+ * 队伍列表可点位置，从真机三帧实测：**首项 y=313，行距 36px**。
+ *
+ * 上游是 315/355/390/430/465/500（PC 布局），首项对得上但后面逐渐偏移，
+ * 到第 6 项差 7px —— 不足半格所以单看不致命，但与滑动错位叠加就会选错队伍。
+ */
+private val TEAM_CLICK_POSITIONS = (0 until TEAMS_PER_PAGE).map {
+    130 to TEAM_FIRST_ROW_Y + it * TEAM_ROW_HEIGHT
+}
+
+/** 首个可点队伍项的 y（真机实测 313） */
+private const val TEAM_FIRST_ROW_Y = 313
+
+/** 队伍项行距（真机实测 36px：313/349/385/421/457/494） */
+private const val TEAM_ROW_HEIGHT = 36
+
+/** 慢速滑动步数。40 步/640ms 把每步位移压到 5px 上下，抬手时速度接近 0，消除惯性续滑 */
+private const val SLOW_SWIPE_STEPS = 40
 
 private const val TEAMS_PER_PAGE = 6
-private const val MAX_TEAM_NO = 19
-private const val MAX_SCROLL = 3
 
-/** 18、19 落在最后一页的第 5、6 格上，故从这里起改用偏移而非取模 */
-private const val LAST_PAGE_FIRST_TEAM = 18
-private const val LAST_PAGE_OFFSET = 14
+/**
+ * 队伍编号上限。上游是 19（假设最多 20 个队伍），但实机可以有 40 个以上
+ * —— 用户实测配置了 40 个。上限过小会把大编号 coerce 成 19，静默选错队伍。
+ */
+private const val MAX_TEAM_NO = 59
+
+/** 最大滑动页数，随 MAX_TEAM_NO 放大：59 / 6 ≈ 9 页 */
+private const val MAX_SCROLL = 10
 
 /**
  * 队伍列表滑动后的静置时间。上游是 0.5 秒（PC 量），安卓上列表有惯性动画，不够。
@@ -196,13 +214,13 @@ private object ChooseTeamAction : ActionBackend {
     override suspend fun execute(ctx: ActionContext): ActionOutcome {
         val cfgType = ctx.node.str("cfg_type") ?: return ActionOutcome.Continue
         val cfgIndex = resolveCfgIndex(ctx, cfgType)
-        // 配置里是 1..20 的人类编号，减一化为 0..19
+        // 配置里是人类编号（1 起），减一化为 0 起的索引
         val teamNo = (ctx.config.intAt(cfgType, "team_indexes", cfgIndex, 1) - 1)
             .coerceIn(0, MAX_TEAM_NO)
         val scrollCount = (teamNo / TEAMS_PER_PAGE).coerceIn(0, MAX_SCROLL)
-        val clickIndex =
-            if (teamNo < LAST_PAGE_FIRST_TEAM) teamNo % TEAMS_PER_PAGE
-            else teamNo - LAST_PAGE_OFFSET
+        // 统一取模。上游对最后一页有个特例（队伍 18/19 落在第 5/6 格，改用固定偏移），
+        // 那是"总共 20 个队伍"才成立的假设；实机可以有 40 个以上，特例反而会算错。
+        val clickIndex = teamNo % TEAMS_PER_PAGE
         ctx.log("选择队伍 #${teamNo + 1}（滑 $scrollCount 页，点第 $clickIndex 格 @${TEAM_CLICK_POSITIONS[clickIndex]}）")
 
         // 先划到顶部重置，否则续跑时列表停在上次位置，下面的滚动次数就对不上。
@@ -217,12 +235,18 @@ private object ChooseTeamAction : ActionBackend {
         // 滑到顶之后先采一帧，作为"第 0 页"的基准
         ctx.recognize.dumpFrame("team_list_top")
         repeat(scrollCount) { i ->
-            swipe(ctx.input, 130, 500, 130, 280)
+            // 慢速滑动消除惯性。真机三帧实测：默认 8 步/300ms 的快滑，手指位移 220px
+            // （≈6 格）却让列表走了约 9.5 格 —— 惯性把位移放大了 1.6 倍。滑 2 次后
+            // 首个可见项落在第 20 项（由 "TEAMS #24" 在第 5 个可见位置反推），
+            // 而上游算法预期第 13 项，于是队伍 #15 被选成了 #22。
+            //
+            // 40 步 / 640ms 把每步位移压到 5px 上下，抬手时速度已接近 0，列表不再续滑。
+            // 位移取 TEAMS_PER_PAGE × 格距，与「一次滑动翻一页」的算法假设对齐。
+            swipe(
+                ctx.input, 130, 500, 130, 500 - TEAMS_PER_PAGE * TEAM_ROW_HEIGHT,
+                steps = SLOW_SWIPE_STEPS,
+            )
             ctx.delay(LIST_SETTLE)
-            // 每滑一次都采帧：对比连续两帧的可见项，就能算出「一次滑动实际走了几格」。
-            // 上游假设一次滑动整好翻一页（TEAMS_PER_PAGE=6），但安卓上滑动距离 220px
-            // 与格距（实测 36px）不成整数倍，且有惯性 —— 实测滑 2 次后列表停在 #23
-            // 附近而非预期的第 12~13 项，说明一次远超 6 格。
             ctx.recognize.dumpFrame("team_list_scroll_${i + 1}")
         }
         click(ctx.input, TEAM_CLICK_POSITIONS[clickIndex].first, TEAM_CLICK_POSITIONS[clickIndex].second)

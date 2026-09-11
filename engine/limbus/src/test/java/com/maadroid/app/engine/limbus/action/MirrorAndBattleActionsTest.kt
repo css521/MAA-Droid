@@ -41,30 +41,34 @@ class MirrorAndBattleActionsTest {
         // 前两次是划到顶部重置，之后不该再有滚动
         val swipes = ctx.fakeInput.events.count { it.startsWith("down(130,320)") }
         assertEquals(2, swipes)
-        assertTrue("应点到第一格 y=315", ctx.fakeInput.clicks().contains(130 to 315))
+        // y=313 是真机三帧实测的首项位置（上游 PC 值是 315）
+        assertTrue("应点到第一格 y=313", ctx.fakeInput.clicks().contains(130 to 313))
     }
 
     @Test
-    fun `第 19 套队伍落在最后一页第五格`() = runTest {
-        // teamNo=18：上游用 18-14=4 而不是 18%6=0 —— 最后一页只剩两格可点
+    fun `第 19 套队伍按整页取模落在第一格`() = runTest {
+        // teamNo=18 → 滑 3 页、点 18%6=0 格。
+        // 上游对此有特例（18-14=4，因为"总共 20 个队伍时最后一页只剩两格"），
+        // 但实机可以有 40 个以上队伍，那个假设不成立，统一取模才对。
         val ctx = ctxFor("choose_team")
         ctx.fakeConfig.putGroups("mirror", "team_orders", listOf(listOf("Yi Sang")))
         ctx.fakeConfig.putGroups("mirror", "team_indexes", listOf(19))
 
         ActionRegistry["choose_team"]!!.execute(ctx)
 
-        assertTrue("19 套应点第五格 y=465", ctx.fakeInput.clicks().contains(130 to 465))
+        assertTrue("19 套应点首格 y=313", ctx.fakeInput.clicks().contains(130 to 313))
         assertFalse("绝不能按取模点到第一格", ctx.fakeInput.clicks().contains(130 to 315))
     }
 
     @Test
-    fun `第 20 套队伍落在最后一页第六格`() = runTest {
+    fun `第 20 套队伍按整页取模落在第二格`() = runTest {
+        // teamNo=19 → 滑 3 页、点 19%6=1 格，y = 313 + 36 = 349
         val ctx = ctxFor("choose_team")
         ctx.fakeConfig.putGroups("mirror", "team_orders", listOf(listOf("Yi Sang")))
         ctx.fakeConfig.putGroups("mirror", "team_indexes", listOf(20))
 
         ActionRegistry["choose_team"]!!.execute(ctx)
-        assertTrue(ctx.fakeInput.clicks().contains(130 to 500))
+        assertTrue(ctx.fakeInput.clicks().contains(130 to 349))
     }
 
     @Test
@@ -74,8 +78,8 @@ class MirrorAndBattleActionsTest {
         ctx.fakeConfig.putGroups("mirror", "team_indexes", listOf(999))
 
         ActionRegistry["choose_team"]!!.execute(ctx)
-        // 夹到 19（第 20 套）而不是越界崩掉
-        assertTrue(ctx.fakeInput.clicks().contains(130 to 500))
+        // 夹到 MAX_TEAM_NO=59（第 60 套）而不是越界崩掉：59%6=5 → y = 313 + 5*36 = 493
+        assertTrue(ctx.fakeInput.clicks().contains(130 to 493))
     }
 
     @Test
