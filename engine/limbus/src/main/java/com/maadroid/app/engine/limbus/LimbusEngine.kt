@@ -9,10 +9,13 @@ import com.maadroid.app.engine.EngineResources
 import com.maadroid.app.engine.GameProfile
 import com.maadroid.app.engine.LogLevel
 import com.maadroid.app.engine.limbus.action.LimbusActions
+import com.maadroid.app.engine.limbus.action.InputHelper
 import com.maadroid.app.engine.limbus.config.JsonLimbusConfig
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonPrimitive
 import com.maadroid.app.engine.limbus.pipeline.NodeRecognizer
 import com.maadroid.app.engine.limbus.pipeline.PipelineRegistry
 import com.maadroid.app.engine.limbus.pipeline.PipelineRunner
@@ -131,6 +134,20 @@ class LimbusEngine(
                 .mapValues { it.value.jsonObject }
         }.onFailure { warn("内嵌补丁解析失败: ${it.message}") }.getOrDefault(emptyMap())
         if (patches.isNotEmpty()) info("已应用流水线补丁 ${patches.size} 个节点")
+
+        // 坐标覆盖：上游坐标取自 Steam 客户端，安卓 UI 有系统性偏移。
+        // 用「原坐标 → 新坐标」的表，在 InputHelper 里统一转换，不用改 53 处调用点。
+        val coords = runCatching {
+            Json.parseToJsonElement(EMBEDDED_COORDS).jsonObject
+                .filterKeys { !it.startsWith("_") }
+                .mapValues { (_, v) ->
+                    val a = v.jsonArray
+                    a[0].jsonPrimitive.content.toInt() to a[1].jsonPrimitive.content.toInt()
+                }
+        }.onFailure { warn("坐标覆盖解析失败: ${it.message}") }.getOrDefault(emptyMap())
+        InputHelper.applyCoordinateOverrides(coords)
+        if (coords.isNotEmpty()) info("已应用坐标覆盖 ${coords.size} 处")
+
         // 不碰磁盘上的任何文件——无论是写入还是删除，都会破坏 verifyInstalledFiles 的 hash 校验。
         // 旧补丁文件（如有）在磁盘上无害：它不会被加载（EMBEDDED_PATCH 是唯一来源），
         // 也不会被清单校验拒绝（它已在清单的白名单里，见 LimbusResourceManifest.PIPELINE_PATCH）。
@@ -512,6 +529,23 @@ class LimbusEngine(
          * error_handler 打转 10 轮累积到 30~80 秒卡顿。
          */
         const val EMBEDDED_PATCH = """{"exp_choose_team":{"recognition":"ocr","params":{"text":"Details","mask":[880,100,120,50]}},"thread_choose_team":{"recognition":"ocr","params":{"text":"Details","mask":[880,100,120,50]}},"mirror_choose_team":{"recognition":"ocr","params":{"text":"Details","mask":[880,100,120,50]}},"mirror_ready_to_battle":{"recognition":"ocr","params":{"text":"Details","mask":[880,100,120,50]}},"touch_to_start":{"recognition":"ocr","params":{"text":"Clear all caches","mask":[170,630,190,55]}},"mirror_enter_resume":{"recognition":"ocr","params":{"text":"Resume","mask":[570,370,150,60]}},"mirror_enter_dungeon":{"recognition":"ocr","params":{"text":"Enter","mask":[1050,440,130,90]}},"check_enkephalin":{"params":{"post_delay":2.5}},"event_entry_dark":{"params":{"post_delay":2.5}},"event_entry":{"params":{"post_delay":2.5}}}"""
+
+        /**
+         * 坐标覆盖表：`"原x,原y"` → `[新x, 新y]`。
+         *
+         * 用途：上游 LALC 的坐标全部取自 Steam 客户端，安卓客户端 UI 有系统性偏移。
+         * 这个表让改坐标不用碰 4 个动作文件里的 53 处 `click` 调用——
+         * 加一行 `"1140,480": [1165, 560]` 即可，由 [InputHelper] 统一查表。
+         *
+         * 当前为空：EXP 与 Thread 链路已真机跑通，说明大多数坐标在安卓上本来就对；
+         * 已确认需要修正的（星光九宫格）直接改在 `MirrorActions.STAR_POSITIONS` 里，
+         * 因为那是整组坐标而非个别点。
+         *
+         * 下一步（需要真机数据）：队伍列表滑动、事件选罪人页的坐标。
+         */
+        const val EMBEDDED_COORDS = """{
+          "_comment": "原坐标 -> 新坐标。例：\"1140,480\": [1165, 560]"
+        }"""
 
         const val PIPELINE_DIR = "config/task"
 

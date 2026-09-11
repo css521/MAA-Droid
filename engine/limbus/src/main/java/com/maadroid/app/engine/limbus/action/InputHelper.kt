@@ -15,9 +15,34 @@ object InputHelper {
     private const val SWIPE_MOTION_MILLIS = 300L
     private const val MIN_MOVE_INTERVAL_MILLIS = 16L
 
+    /**
+     * 坐标覆盖表：`"原x,原y"` → `新x to 新y`。
+     *
+     * 上游 LALC 的坐标全部取自 Steam 客户端，安卓客户端的 UI 布局有系统性偏移
+     * （实测星光九宫格 dx≈+25, dy≈+80）。这个表让**不改任何调用点**就能修正坐标：
+     * 全部 53 处 `click(ctx.input, x, y)` 都过 [click]，在这里查表即可。
+     *
+     * 为什么用原坐标当 key 而不是给每处起名：104 处硬编码分散在 4 个动作文件里，
+     * 逐个起名并改调用点是大改动；而绝大多数坐标在安卓上本来就是对的
+     * （EXP / Thread 链路已真机跑通），只有少数需要修正。
+     *
+     * 由 [LimbusEngine] 在 prepare 时从内嵌常量装入；将来可改为从资源包读，
+     * 那时改坐标就不用重新打 285MB 的包。
+     */
+    @Volatile
+    private var overrides: Map<String, Pair<Int, Int>> = emptyMap()
+
+    fun applyCoordinateOverrides(table: Map<String, Pair<Int, Int>>) {
+        overrides = table
+    }
+
+    private fun resolve(x: Int, y: Int): Pair<Int, Int> =
+        overrides["$x,$y"] ?: (x to y)
+
     suspend fun click(input: InputSink, x: Int, y: Int) {
-        withRelease({ input.touchUp(x, y) }) {
-            input.touchDown(x, y)
+        val (px, py) = resolve(x, y)
+        withRelease({ input.touchUp(px, py) }) {
+            input.touchDown(px, py)
             delay(PRESS_MILLIS)
         }
     }
@@ -40,6 +65,8 @@ object InputHelper {
     /** 默认 500ms：起终点各保持 100ms，中间均匀移动；步数增加时仍保留帧间隔。 */
     suspend fun swipe(input: InputSink, x1: Int, y1: Int, x2: Int, y2: Int, steps: Int = 8) {
         require(steps > 0) { "Swipe steps must be positive" }
+        @Suppress("NAME_SHADOWING") val (x1, y1) = resolve(x1, y1)
+        @Suppress("NAME_SHADOWING") val (x2, y2) = resolve(x2, y2)
         val motionMillis = maxOf(SWIPE_MOTION_MILLIS, steps.toLong() * MIN_MOVE_INTERVAL_MILLIS)
         val intervalMillis = motionMillis / steps
         val remainder = motionMillis % steps
