@@ -28,8 +28,10 @@ class LocalizedActionsTest {
     @Test fun chineseFloorGiftUsesTheConfiguredPreference() = runTest {
         val fake = FakeRecognizer()
         val rec = object : Recognizer by fake {
+            // 饰品名区域是 Crop(90,168,1090,60)，Acquire 标记区域是 Crop(110,138,1090,50)。
+            // 用 y 区分二者：只有饰品名区域返回文字，让这条用例专测「倾向饰品被选中」。
             override suspend fun detectText(crop: Crop?, threshold: Double) =
-                if (crop?.y == 180) listOf(TextMatch("石版字符", 400, 190, .95)) else emptyList()
+                if (crop?.y == 168) listOf(TextMatch("石版字符", 400, 190, .95)) else emptyList()
         }
         val ctx = TestActionContext(node = nodeWith("""{"cfg_type":"mirror"}"""), recognize = rec,
             templates = FakeTemplateIndex(mapOf("ego_gifts" to listOf("Lithograph"))))

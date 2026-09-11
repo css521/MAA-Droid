@@ -174,14 +174,26 @@ private object SelectFloorEgoGiftAction : ActionBackend {
         val preferGifts = preferredEgoGifts(ctx, cfgType, cfgIndex)
         val allGiftNames = ctx.templates.namesByTag("ego_gifts")
 
-        val curGifts = ctx.recognize.detectText(Crop(90, 180, 1090, 40))
-        val acquireAndOwned = ctx.recognize.detectText(Crop(110, 120, 1090, 60))
+        // 取字区域按真机帧 acquire_ego_gift.png 放宽：
+        // 上游 Crop(90,180,1090,40)（y 180-220）与 Crop(110,120,1090,60)（y 120-180）
+        // 的边界正好切在文字上 —— 实测 Acquire 标记在 y150-172、饰品名在 y175-202，
+        // 名字的下沿被 y=220 之内切掉、上沿被 y=180 切掉，于是 OCR 只拿到半行，
+        // 读出 "cmeraiu ciytra" 这类乱码。
+        //
+        // 放宽后同一帧实测：三个饰品名 conf 0.98/0.98/0.99 全部读对
+        // （Bell of Truth / Bio-venom Vial / Clockwork Spring）。
+        val curGifts = ctx.recognize.detectText(Crop(90, 168, 1090, 60))
+        val acquireAndOwned = ctx.recognize.detectText(Crop(110, 138, 1090, 50))
 
         val ownedPositions = acquireAndOwned.filter { it.text == OWNED_MARK }
         fun hasOwnedOnLeft(x: Int) =
             ownedPositions.any { it.x < x && x - it.x <= OWNED_LEFT_RANGE }
 
-        val acquireGifts = acquireAndOwned.filter { ACQUIRE_MARK in it.text }
+        // 不能用 `ACQUIRE_MARK in text` 精确子串匹配：真机同一帧上这个标记有三种读法
+        // 「Acquire E.G.O Gift」0.93 /「Acquire E.G.0 Gif」0.88（O→0 且右侧截断）
+        // 「Acquine」0.89（被右上角提示框遮挡）。只有第一种能匹配上，另两个饰品会被漏掉。
+        // 改为看是否以 "Acqui" 开头 —— 这五个字符在三种读法里都稳定。
+        val acquireGifts = acquireAndOwned.filter { it.text.startsWith(ACQUIRE_MARK_PREFIX, ignoreCase = true) }
         val acquireWithoutOwned = acquireGifts.filterNot { hasOwnedOnLeft(it.x) }
         val acquireWithOwned = acquireGifts.filter { hasOwnedOnLeft(it.x) }
 
@@ -208,15 +220,21 @@ private object SelectFloorEgoGiftAction : ActionBackend {
                 click(ctx.input, fallback[0].x, fallback[0].y + FLOOR_GIFT_CLICK_DY)
                 ctx.delay(0.5)
                 click(ctx.input, GIFT_SELECT_BUTTON.first, GIFT_SELECT_BUTTON.second)
+                click(ctx.input, GIFT_SELECT_BUTTON.first, GIFT_SELECT_BUTTON.second)
             } else {
                 // 模板也匹配不上（安卓上 acquire_ego_gift 只有 0.587~0.636）。
                 //
-                // 一个饰品都没选时**必须点 Refuse Gift，不能点 Select**：
-                // 真机实测点 Select(0/3) 会弹出 "You have not selected an E.G.O Gift yet.
-                // Continue without choosing?" 的二次确认，而流水线不认识那个弹窗，
-                // 于是卡在那里（截图证据：14:31 那轮就停在这个弹窗上）。
-                // Refuse Gift 是游戏提供的"明确放弃"入口，一步到位不弹窗。
-                ctx.log("OCR 与模板均失败，点 Refuse Gift 放弃本次饰品")
+                // 这里**不盲选**：Select 按钮上的 `N/3` 是「必须选够的数量」而非上限，
+                // 且该数量随主题包变化（可能 3 选 3、3 选 2）。盲点一张凑不够数量时
+                // Select 仍会被拒绝或弹窗，反而更难收场。
+                //
+                // 改为点 Refuse Gift —— 游戏提供的「明确放弃」入口，一步到位不弹窗。
+                // 代价是这层楼没拿到饰品，但不会卡死整个镜牢。
+                //
+                // 绝不能一个都不选就点 Select：真机实测会弹出
+                // "You have not selected an E.G.O Gift yet. Continue without choosing?"
+                // 二次确认，流水线不认识那个弹窗，卡死在上面（14:31 那轮的截图证据）。
+                ctx.log("OCR 与模板均失败，点 Refuse Gift 放弃本层饰品")
                 click(ctx.input, GIFT_REFUSE_BUTTON.first, GIFT_REFUSE_BUTTON.second)
             }
             waitConnectingDisappear(ctx)
@@ -236,6 +254,14 @@ private object SelectFloorEgoGiftAction : ActionBackend {
 
 private const val OWNED_MARK = "Owned"
 private const val ACQUIRE_MARK = "Acquire E.G.O Gift"
+
+/**
+ * 只匹配「Acquire」的前五个字符。
+ *
+ * 完整串在真机上有多种读法：`Acquire E.G.O Gift`、`Acquire E.G.0 Gif`（O→0 且右侧截断）、
+ * `Acquine`（被右上角提示框遮挡）。用完整串精确匹配会漏掉后两个饰品。
+ */
+private const val ACQUIRE_MARK_PREFIX = "Acqui"
 
 /** 「已持有」标记画在饰品名左侧的距离上限，照抄上游 */
 private const val OWNED_LEFT_RANGE = 200
