@@ -214,13 +214,17 @@ private object ChooseTeamAction : ActionBackend {
             ctx.delay(LIST_SETTLE)
         }
 
-        repeat(scrollCount) {
+        // 滑到顶之后先采一帧，作为"第 0 页"的基准
+        ctx.recognize.dumpFrame("team_list_top")
+        repeat(scrollCount) { i ->
             swipe(ctx.input, 130, 500, 130, 280)
             ctx.delay(LIST_SETTLE)
+            // 每滑一次都采帧：对比连续两帧的可见项，就能算出「一次滑动实际走了几格」。
+            // 上游假设一次滑动整好翻一页（TEAMS_PER_PAGE=6），但安卓上滑动距离 220px
+            // 与格距（实测 36px）不成整数倍，且有惯性 —— 实测滑 2 次后列表停在 #23
+            // 附近而非预期的第 12~13 项，说明一次远超 6 格。
+            ctx.recognize.dumpFrame("team_list_scroll_${i + 1}")
         }
-
-        // 采帧：看翻完后列表停在第几格，用于修正安卓上的滑动距离和格位坐标
-        ctx.recognize.dumpFrame("team_list_after_scroll_$scrollCount")
         click(ctx.input, TEAM_CLICK_POSITIONS[clickIndex].first, TEAM_CLICK_POSITIONS[clickIndex].second)
         // 点完队伍要等罪人阵容真的载入：上游点完即返回，后续 ready_to_battle 会读
         // "已选/总数"（Crop(1130,500,100,50)），读到旧值就会做出错误判断。

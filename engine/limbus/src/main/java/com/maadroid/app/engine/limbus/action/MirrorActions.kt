@@ -207,13 +207,18 @@ private object SelectFloorEgoGiftAction : ActionBackend {
                 ctx.log("饰品名 OCR 失败，退到模板兜底点第一个可选项")
                 click(ctx.input, fallback[0].x, fallback[0].y + FLOOR_GIFT_CLICK_DY)
                 ctx.delay(0.5)
+                click(ctx.input, GIFT_SELECT_BUTTON.first, GIFT_SELECT_BUTTON.second)
             } else {
                 // 模板也匹配不上（安卓上 acquire_ego_gift 只有 0.587~0.636）。
-                // 不选任何饰品，直接点确认跳过——绝对不能点 Cancel 或猜坐标，
-                // 否则 Cancel 退出选择 → 流水线又回来 → 又失败 → 又 Cancel → 死循环。
-                ctx.log("OCR 与模板均失败，不选饰品直接跳过")
+                //
+                // 一个饰品都没选时**必须点 Refuse Gift，不能点 Select**：
+                // 真机实测点 Select(0/3) 会弹出 "You have not selected an E.G.O Gift yet.
+                // Continue without choosing?" 的二次确认，而流水线不认识那个弹窗，
+                // 于是卡在那里（截图证据：14:31 那轮就停在这个弹窗上）。
+                // Refuse Gift 是游戏提供的"明确放弃"入口，一步到位不弹窗。
+                ctx.log("OCR 与模板均失败，点 Refuse Gift 放弃本次饰品")
+                click(ctx.input, GIFT_REFUSE_BUTTON.first, GIFT_REFUSE_BUTTON.second)
             }
-            click(ctx.input, 1130, 580)
             waitConnectingDisappear(ctx)
             return ActionOutcome.Continue
         }
@@ -223,7 +228,7 @@ private object SelectFloorEgoGiftAction : ActionBackend {
             ctx.delay(0.5)
         }
 
-        click(ctx.input, 1130, 580)
+        click(ctx.input, GIFT_SELECT_BUTTON.first, GIFT_SELECT_BUTTON.second)
         waitConnectingDisappear(ctx)
         return ActionOutcome.Continue
     }
@@ -764,6 +769,17 @@ private const val NODE_EMPTY = "node_empty"
 private const val NODES_PER_COLUMN = 3
 
 /** 车头 y 小于此值说明九宫格上沿被裁，要先下滑 */
+/**
+ * 饰品选择页底部的两个按钮，坐标从真机帧 `acquire_ego_gift.png` 实测。
+ *
+ * `Select N/3` 是"确认已选的饰品"；`Refuse Gift` 是"明确放弃本次饰品"。
+ * **一个都没选时必须点 Refuse**——点 Select 会弹出二次确认
+ * （"You have not selected an E.G.O Gift yet. Continue without choosing?"），
+ * 流水线不认识那个弹窗，会卡死在上面。
+ */
+private val GIFT_SELECT_BUTTON = 1139 to 579
+private val GIFT_REFUSE_BUTTON = 949 to 579
+
 private const val TRAIN_HEAD_TOO_HIGH_Y = 300
 
 private object SelectThemePackAction : ActionBackend {
