@@ -40,7 +40,49 @@ internal object LimbusResourceManifest {
 
     fun finalize(root: File, revision: ResourceRevision, compatibility: (String) -> String?) {
         val inspection = File(root, UpstreamArchive.INSPECTION_DIRECTORY)
-        require(inspection.isDirectory) { "缺少上游动作声明，无法校验兼容性" }
+
+        // 预打包的资源包（CI limbus-resource.yml 产出）已在打包时算好 required_actions，
+        // 且**不含上游 .py 源码**——所以这里没有 .upstream-source/ 可扫。
+        // 直接采用包内清单，避免在设备上重算。
+        //
+        // 从 LALC 整仓库 zip 安装时才会有 .py（mapEntry 按 inspectionSuffixes 收进
+        // .upstream-source/），走下面的扫描分支。
+        if (!inspection.isDirectory) {
+            // 没有 .py 可扫时，改用**本 App 实现了哪些动作**当基准——这才是校验的真正意图：
+            // 「资源包引用的动作，App 是否都实现了」。App 的实现集是代码里的事实，
+            // 不需要从上游 Python 源码反推。
+            //
+            // 走这条分支的是 CI 预打包的资源包：它只含 5 个资源目录、不带 .py。
+            val actions = validateResources(root).referencedActions()
+            com.maadroid.app.engine.limbus.action.LimbusActions.install()
+            val implemented = com.maadroid.app.engine.limbus.action.ActionRegistry.names()
+            val unsupported = (actions - implemented - routingActions).sorted()
+            require(unsupported.isEmpty()) {
+                "资源包引用了本版本未实现的动作：$unsupported，请升级 App"
+            }
+            val files = resourceFiles(root)
+            val entries = fileEntries(root, files)
+            val manifest = buildJsonObject {
+                put("schema_version", 1)
+                put("engine", "limbus")
+                put("min_engine_version", 1)
+                put("revision", contentRevision(entries))
+                putJsonObject("upstream") {
+                    put("repo", REPOSITORY)
+                    put("tag", revision.tag)
+                    put("commit", revision.commit)
+                }
+                put("required_actions", strings((actions intersect implemented).sorted()))
+                put("routing_only_actions", strings((actions - implemented).sorted()))
+                put("declared_actions", strings(implemented.sorted()))
+                put("files", JsonArray(entries))
+            }
+            val text = json.encodeToString(JsonObject.serializer(), manifest)
+            compatibility(text)?.let { error(it) }
+            File(root, "manifest.json").writeText(text)
+            return
+        }
+
         val declarations = sortedSetOf<String>()
         inspection.walkTopDown().filter { it.isFile && it.extension == "py" }.forEach { file ->
             val relative = file.relativeTo(inspection).invariantSeparatorsPath
