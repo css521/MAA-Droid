@@ -125,7 +125,13 @@ class LimbusEngine(
         // 在安卓上大面积失配（实测 details.png 在真实按钮处只有 0.485），而两个客户端显示的是
         // 同一串文字 —— OCR 读字不读像素，不受字体渲染与 UI 缩放差异影响。
         // 补丁文件由覆盖层随资源安装写入，只覆盖具名字段，上游流程更新仍照常生效。
+        // 每次 prepare 都写入当前版本的补丁——确保旧版本残留的补丁不会继续生效。
+        // 此前只在 AtomicResourceInstaller 安装时覆盖，但换 APK 后如果资源没重装，
+        // 旧补丁就残留在设备上（真机实测：旧版 21 个 OCR 补丁导致 7 个 error_handler
+        // 候选全走 OCR，每个 1~5 秒，累积出 30~80 秒卡顿）。
         val patchFile = File(resourceDir, PIPELINE_PATCH)
+        patchFile.parentFile?.mkdirs()
+        patchFile.writeText(EMBEDDED_PATCH)
         val patches = if (!patchFile.isFile) emptyMap() else runCatching {
             Json.parseToJsonElement(patchFile.readText()).jsonObject
                 // 下划线前缀是注释键。JSON 不支持注释，而这个文件需要写清"为什么这么改"，
@@ -504,6 +510,15 @@ class LimbusEngine(
     private companion object {
         /** 开发模式开关：该文件存在即开启采集，真机现场建/删即可，无需重新打包 */
         const val CAPTURE_MARKER = ".capture"
+
+        /**
+         * 内嵌补丁——每次 prepare 写入资源目录，确保不会残留旧版本的补丁。
+         *
+         * 真机踩过：旧版有 21 个 OCR 补丁（含 7 个 error_handler 弹窗候选），新版回退到
+         * 10 个但资源没重装，旧补丁残留导致 7 个弹窗候选全走 OCR（每个 1~5 秒），
+         * error_handler 打转 10 轮累积到 30~80 秒卡顿。
+         */
+        const val EMBEDDED_PATCH = """{"exp_choose_team":{"recognition":"ocr","params":{"text":"Details","mask":[880,100,120,50]}},"thread_choose_team":{"recognition":"ocr","params":{"text":"Details","mask":[880,100,120,50]}},"mirror_choose_team":{"recognition":"ocr","params":{"text":"Details","mask":[880,100,120,50]}},"mirror_ready_to_battle":{"recognition":"ocr","params":{"text":"Details","mask":[880,100,120,50]}},"touch_to_start":{"recognition":"ocr","params":{"text":"Clear all caches","mask":[170,630,190,55]}},"mirror_enter_resume":{"recognition":"ocr","params":{"text":"Resume","mask":[570,370,150,60]}},"mirror_enter_dungeon":{"recognition":"ocr","params":{"text":"Enter","mask":[1050,440,130,90]}},"check_enkephalin":{"params":{"post_delay":2.5}},"event_entry_dark":{"params":{"post_delay":2.5}},"event_entry":{"params":{"post_delay":2.5}}}"""
 
         const val PIPELINE_DIR = "config/task"
 
