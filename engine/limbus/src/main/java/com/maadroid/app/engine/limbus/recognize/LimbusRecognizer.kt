@@ -254,8 +254,35 @@ class LimbusRecognizer(
      * 裁成窄图会被检测模型的短边规则过度放大，也会改变文字的识别尺寸。
      * OCR 不可用时返回空表（等价于「识别不中」），依赖文字的步骤会走兜底分支。
      */
-    override suspend fun detectText(crop: Crop?, threshold: Double): List<TextMatch> =
-        readText(crop, threshold, query = null)
+    /**
+     * 读区域内文字；**读不到就自动放宽区域重试一次**。
+     *
+     * 为什么需要：13 处 `detectText(Crop(...))` 的坐标全部来自上游 LALC 的 Windows
+     * 客户端，安卓上没有一个经过真帧验证。饰品名那次实测出的失败模式很典型——
+     * 区域边界正好切在文字上沿（文字在 y175-202，区域是 y180-220），OCR 只拿到半行，
+     * 读出 "cmeraiu ciytra" 这类乱码；把区域放宽 12px 后同一帧三个名字全部读对
+     * （conf 0.96/0.99/0.98）。
+     *
+     * 逐个区域拿真帧去量是没完的（多数界面的帧还采不到），所以在这里兜住：
+     * 空结果时按 [OCR_RETRY_PAD] 四向放宽再读一次。放宽只在**读不到时**发生，
+     * 正常路径零额外开销；放宽后可能多读到相邻文字，由调用方的匹配逻辑筛掉
+     * （它们本来就在做模糊匹配或前缀比对）。
+     */
+    override suspend fun detectText(crop: Crop?, threshold: Double): List<TextMatch> {
+        val first = readText(crop, threshold, query = null)
+        if (first.isNotEmpty() || crop == null) return first
+        val widened = crop.widened(OCR_RETRY_PAD)
+        if (widened == crop) return first
+        val retry = readText(widened, threshold, query = null)
+        if (retry.isNotEmpty()) {
+            onDiagnostic(
+                "ocr.widen",
+                "原区域读不到内容，放宽 ${OCR_RETRY_PAD}px 后读到 ${retry.size} 段：" +
+                    "$crop → $widened",
+            )
+        }
+        return retry
+    }
 
     private suspend fun readText(
         crop: Crop?, threshold: Double, query: OcrTextQuery?,
@@ -664,6 +691,15 @@ class LimbusRecognizer(
     }
 
     private companion object {
+        /**
+         * OCR 读不到内容时的区域放宽量。
+         *
+         * 12px 是从饰品名那次实测反推的：文字在 y175-202，上游区域 y180-220，
+         * 上沿被切 5px 就足以让 OCR 读出乱码。取 12px 留出余量又不至于吞进相邻行
+         * （界面上相邻文字行的间距普遍 25px 以上）。
+         */
+        const val OCR_RETRY_PAD = 12
+
 
         /** 开发模式采集帧数上限，避免写满存储 */
         const val MAX_CAPTURES = 60

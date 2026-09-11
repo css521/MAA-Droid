@@ -15,7 +15,28 @@ data class TextMatch(val text: String, val x: Int, val y: Int, val score: Double
  * 模板匹配用 `mask_screenshot` 裁剪后加回坐标偏移；OCR 用 `fill_mask_screenshot`
  * 保留整帧并涂黑区域外。两者都返回原始画面的坐标。
  */
-data class Crop(val x: Int, val y: Int, val width: Int, val height: Int)
+data class Crop(val x: Int, val y: Int, val width: Int, val height: Int) {
+    /**
+     * 四向放宽 [pad] 像素，夹在 1280x720 帧内。
+     *
+     * 给 OCR 读不到内容时的重试用：上游的取字区域常有边界正好切在文字上的问题
+     * （饰品名实测：文字 y175-202，区域 y180-220，上沿被切掉半行）。
+     */
+    fun widened(pad: Int): Crop {
+        val nx = (x - pad).coerceAtLeast(0)
+        val ny = (y - pad).coerceAtLeast(0)
+        return Crop(
+            nx, ny,
+            (x + width + pad).coerceAtMost(FRAME_WIDTH) - nx,
+            (y + height + pad).coerceAtMost(FRAME_HEIGHT) - ny,
+        )
+    }
+
+    private companion object {
+        const val FRAME_WIDTH = 1280
+        const val FRAME_HEIGHT = 720
+    }
+}
 
 /**
  * 识别器。方法集按上游实测调用量排布，不是等量的：
