@@ -24,24 +24,41 @@ object UtilActions {
 }
 
 private object ConfirmAllCoinsAction : ActionBackend {
-    override suspend fun execute(ctx: ActionContext): ActionOutcome {
-        ctx.log("收集日常奖励")
+    /**
+     * 一次识别拿到所有奖励位置，再逐个点击。
+     *
+     * 不改成「每次点完重新识别」：那样每项都要付一次模板匹配，几十项奖励会慢到不可用。
+     * 领奖界面的布局在领取过程中不重排，一次识别的坐标是可靠的。
+     *
+     * 真正缺的是**点击间隔**：上游点完只等 waitConnectingDisappear（网络请求完成），
+     * 不等领取动画播完。安卓上动画更长，下一次点击落在动画中途会被吞掉，表现为漏领。
+     */
+    private suspend fun claimAll(ctx: ActionContext, label: String) {
+        ctx.log(label)
         val coins = ctx.recognize.templateMatch("reward_coin")
         for (pos in coins) {
+            ctx.ensureActive()
             click(ctx.input, pos.x, pos.y)
             waitConnectingDisappear(ctx)
+            // 上游点完只等 waitConnectingDisappear（网络请求），不等领取动画播完，
+            // 安卓上动画更长，下一次点击落在动画中途会被吞掉 → 漏领。
+            ctx.delay(REWARD_SETTLE)
         }
+        ctx.log("$label：点击 ${coins.size} 项")
+    }
+
+    override suspend fun execute(ctx: ActionContext): ActionOutcome {
+        claimAll(ctx, "收集日常奖励")
         click(ctx.input, 270, 400)
-        ctx.delay(1.0)
-        ctx.log("收集周常奖励")
-        val weeklyCoins = ctx.recognize.templateMatch("reward_coin")
-        for (pos in weeklyCoins) {
-            click(ctx.input, pos.x, pos.y)
-            waitConnectingDisappear(ctx)
-        }
+        ctx.delay(REWARD_SETTLE)
+        claimAll(ctx, "收集周常奖励")
         return ActionOutcome.Continue
     }
 }
+
+/** 领奖后等动画与列表重排；上游没有这段等待，安卓上会漏领 */
+private const val REWARD_SETTLE = 1.5
+
 
 private object GetEnkephalinModuleAction : ActionBackend {
     override suspend fun execute(ctx: ActionContext): ActionOutcome {
