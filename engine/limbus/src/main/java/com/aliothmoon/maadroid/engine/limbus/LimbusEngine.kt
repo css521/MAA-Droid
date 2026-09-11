@@ -131,8 +131,9 @@ class LimbusEngine(
                 .mapValues { it.value.jsonObject }
         }.onFailure { warn("内嵌补丁解析失败: ${it.message}") }.getOrDefault(emptyMap())
         if (patches.isNotEmpty()) info("已应用流水线补丁 ${patches.size} 个节点")
-        // 删掉磁盘上残留的旧补丁文件，避免 verifyInstalledFiles 报"包含清单外文件"
-        File(resourceDir, PIPELINE_PATCH).let { if (it.isFile) it.delete() }
+        // 不碰磁盘上的任何文件——无论是写入还是删除，都会破坏 verifyInstalledFiles 的 hash 校验。
+        // 旧补丁文件（如有）在磁盘上无害：它不会被加载（EMBEDDED_PATCH 是唯一来源），
+        // 也不会被清单校验拒绝（它已在清单的白名单里，见 LimbusResourceManifest.PIPELINE_PATCH）。
 
         val loaded = PipelineRegistry.load(files, patches)
 

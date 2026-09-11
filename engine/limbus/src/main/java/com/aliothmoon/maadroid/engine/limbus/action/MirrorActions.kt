@@ -209,11 +209,9 @@ private object SelectFloorEgoGiftAction : ActionBackend {
                 ctx.delay(0.5)
             } else {
                 // 模板也匹配不上（安卓上 acquire_ego_gift 只有 0.587~0.636）。
-                // 直接点第一个饰品的位置：上游三列布局，第一列中心约 x=300。
-                // 宁可选错也不要反复空转——每次重试同一帧只会得到同样的乱码。
-                ctx.log("OCR 与模板均失败，直接点第一个饰品位置")
-                click(ctx.input, 300, 210)
-                ctx.delay(0.5)
+                // 不选任何饰品，直接点确认跳过——绝对不能点 Cancel 或猜坐标，
+                // 否则 Cancel 退出选择 → 流水线又回来 → 又失败 → 又 Cancel → 死循环。
+                ctx.log("OCR 与模板均失败，不选饰品直接跳过")
             }
             click(ctx.input, 1130, 580)
             waitConnectingDisappear(ctx)
