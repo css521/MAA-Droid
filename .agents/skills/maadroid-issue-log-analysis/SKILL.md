@@ -1,10 +1,10 @@
 ---
 name: maadroid-issue-log-analysis
 description: >
-  分析 MAA Droid（Aliothmoon/MAA-Meow）的 GitHub Issue 或本地 `maa_logs_*.zip` 日志包。
+  分析 MAA Droid（css521/MAA-Droid）的 GitHub Issue 或本地 `maa_logs_*.zip` 日志包。
   下载附件后从 gui/meow_log、error_logs、logcat/core|app、asst.log、properties.txt、device_info.txt 交叉取证，
   对照双进程（App + Shizuku/Root 提权）与 MaaCore/bridge 代码判断根因。
-  Use when analyzing MAA Droid/MAA-Meow issues, log zips, task failures, service death,
+  Use when analyzing MAA Droid issues, log zips, task failures, service death,
   Shizuku/Root elevation, virtual display, recognition errors, or connection init failures.
 ---
 
@@ -14,7 +14,7 @@ description: >
 
 ## Scope
 
-- 适用于 `https://github.com/Aliothmoon/MAA-Meow` 的公开 Issue。
+- 适用于 `https://github.com/css521/MAA-Droid` 的公开 Issue。
 - 也适用于本地 `maa_logs_*.zip` 或已解压日志目录。
 - 输入：完整 issue URL、`#1234`、或本地路径。
 - 无 `maa_logs_*.zip` 时先声明证据不足，再基于正文/截图/代码做初步判断。
@@ -81,10 +81,10 @@ libMaaCore.so → JNA AsstApiCallback → MaaCoreServiceImpl
 ## Workflow
 
 1. **规范化输入**  
-   - `#N` → `https://github.com/Aliothmoon/MAA-Meow/issues/N`  
+   - `#N` → `https://github.com/css521/MAA-Droid/issues/N`  
    - 本地 zip/目录 → 跳过 issue 拉取  
 
-2. **读 Issue**（`gh issue view N --repo Aliothmoon/MAA-Meow`）  
+2. **读 Issue**（`gh issue view N --repo css521/MAA-Droid`）  
    提取：App 版本、**提权后端（Shizuku/Root）**、运行模式、客户端、任务、期望/实际、复现步骤、维护者评论。  
    评论结论需用日志/代码自证，勿照抄。
 
@@ -329,7 +329,7 @@ git sparse-checkout set src/MaaCore
 - 旧版本 issue 区分「当时根因」与「主线是否已修」。
 - 证据未复现要写明，勿硬凑。
 - 设备/ROM 不兼容须有代码或日志依据。
-- 代码引用用 GitHub blob：`https://github.com/Aliothmoon/MAA-Meow/blob/<sha>/...#L..`；上游同理。
+- 代码引用用 GitHub blob：`https://github.com/css521/MAA-Droid/blob/<sha>/...#L..`；上游同理。
 - 识别/任务逻辑需要读 C++ 时，**可以** clone `MaaAssistantArknights/MaaAssistantArknights`（见「MaaCore 源码获取」）；仅 blob 不够或要全局搜索时再 clone。
 - 用户可见文案以 `values/strings.xml`（中文源）/ `values-en` 为准，勿直接甩内部 key。
 - 架构细节以 `Claude.md` 为准；本 skill 过时处按源码与 Claude.md 校正。

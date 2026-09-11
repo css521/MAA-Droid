@@ -24,7 +24,7 @@ class MirrorChyanResourceDownloadUrlResolver(
             ArknightsApi.MIRROR_CHYAN_RESOURCE,
             query = mapOf(
                 "current_version" to currentVersion,
-                "user_agent" to "MAA-Meow",
+                "user_agent" to "MAA-Droid",
                 "cdk" to cdk
             )
         ).map { data ->

@@ -11,7 +11,7 @@ import com.maadroid.app.constant.MaaFiles
 object CoreDataDir {
 
     /** shell:shell 0771，两种后端都可写 */
-    const val ROOT = "/data/local/tmp/maameow"
+    const val ROOT = "/data/local/tmp/maadroid"
 
     const val RESOURCE_ASSET_PREFIX = "assets/${MaaFiles.ASSET_DIR_NAME}/"
     const val OVERRIDES_ASSET_ENTRY = "assets/${MaaFiles.OVERRIDES_ASSET_TASKS}"

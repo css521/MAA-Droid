@@ -154,10 +154,10 @@ public final class PowerManager {
             long time = SystemClock.uptimeMillis();
             switch (wakeUpMethodVersion) {
                 case 0:
-                    method.invoke(manager, time, WAKE_REASON_APPLICATION, "maameow:wake", FakeContext.PACKAGE_NAME);
+                    method.invoke(manager, time, WAKE_REASON_APPLICATION, "maadroid:wake", FakeContext.PACKAGE_NAME);
                     return true;
                 case 1:
-                    method.invoke(manager, time, "maameow:wake", FakeContext.PACKAGE_NAME);
+                    method.invoke(manager, time, "maadroid:wake", FakeContext.PACKAGE_NAME);
                     return true;
                 default:
                     method.invoke(manager, time);

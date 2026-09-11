@@ -32,7 +32,7 @@ fun buildConfigString(value: String): String = "\"" + value
     .replace("\r", "\\r")
     .replace("\t", "\\t") + "\""
 
-// 见 version.properties：本仓库是从 MAA-Meow（688 提交）切出的独立仓库，
+// 见 version.properties：本仓库是从原仓库（688 提交）切出的独立仓库，
 // 提交数从 1 重新开始，必须叠加基线否则 versionCode 回退、已装用户无法升级
 val versionProps = Properties().apply {
     rootProject.file("version.properties").takeIf { it.isFile }?.inputStream()?.use { load(it) }
@@ -99,7 +99,7 @@ android {
 
 
     defaultConfig {
-        // 永久改为与 namespace 一致。此前保留旧值是为兼容 MAA-Meow 老用户；
+        // 永久改为与 namespace 一致。此前保留旧值是为兼容旧包名老用户；
         // 现明确以 MAA-Droid 身份发布，老用户视为全新安装（数据不迁移）。
         applicationId = "com.maadroid.app"
         minSdk = 28

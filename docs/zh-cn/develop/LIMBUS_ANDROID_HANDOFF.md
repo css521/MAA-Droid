@@ -114,7 +114,7 @@ AALC（`/Users/css521/project/java/AhabAssistantLimbusCompany`）确实支持模
 `module/automation` 5626 行，实际要搬约 **15000 行**；而 `engine/limbus` 现有 16324 行已跑通
 EXP 全链、Thread 已验证。
 
-**更关键**：AALC 流程是 Python 代码，MAA-Meow 选 LALC 正是因为它的流程在 JSON 里可热更
+**更关键**：AALC 流程是 Python 代码，MAA Droid 选 LALC 正是因为它的流程在 JSON 里可热更
 （见 `LimbusEngine` 类注释）。改造成 AALC 逻辑会让「上游每次更新都要改代码发 APK」
 从担忧变成必然，而且**仍然要做同样的裁素材工作**。
 

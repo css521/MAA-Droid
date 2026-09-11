@@ -40,7 +40,7 @@ class AppUpdateSourceConfigTest {
         val config = AppUpdateSourceConfig("example-org", "independent-app", " IndependentApk ")
         assertTrue(config.usesMirrorChyan)
         assertEquals("https://mirrorchyan.com/api/resources/IndependentApk/latest", config.mirrorChyanResourceUrl())
-        for (rid in listOf("", " ", "../MAA-Meow", "https://mirrorchyan.com", "id?x=y", "..")) {
+        for (rid in listOf("", " ", "../MAA-Droid", "https://mirrorchyan.com", "id?x=y", "..")) {
             val invalid = AppUpdateSourceConfig("example-org", "independent-app", rid)
             assertNull(invalid.disabledReason)
             assertFalse(invalid.usesMirrorChyan)

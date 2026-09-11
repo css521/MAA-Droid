@@ -26,10 +26,10 @@
 请使用「设置 → 日志 → 导出日志压缩包」生成日志包，并通过「设置 → 关于 → 问题反馈」提交
 
 **⚠️ 反馈规范**  
-请在确认问题不属于「常见问题」后，再依 [Issue 模板](https://github.com/Aliothmoon/MAA-Meow/issues/new/choose) 在 [GitHub](https://github.com/Aliothmoon/MAA-Meow/issues) 提交反馈，并附上日志压缩包
+请在确认问题不属于「常见问题」后，再依 [Issue 模板](https://github.com/css521/MAA-Droid/issues/new/choose) 在 [GitHub](https://github.com/css521/MAA-Droid/issues) 提交反馈，并附上日志压缩包
 
 **💡 参与开源**  
-欢迎在 [GitHub](https://github.com/Aliothmoon/MAA-Meow) 参与开发，鼓励通过代码贡献代替问题反馈
+欢迎在 [GitHub](https://github.com/css521/MAA-Droid) 参与开发，鼓励通过代码贡献代替问题反馈
 
 ---
 
@@ -41,7 +41,7 @@
 
 新版本 App 发布时已包含当时最新资源，若不使用新资源相关功能可暂不更新；需要时请在「设置 → 更新管理」及时更新资源
 
-**下载源**：可选 GitHub 或 [Mirror酱](https://mirrorchyan.com/?source=maameow-anno)。Mirror酱 填写 CDK 后支持 App 与资源自动更新，优先通过高速 CDN 下载
+**下载源**：可选 GitHub 或 [Mirror酱](https://mirrorchyan.com/?source=maadroid-anno)。Mirror酱 填写 CDK 后支持 App 与资源自动更新，优先通过高速 CDN 下载
 
 **更新渠道**：可在「设置 → 更新管理 → 更新渠道」切换 **稳定版** 和 **公测版**（版本号含 `-beta.x` 的为公测版）。公测版可能存在更多问题，如无特殊需求建议使用稳定版
 
@@ -81,7 +81,7 @@ MAA 已接入 [Mirror酱](https://mirrorchyan.com/?source=maa-anno)，来自 Mir
 
 MAA Droid 完全免费开源，**不会**要求「关注、三连、私信」才能获取安装包。请优先通过以下 **官方渠道** 获取：
 
-- **GitHub Release**：[github.com/Aliothmoon/MAA-Meow](https://github.com/Aliothmoon/MAA-Meow/releases)
+- **GitHub Release**：[github.com/css521/MAA-Droid](https://github.com/css521/MAA-Droid/releases)
 - **QQ 官方群**：群内公告/文件（可通过「设置 → 关于 → QQ 群」加群，请勿通过其他渠道加群）
 - **Mirror酱**：官方支持的镜像加速渠道
 

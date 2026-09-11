@@ -84,7 +84,7 @@ class MaaResourceLoaderTest {
         withEnv(coreSeparated = true) { env ->
             assertTrue(env.loader.load("Official").isSuccess)
             assertTrue(env.loadedDirs.isNotEmpty())
-            assertTrue(env.loadedDirs.all { it.startsWith("/data/local/tmp/maameow") })
+            assertTrue(env.loadedDirs.all { it.startsWith("/data/local/tmp/maadroid") })
             coVerify(exactly = 1) { env.coreDataPusher.prepare(any()) }
         }
     }
@@ -346,11 +346,11 @@ class MaaResourceLoaderTest {
             val service = mockk<RemoteService>()
             every { pathConfig.isCoreSeparated } returns coreSeparated
             every { pathConfig.coreRootDir } answers {
-                if (coreSeparated) "/data/local/tmp/maameow" else rootDir.absolutePath
+                if (coreSeparated) "/data/local/tmp/maadroid" else rootDir.absolutePath
             }
             every { pathConfig.toCorePath(any()) } answers {
                 if (coreSeparated) {
-                    MaaPathConfig.toCorePath(firstArg(), rootDir.absolutePath, "/data/local/tmp/maameow")
+                    MaaPathConfig.toCorePath(firstArg(), rootDir.absolutePath, "/data/local/tmp/maadroid")
                 } else firstArg()
             }
             val coreDataPusher = mockk<CoreDataPusher> {

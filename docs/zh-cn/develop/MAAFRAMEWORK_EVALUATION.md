@@ -61,12 +61,12 @@ LALC 的 Windows 输入实现也不能因为 Framework 支持 Agent 就直接在
 
 ## MaaFwApp 取舍
 
-可复用或参考其 [Kotlin/JNA 声明](https://github.com/Aliothmoon/MaaFwApp/blob/f4f6f220e21e3a1b7b0cf5df4bdbe0ec04c668f7/app/src/main/java/com/maadroid/maafw/maa/MaaFrameworkLibrary.kt)、
-[MaaRunner 装载与绑定顺序](https://github.com/Aliothmoon/MaaFwApp/blob/f4f6f220e21e3a1b7b0cf5df4bdbe0ec04c668f7/app/src/main/java/com/maadroid/maafw/remote/MaaRunner.kt)。
+可复用或参考其 [Kotlin/JNA 声明](https://github.com/css521/MaaFwApp/blob/f4f6f220e21e3a1b7b0cf5df4bdbe0ec04c668f7/app/src/main/java/com/maadroid/maafw/maa/MaaFrameworkLibrary.kt)、
+[MaaRunner 装载与绑定顺序](https://github.com/css521/MaaFwApp/blob/f4f6f220e21e3a1b7b0cf5df4bdbe0ec04c668f7/app/src/main/java/com/maadroid/maafw/remote/MaaRunner.kt)。
 其 JNA 声明尚未覆盖这里需要的 CustomController 和 custom-action 注册接口。
 Framework 文档标记外部 Java 绑定停留在旧 v3，不能直接假定其支持当前 ABI。
 
-该版本 MaaFwApp 的 [集成说明](https://github.com/Aliothmoon/MaaFwApp/blob/f4f6f220e21e3a1b7b0cf5df4bdbe0ec04c668f7/INTEGRATION.md#L53)
+该版本 MaaFwApp 的 [集成说明](https://github.com/css521/MaaFwApp/blob/f4f6f220e21e3a1b7b0cf5df4bdbe0ec04c668f7/INTEGRATION.md#L53)
 以 APK 内置资源为主，不支持资源热切换；其停止请求与路径复用策略也不等同于本项目的
 停止确认和资源 revision 锁定。因此保留当前 EngineSession、设备 lease、资源安装器和
 预览生命周期。复制代码时记录来源，保留 MaaFwApp 的 AGPL-3.0 和 Framework 的 LGPL-3.0 声明。

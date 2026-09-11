@@ -421,7 +421,7 @@ fun UpdateCard(
                             context = context,
                             uriString = when (source) {
                                 UpdateSource.GITHUB -> "https://github.com/MaaAssistantArknights/MaaResource"
-                                UpdateSource.MIRROR_CHYAN -> "https://mirrorchyan.com/zh/projects?rid=MAA&os=android&channel=stable&source=maameow"
+                                UpdateSource.MIRROR_CHYAN -> "https://mirrorchyan.com/zh/projects?rid=MAA&os=android&channel=stable&source=maadroid"
                             }
                         )
                         showInfoSource = null

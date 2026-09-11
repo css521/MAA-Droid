@@ -182,7 +182,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # 生成当前版本的 changelog（用于 Release body）
-          git-cliff --current --strip header --github-repo Aliothmoon/MAA-Meow -o RELEASE_NOTES.md
+          git-cliff --current --strip header --github-repo css521/MAA-Droid -o RELEASE_NOTES.md
           # 追加下载说明与 Mirror酱 下载链接
           cat >> RELEASE_NOTES.md << 'EOF'
 

@@ -972,7 +972,7 @@ fun SettingsView(
                             description = stringResource(R.string.settings_export_config_desc),
                             contentColor = contentColor
                         ) {
-                            exportLauncher.launch("maameow_config.json")
+                            exportLauncher.launch("maadroid_config.json")
                         }
                         ListItemDivider()
                         SettingClickItem(

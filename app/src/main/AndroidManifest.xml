@@ -87,7 +87,7 @@
         </activity>
 
         <!--
-            原有 com.maadroid.app.maameow/.MainActivity 的兼容别名已随永久改名移除。
+            原有 com.maadroid.app/.MainActivity 的兼容别名已随永久改名移除。
             外部自动化（MacroDroid / Tasker）请改用新组件与 action：
               -a com.maadroid.app.action.LAUNCH_PROFILE
               -n com.maadroid.app/.MainActivity

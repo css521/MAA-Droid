@@ -15,11 +15,11 @@ import com.maadroid.app.data.model.update.AppUpdateSourceConfig
  */
 object AppApi {
 
-    const val FAQ_URL = "https://docs.maameow.com/faq/getting-started/"
-    const val FEEDBACK_URL = "https://github.com/Aliothmoon/MAA-Meow/issues"
+    const val FAQ_URL = "https://github.com/css521/MAA-Droid#readme"
+    const val FEEDBACK_URL = "https://github.com/css521/MAA-Droid/issues"
 
     /** 静态 API 基础地址 */
-    const val MEOW_API_BASE = "https://maameow.com/api/"
+    const val MEOW_API_BASE = "https://raw.githubusercontent.com/css521/MAA-Droid/main/app/src/main/assets/"
 
     const val ANNOUNCEMENT_ZH = "${MEOW_API_BASE}announcement/announcement_zh.md"
     const val ANNOUNCEMENT_EN = "${MEOW_API_BASE}announcement/announcement_en.md"

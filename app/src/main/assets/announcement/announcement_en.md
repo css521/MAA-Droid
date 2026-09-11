@@ -26,10 +26,10 @@ Go to `Settings → Logs` to review the task history and error logs and identify
 Use `Settings → Logs → Export Log Archive` to generate a log package, then submit it via `Settings → About → Issue Report`.
 
 **⚠️ Feedback Guidelines**  
-After confirming the issue is not covered by the FAQ, file it on [GitHub](https://github.com/Aliothmoon/MAA-Meow/issues) following the [issue template](https://github.com/Aliothmoon/MAA-Meow/issues/new/choose), with the log archive attached.
+After confirming the issue is not covered by the FAQ, file it on [GitHub](https://github.com/css521/MAA-Droid/issues) following the [issue template](https://github.com/css521/MAA-Droid/issues/new/choose), with the log archive attached.
 
 **💡 Contributing**  
-Contributions on [GitHub](https://github.com/Aliothmoon/MAA-Meow) are welcome. Code contributions are encouraged over issue reports.
+Contributions on [GitHub](https://github.com/css521/MAA-Droid) are welcome. Code contributions are encouraged over issue reports.
 
 ---
 
@@ -41,7 +41,7 @@ Contributions on [GitHub](https://github.com/Aliothmoon/MAA-Meow) are welcome. C
 
 Each app release includes the latest resources at the time of release. If you don't need features requiring the latest resources, you can postpone updating; when needed, update resources in `Settings → Update`.
 
-**Download Source**: Choose GitHub or [MirrorChyan](https://mirrorchyan.com/?source=maameow-anno-en). With a CDK, MirrorChyan enables automatic updates for both the app and resources, with priority downloads via high-speed CDN.
+**Download Source**: Choose GitHub or [MirrorChyan](https://mirrorchyan.com/?source=maadroid-anno-en). With a CDK, MirrorChyan enables automatic updates for both the app and resources, with priority downloads via high-speed CDN.
 
 **Update Channel**: Switch between **Stable** and **Beta** in `Settings → Update → Update Channel` (beta versions have `-beta.x` in the version number). Beta builds may have more issues; Stable is recommended unless you have specific needs.
 
@@ -81,7 +81,7 @@ Recently, third parties have been found creating fake MAA repositories, tamperin
 
 MAA Droid is completely free and open-source. We **never** require "follow, like, share, and DM" to access the installer. Please download exclusively from **official channels**:
 
-- **GitHub Release**: [github.com/Aliothmoon/MAA-Meow](https://github.com/Aliothmoon/MAA-Meow/releases)
+- **GitHub Release**: [github.com/css521/MAA-Droid](https://github.com/css521/MAA-Droid/releases)
 - **Official QQ Group**: announcements and files within the group (join via `Settings → About → QQ Group`; do not join through other channels)
 - **MirrorChyan**: the officially supported mirror download service
 

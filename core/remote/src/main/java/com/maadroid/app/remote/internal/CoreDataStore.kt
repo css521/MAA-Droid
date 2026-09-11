@@ -10,7 +10,7 @@ import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
 
 /**
- * 提权进程侧的独立数据目录（/data/local/tmp/maameow）
+ * 提权进程侧的独立数据目录（/data/local/tmp/maadroid）
  *
  * 纯 java.io，不带日志，便于 JVM 单测；日志由 RemoteServiceImpl 打
  * 资源来源是 APK 本身（/data/app 下 0644，shell 可读），按 stamp 判断是否重解

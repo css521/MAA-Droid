@@ -96,7 +96,7 @@ Gradle 路径与目录对应，例如 `:engine:limbus`、`:core:bridge`。`app` 
 
 ## 资源下载与更新
 
-资源包的 App 可读根目录由 [EngineDataRoot](../../../core/remote/src/main/java/com/maadroid/app/remote/EngineDataRoot.kt) 解析为 `externalFilesDir/Maa/<relativeRoot>`。历史 `Maa` 目录名保持不变；提权侧 `/data/local/tmp/maameow` 是另一个目录，不应直接交给 App 进程内的识别器读取。
+资源包的 App 可读根目录由 [EngineDataRoot](../../../core/remote/src/main/java/com/maadroid/app/remote/EngineDataRoot.kt) 解析为 `externalFilesDir/Maa/<relativeRoot>`。历史 `Maa` 目录名保持不变；提权侧 `/data/local/tmp/maadroid` 是另一个目录，不应直接交给 App 进程内的识别器读取。
 
 | | 方舟 | 边狱 |
 |---|---|---|

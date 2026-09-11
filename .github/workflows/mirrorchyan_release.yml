@@ -12,7 +12,7 @@ on:
 jobs:
   mirrorchyan:
     runs-on: macos-latest
-    if: ${{ github.repository_owner == 'Aliothmoon' }}
+    if: ${{ github.repository_owner == 'css521' }}
     # strategy:
     #   fail-fast: false
     #   matrix:
@@ -23,13 +23,13 @@ jobs:
         with:
           filetype: latest-release
           filename: "*universal.apk"
-          mirrorchyan_rid: MAA-Meow
+          mirrorchyan_rid: MAA-Droid
           tag: ${{ inputs.tag }}
 
           os: android
           # arch:
 
-          owner: Aliothmoon
-          repo: MAA-Meow
+          owner: css521
+          repo: MAA-Droid
           github_token: ${{ secrets.GITHUB_TOKEN }}
           upload_token: ${{ secrets.MirrorChyanUploadToken }}

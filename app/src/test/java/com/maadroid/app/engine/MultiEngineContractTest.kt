@@ -161,7 +161,7 @@ class MultiEngineContractTest {
 
     @Test
     fun defaultGameIsArknightsSoUpgradingUsersStayPut() {
-        // 本 App 从只有方舟的 MAA-Meow 演进而来；已装用户升级后应停在原来的游戏上，
+        // 本 App 从只有方舟的上游演进而来；已装用户升级后应停在原来的游戏上，
         // 而不是被切到边狱
         assertEquals(
             EngineIds.ARKNIGHTS,
