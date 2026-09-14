@@ -134,7 +134,7 @@ jobs:
           cd app/build/outputs/apk/release
           TAG="${GITHUB_REF_NAME:-dev}"
           for f in *.apk; do
-            mv "$f" "MaaMeow-${TAG}-${{ matrix.label }}.apk"
+            mv "$f" "MAA-Droid-${TAG}-${{ matrix.label }}.apk"
           done
 
       - name: Verify compat APK
@@ -228,7 +228,7 @@ jobs:
         with:
           draft: false
           prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
-          # 小写 mapping- 前缀，ASCII 升序下排在 MaaMeow-*.apk 之后，不打乱下载列表
+          # 小写 mapping- 前缀，ASCII 升序下排在 MAA-Droid-*.apk 之后（大写字母小于小写），不打乱下载列表
           files: |
             apks/*.apk
             mapping-*.zip
