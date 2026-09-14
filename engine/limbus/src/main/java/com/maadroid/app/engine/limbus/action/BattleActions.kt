@@ -72,6 +72,15 @@ private const val MAX_SCROLL = 10
  */
 private const val LIST_SETTLE = 2.0
 
+/**
+ * 编队时每个成员点击之间的间隔。
+ *
+ * 上游零间隔连点 12 次（PC 上够用），安卓上会被大量吞掉 —— 真机实测点完
+ * 只剩 "1 SELECTED / 1/12"，随后的"进战斗"点击落在人数不足的界面上被游戏拒绝，
+ * 整个流程卡在编队页。
+ */
+private const val MEMBER_CLICK_GAP = 0.35
+
 /** 点选队伍后等阵容载入的时间；ready_to_battle 要读"已选/总数"，读到旧值会误判 */
 private const val TEAM_LOAD = 1.5
 
@@ -196,12 +205,32 @@ private object ReadyToBattleAction : ActionBackend {
             )
 
             // 先按配置顺序点指定成员，再把剩下的补齐 —— 点击顺序就是出场顺序，
-            // 所以两轮不能合并，也不能改顺序
+            // 所以两轮不能合并，也不能改顺序。
+            //
+            // 每次点击后必须留间隔：上游是零间隔连点 12 次，安卓上会被大量吞掉 ——
+            // 真机实测点完只有 "1 SELECTED / 1/12"，于是本动作末尾的"进战斗"点击
+            // 落在人数不足的界面上，游戏拒绝，整个流程卡在编队页。
             for (member in teamOrders) {
-                TEAM_ORDER_MAP[member]?.let { click(ctx.input, it.first, it.second) }
+                TEAM_ORDER_MAP[member]?.let {
+                    click(ctx.input, it.first, it.second)
+                    ctx.delay(MEMBER_CLICK_GAP)
+                }
             }
             for ((member, pos) in TEAM_ORDER_MAP) {
-                if (member !in teamOrders) click(ctx.input, pos.first, pos.second)
+                if (member !in teamOrders) {
+                    click(ctx.input, pos.first, pos.second)
+                    ctx.delay(MEMBER_CLICK_GAP)
+                }
+            }
+
+            // 点完确认一次是否真的选满。没满就再等一轮让 UI 追上，仍不满则报出来 ——
+            // 带着不完整的队伍点"进战斗"只会卡在这一页，不如把人数说清楚。
+            ctx.delay(TEAM_LOAD)
+            val after = ctx.recognize.detectText(Crop(1130, 500, 100, 50)).firstOrNull()?.text
+            val nowSelected = parseSlashCount(after) ?: 0
+            val nowAll = parseSlashTotal(after) ?: 0
+            if (nowAll > 0 && nowSelected != nowAll) {
+                ctx.log("编队仅选上 $nowSelected/$nowAll，可能有点击被吞；仍尝试进入战斗")
             }
         }
 

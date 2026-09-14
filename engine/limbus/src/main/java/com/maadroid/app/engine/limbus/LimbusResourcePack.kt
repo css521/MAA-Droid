@@ -30,7 +30,7 @@ object LimbusResourcePack : ResourcePackSpec {
         // 资源包从本仓库的 Release 下载（CI limbus-resource.yml 自动跟随上游 tag 重打包），
         // 约 43 MB，而不是从上游整仓库 zip 的 ~100 MB。
         repository = LimbusResourceManifest.REPOSITORY,
-        initialRevision = ResourceRevision("limbus-resource-v5.0.0", "431b432e22f0b0da08b95d7c478fa213be20b3e8"),
+        initialRevision = ResourceRevision("limbus-resource-v5.0.0", "b1f9fac9514a06b174f67cdf799f218a923ca1de"),
         resourcePrefix = "lalc_backend",
         directories = LimbusResourceManifest.directories,
         inspectionSuffixes = listOf(".py"),

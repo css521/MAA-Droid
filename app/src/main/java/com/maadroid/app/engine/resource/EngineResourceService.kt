@@ -117,9 +117,22 @@ class EngineResourceService internal constructor(
             check(++page <= 20) { "上游标签页数超出限制，无法确认最新稳定版本" }
         }
         val latest = GitHubResourceTags.latest(revisions, source.tagPrefix) ?: error("上游没有可用的稳定语义版本标签")
-        val current = readRevision(pack, target) ?: source.initialRevision
+        // installed 为 null 表示本机还没装过（或清单来自另一个上游仓库）。
+        val installed = readRevision(pack, target)
+        val current = installed ?: source.initialRevision
         val compared = GitHubResourceTags.compare(latest.tag, current.tag, source.tagPrefix)
-        require(compared != 0 || latest.commit == current.commit) { "上游稳定标签的 SHA 已改变，拒绝覆盖已固定的提交" }
+        // SHA 篡改校验只对**本机确实装过的那个 tag** 生效：那才是「同名 tag 被改写」。
+        //
+        // 不能拿 initialRevision 参与比对：它是编译期写死的起点，而 tag 指向的 commit
+        // 会随每次发布变化（资源包由本仓库 CI 发 Release，tag 落在新的本仓库提交上）。
+        // 早先把 initialRevision 的 SHA 当基准，导致「上游稳定标签的 SHA 已改变，
+        // 拒绝覆盖已固定的提交」在首次安装时就死锁，且钉死一个 SHA 只能撑到下次发布。
+        if (installed != null) {
+            require(compared != 0 || latest.commit == installed.commit) {
+                "已安装的 ${installed.tag} 在远端指向了不同的提交，拒绝覆盖；" +
+                    "如确认远端无误，请用「修复 / 重试」重新安装"
+            }
+        }
         return latest.takeIf { compared > 0 }
     }
 
