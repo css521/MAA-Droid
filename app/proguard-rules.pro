@@ -45,6 +45,23 @@
     native <methods>;
 }
 
+# ONNX Runtime 的 **Java** API（engine:limbus 的三个分类器 + PP-OCRv5 用它）。
+# 方舟侧的 MaaCore 是从 C++ 直接链 onnxruntime 的，所以上游 CI 的 release
+# 从没编译过这几个 Java 类 —— 这条规则的缺失不会在上游暴露。
+#
+# 上面那条 native <methods> 规则不足以覆盖：OrtSession.run() 的返回值是由
+# native 侧 FindClass + GetMethodID 反向构造的（OnnxTensor / TensorInfo /
+# OnnxJavaType.mapFromInt / OrtException）。这些构造器与工厂方法在 Java 侧
+# 找不到调用点，R8 会当死代码删掉，于是 GetMethodID 返回 null → 一跑分类就崩。
+# AAR 里没有 consumer-rules，只能在这里兜。
+-keep class ai.onnxruntime.** { *; }
+-dontwarn ai.onnxruntime.**
+
+# OpenCV Java 绑定同样只有 limbus 在用。类名与 native 方法名已被上面的
+# native <methods> 规则保住（JNI 用静态命名 Java_org_opencv_core_Mat_n_1Mat），
+# 这里只补 dontwarn：org.opencv.android.* 引用了若干编译期不存在的可选类。
+-dontwarn org.opencv.**
+
 # SMTP：ServiceLoader / mailcap 点名的实现，imap/pop3 缺一个就炸
 -keep class org.eclipse.angus.mail.smtp.** { *; }
 -keep class org.eclipse.angus.mail.imap.** { *; }
