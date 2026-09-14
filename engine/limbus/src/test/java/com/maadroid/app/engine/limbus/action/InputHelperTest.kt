@@ -72,9 +72,42 @@ class InputHelperTest {
         }
     }
 
-    @Test fun defaultSwipePreservesCoordinatesAndSpacesEveryMoveAndRelease() = runTest {
+    /** 默认驻留 180ms，每帧（16ms）补一个原地 move → 12 个。 */
+    private val settleMoves = 12
+
+    private fun List<Event>.moves() = filter { it.action.startsWith("move(") }
+
+    /**
+     * 抬手前必须**在终点原地持续发 move**，否则 Unity 的 ScrollRect 会按最后那个
+     * 高速度继续惯性滚动。真机实测惯性把队伍侧栏的位移放大到 1.58 倍（手指 216px，
+     * 列表走 341px），把插值步数从 8 加到 40 也没用 —— 匀速的最后一步速度照样不为零。
+     */
+    @Test fun defaultSwipeInterpolatesThenHoldsStillBeforeReleasing() = runTest {
         val input = TimedInput { currentTime }
         InputHelper.swipe(input, 11, 90, 75, 10)
+        assertEquals(Event("down(11,90,0)", 0), input.events.first())
+        val moves = input.events.moves()
+        assertEquals(listOf(
+            Event("move(19,80,0)", 138),
+            Event("move(27,70,0)", 176),
+            Event("move(35,60,0)", 214),
+            Event("move(43,50,0)", 252),
+            Event("move(51,40,0)", 289),
+            Event("move(59,30,0)", 326),
+            Event("move(67,20,0)", 363),
+            Event("move(75,10,0)", 400),
+        ), moves.take(8))
+        val settle = moves.drop(8)
+        assertEquals(settleMoves, settle.size)
+        assertTrue(settle.all { it.action == "move(75,10,0)" })
+        assertEquals(List(settleMoves) { 416L + it * 16 }, settle.map { it.at })
+        assertEquals(Event("up(75,10,0)", 692), input.events.last())
+    }
+
+    /** 传 0 保留惯性：甩到列表尽头时越界会被自动夹住，要的是快而不是准。 */
+    @Test fun swipeWithoutSettleKeepsTheFlingForFastListJumps() = runTest {
+        val input = TimedInput { currentTime }
+        InputHelper.swipe(input, 11, 90, 75, 10, settleMillis = 0)
         assertEquals(listOf(
             Event("down(11,90,0)", 0),
             Event("move(19,80,0)", 138),
@@ -91,7 +124,7 @@ class InputHelperTest {
 
     @Test fun customSwipeStepsRetainInterpolationAndAtLeastAFrameBetweenMoves() = runTest {
         val input = TimedInput { currentTime }
-        InputHelper.swipe(input, -11, 12, 7, -9, steps = 3)
+        InputHelper.swipe(input, -11, 12, 7, -9, steps = 3, settleMillis = 0)
         assertEquals(listOf(
             Event("down(-11,12,0)", 0),
             Event("move(-5,5,0)", 200),
@@ -101,12 +134,17 @@ class InputHelperTest {
         ), input.events)
 
         input.events.clear()
+        val start = currentTime
         InputHelper.swipe(input, 0, 0, 100, 100, steps = 20)
-        val moves = input.events.filter { it.action.startsWith("move(") }
-        assertEquals(20, moves.size)
+        val moves = input.events.moves()
+        assertEquals(20 + settleMoves, moves.size)
         assertTrue(moves.zipWithNext().all { (a, b) -> b.at - a.at >= 16 })
-        assertEquals(Event("move(100,100,0)", 920), moves.last())
-        assertEquals(Event("up(100,100,0)", 1_020), input.events.last())
+        assertEquals(Event("move(100,100,0)", start + 420), moves[19])
+        assertTrue(moves.drop(20).all { it.action == "move(100,100,0)" })
+        assertEquals(
+            Event("up(100,100,0)", start + 420 + settleMoves * 16 + 100),
+            input.events.last(),
+        )
     }
 
     @Test fun invalidSwipeStepsAndUnknownKeysDoNotInjectAnything() = runTest {
@@ -115,6 +153,8 @@ class InputHelperTest {
             assertTrue(runCatching { InputHelper.swipe(input, 1, 2, 3, 4, steps) }
                 .exceptionOrNull() is IllegalArgumentException)
         }
+        assertTrue(runCatching { InputHelper.swipe(input, 1, 2, 3, 4, settleMillis = -1) }
+            .exceptionOrNull() is IllegalArgumentException)
         assertTrue(runCatching { InputHelper.keyPress(input, "unknown") }
             .exceptionOrNull() is IllegalArgumentException)
         assertTrue(input.events.isEmpty())

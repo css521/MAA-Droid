@@ -53,8 +53,46 @@ private const val TEAM_FIRST_ROW_Y = 313
 /** 队伍项行距（真机实测 36px：313/349/385/421/457/494） */
 private const val TEAM_ROW_HEIGHT = 36
 
-/** 慢速滑动步数。40 步/640ms 把每步位移压到 5px 上下，抬手时速度接近 0，消除惯性续滑 */
-private const val SLOW_SWIPE_STEPS = 40
+/** 精确滑动的步数。真正消掉惯性靠的是 [InputHelper.swipe] 抬手前的原地驻留，不是步数。 */
+private const val SLOW_SWIPE_STEPS = 24
+
+/** 队伍列表可点的 x：侧栏横跨 x≈78..182，取中。 */
+private const val TEAM_COLUMN_X = 130
+
+/**
+ * 队伍侧栏的取字区域（编队页左侧那条窄列表），真机三帧实测。
+ *
+ * 注意这不是"队伍选择页"——安卓上根本没有独立的队伍选择页，队伍列表就是编队页
+ * 左边这条窄边栏，而右侧同屏显示着 12 名罪人。上游按 PC 布局假设的是另一回事。
+ */
+private val TEAM_SIDEBAR = Crop(74, 286, 118, 256)
+
+/**
+ * 只认完整可见的行。被列表上下边界切掉的行 OCR 出来是乱码
+ * （真机实测把 `RUPTURE·MIRROR` 读成 `DIIDTIIEZ.AAIDDA`，置信度还有 0.84），
+ * 一旦把它算作一行，按索引推算的位置就整体错一格。
+ */
+private const val ROW_BAND_TOP = 305
+private const val ROW_BAND_BOTTOM = 520
+private const val ROW_BAND_CENTER = (ROW_BAND_TOP + ROW_BAND_BOTTOM) / 2
+
+/**
+ * 未改名的队伍显示为 `TEAMS #N`，N 就是队伍编号 —— 列表里唯一的**绝对位置锚点**。
+ *
+ * 用户改过名的队伍显示自定义名，且名字会重复，所以按名字定位不成立；但只要视野里
+ * 有任意一行还是默认名，就能反推出每一行的编号（列表按编号顺序排，真机实测
+ * `MIRROR DUN.-BL.` / `TEAMS #21` / `TEAMS #22` / `TEAMS #23` 连续相邻）。
+ */
+private val TEAM_NO_REGEX = Regex("""TEAMS#(\d+)""", RegexOption.IGNORE_CASE)
+
+/** 编队页标题栏。点完队伍后读它核对选中的编号，专门抓"点到隔壁队伍"这个故障。 */
+private val TEAM_TITLE = Crop(222, 108, 210, 34)
+
+/** 单次精确滑动的最大内容位移。侧栏可拖区域约 y∈[310,515]，留出余量。 */
+private const val MAX_ALIGN_SWIPE_PX = 190
+
+/** 对齐循环上限。每轮最多走 190px≈5.2 行，12 轮足够覆盖 MAX_TEAM_NO。 */
+private const val MAX_ALIGN_ROUNDS = 12
 
 private const val TEAMS_PER_PAGE = 6
 
@@ -239,50 +277,115 @@ private object ReadyToBattleAction : ActionBackend {
     }
 }
 
+/** 侧栏一行：文字 + 行中心 y；[teamNo] 仅当该行还是默认名 `TEAMS #N` 时非空。 */
+private data class SidebarRow(val text: String, val y: Int, val teamNo: Int?)
+
+/** 读侧栏里**完整可见**的行，自上而下。 */
+private suspend fun readSidebar(ctx: ActionContext): List<SidebarRow> =
+    ctx.recognize.detectText(TEAM_SIDEBAR)
+        .filter { it.y in ROW_BAND_TOP..ROW_BAND_BOTTOM }
+        .sortedBy { it.y }
+        .map { match ->
+            // OCR 会吞掉空格（真机实测读成 "TEAMS#21"），比对前统一去掉
+            val compact = match.text.filterNot(Char::isWhitespace)
+            SidebarRow(compact, match.y, TEAM_NO_REGEX.find(compact)?.groupValues?.get(1)?.toIntOrNull())
+        }
+
+/**
+ * 精确滚动侧栏：让**内容**上移 [deltaPx] 像素（正数=目标在下方）。
+ *
+ * 手指位移与内容位移 1:1 —— 前提是 [InputHelper.swipe] 默认的抬手前驻留把惯性消掉了。
+ * 单次夹在 [MAX_ALIGN_SWIPE_PX]，剩下的交给外层循环下一轮重新观测后再走。
+ */
+private suspend fun alignSidebar(ctx: ActionContext, deltaPx: Int) {
+    val step = deltaPx.coerceIn(-MAX_ALIGN_SWIPE_PX, MAX_ALIGN_SWIPE_PX)
+    if (step == 0) return
+    // 内容上移 → 手指也上移，所以起点要留出 step 的行程
+    val from = if (step > 0) ROW_BAND_BOTTOM - 5 else ROW_BAND_TOP + 5
+    swipe(ctx.input, TEAM_COLUMN_X, from, TEAM_COLUMN_X, from - step, steps = SLOW_SWIPE_STEPS)
+    ctx.delay(LIST_SETTLE)
+}
+
 private object ChooseTeamAction : ActionBackend {
     override suspend fun execute(ctx: ActionContext): ActionOutcome {
         val cfgType = ctx.node.str("cfg_type") ?: return ActionOutcome.Continue
         val cfgIndex = resolveCfgIndex(ctx, cfgType)
-        // 配置里是人类编号（1 起），减一化为 0 起的索引
-        val teamNo = (ctx.config.intAt(cfgType, "team_indexes", cfgIndex, 1) - 1)
-            .coerceIn(0, MAX_TEAM_NO)
-        val scrollCount = (teamNo / TEAMS_PER_PAGE).coerceIn(0, MAX_SCROLL)
-        // 统一取模。上游对最后一页有个特例（队伍 18/19 落在第 5/6 格，改用固定偏移），
-        // 那是"总共 20 个队伍"才成立的假设；实机可以有 40 个以上，特例反而会算错。
-        val clickIndex = teamNo % TEAMS_PER_PAGE
-        ctx.log("选择队伍 #${teamNo + 1}（滑 $scrollCount 页，点第 $clickIndex 格 @${TEAM_CLICK_POSITIONS[clickIndex]}）")
+        // 配置里是人类编号（1 起）
+        val target = ctx.config.intAt(cfgType, "team_indexes", cfgIndex, 1)
+            .coerceIn(1, MAX_TEAM_NO + 1)
+        ctx.log("选择队伍 #$target")
 
-        // 先划到顶部重置，否则续跑时列表停在上次位置，下面的滚动次数就对不上。
-        // 每次滑动后必须等列表**惯性滑动停下**：上游给 0.5 秒是 PC 的量，安卓上不够——
-        // 真机实测 "选择队伍→完成选择队伍" 只花 2 秒就点完了格子并交给 ready_to_battle，
-        // 游戏还没稳定就被点，表现为进不了战斗。
+        // 先甩到顶部：越界会被自动夹住，所以这里要的是"快"而不是"准"，
+        // 传 settleMillis=0 保留惯性，两下就能从任意位置回到第一项。
         repeat(2) {
-            swipe(ctx.input, 130, 320, 130, 720)
+            swipe(ctx.input, TEAM_COLUMN_X, 320, TEAM_COLUMN_X, ROW_BAND_BOTTOM, settleMillis = 0)
             ctx.delay(LIST_SETTLE)
         }
-
-        // 滑到顶之后先采一帧，作为"第 0 页"的基准
         ctx.recognize.dumpFrame("team_list_top", overwrite = true)
-        repeat(scrollCount) { i ->
-            // 慢速滑动消除惯性。真机三帧实测：默认 8 步/300ms 的快滑，手指位移 220px
-            // （≈6 格）却让列表走了约 9.5 格 —— 惯性把位移放大了 1.6 倍。滑 2 次后
-            // 首个可见项落在第 20 项（由 "TEAMS #24" 在第 5 个可见位置反推），
-            // 而上游算法预期第 13 项，于是队伍 #15 被选成了 #22。
-            //
-            // 40 步 / 640ms 把每步位移压到 5px 上下，抬手时速度已接近 0，列表不再续滑。
-            // 位移取 TEAMS_PER_PAGE × 格距，与「一次滑动翻一页」的算法假设对齐。
-            swipe(
-                ctx.input, 130, 500, 130, 500 - TEAMS_PER_PAGE * TEAM_ROW_HEIGHT,
-                steps = SLOW_SWIPE_STEPS,
-            )
-            ctx.delay(LIST_SETTLE)
-            ctx.recognize.dumpFrame("team_list_scroll_${i + 1}", overwrite = true)
+
+        // 到顶后首行就是队伍 #1，据此粗跳到目标附近；此时滑动已无惯性，位移可预测。
+        val coarse = (target - 1) * TEAM_ROW_HEIGHT - (ROW_BAND_CENTER - ROW_BAND_TOP)
+        var remaining = coarse
+        var jumps = 0
+        while (remaining > 0 && jumps++ < MAX_ALIGN_ROUNDS) {
+            alignSidebar(ctx, remaining)
+            remaining -= remaining.coerceAtMost(MAX_ALIGN_SWIPE_PX)
         }
-        click(ctx.input, TEAM_CLICK_POSITIONS[clickIndex].first, TEAM_CLICK_POSITIONS[clickIndex].second)
+        ctx.recognize.dumpFrame("team_list_coarse", overwrite = true)
+
+        // 闭环对齐：用侧栏里的 TEAMS #N 直接算出目标行的 y。
+        // 这一步不依赖"滑了几行"，也不依赖行索引（被切掉的行 OCR 是乱码，计数会错），
+        // 只依赖"列表按编号顺序排"这一条 —— 真机三帧已证实相邻编号连续。
+        var clicked: SidebarRow? = null
+        var fallbackY = TEAM_CLICK_POSITIONS[(target - 1) % TEAMS_PER_PAGE].second
+        for (round in 1..MAX_ALIGN_ROUNDS) {
+            ctx.ensureActive()
+            val rows = readSidebar(ctx)
+            if (rows.isEmpty()) {
+                ctx.log("侧栏读不到任何队伍名（第 $round 轮），可能不在编队页")
+                break
+            }
+            val anchor = rows.firstOrNull { it.teamNo != null }
+            if (anchor == null) {
+                // 所有可见队伍都被改过名：没有绝对锚点，只能相信粗跳的落点
+                fallbackY = rows[((target - 1) % TEAMS_PER_PAGE).coerceAtMost(rows.lastIndex)].y
+                ctx.log("侧栏无 TEAMS #N 锚点（可见 ${rows.size} 行），按粗跳落点点击 y=$fallbackY")
+                break
+            }
+            val anchorNo = requireNotNull(anchor.teamNo)
+            val targetY = anchor.y + (target - anchorNo) * TEAM_ROW_HEIGHT
+            if (targetY in ROW_BAND_TOP..ROW_BAND_BOTTOM) {
+                clicked = rows.minByOrNull { kotlin.math.abs(it.y - targetY) }
+                    ?.takeIf { kotlin.math.abs(it.y - targetY) <= TEAM_ROW_HEIGHT / 2 }
+                ctx.log("锚点 #$anchorNo@${anchor.y} → 队伍 #$target 在 y=$targetY（${clicked?.text ?: "该行未读到文字"}）")
+                click(ctx.input, TEAM_COLUMN_X, targetY)
+                fallbackY = targetY
+                break
+            }
+            ctx.log("锚点 #$anchorNo@${anchor.y} → 目标 y=$targetY 在视野外，第 $round 轮继续对齐")
+            alignSidebar(ctx, targetY - ROW_BAND_CENTER)
+            if (round == MAX_ALIGN_ROUNDS) {
+                ctx.log("对齐 $MAX_ALIGN_ROUNDS 轮仍未把队伍 #$target 带进视野，按粗跳落点点击")
+                click(ctx.input, TEAM_COLUMN_X, fallbackY)
+            }
+        }
+        if (clicked == null && fallbackY != 0) click(ctx.input, TEAM_COLUMN_X, fallbackY)
+
         // 点完队伍要等罪人阵容真的载入：上游点完即返回，后续 ready_to_battle 会读
         // "已选/总数"（Crop(1130,500,100,50)），读到旧值就会做出错误判断。
         ctx.delay(TEAM_LOAD)
-        ctx.log("完成选择队伍")
+
+        // 核对：标题栏显示当前队伍。目标未改名时它就是 "TEAMS #<target>"，
+        // 专门抓"点到隔壁队伍"这个故障 —— 之前 #15 被选成 #22 就是这样静默发生的。
+        // 目标改过名时标题是自定义名，读不出编号，此时不报警免得误伤。
+        val title = ctx.recognize.detectText(TEAM_TITLE).firstOrNull()?.text?.filterNot(Char::isWhitespace)
+        val shown = title?.let { TEAM_NO_REGEX.find(it)?.groupValues?.get(1)?.toIntOrNull() }
+        when {
+            shown == null -> ctx.log("完成选择队伍（标题「${title ?: "读不到"}」未含编号，无法核对）")
+            shown == target -> ctx.log("完成选择队伍：标题已确认 TEAMS #$target")
+            else -> ctx.log("警告：目标是队伍 #$target，但标题显示 TEAMS #$shown —— 选错了")
+        }
+        ctx.recognize.dumpFrame("team_selected", overwrite = true)
 
         if (cfgType == "mirror") {
             ctx.delay(0.5)

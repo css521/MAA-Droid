@@ -15,6 +15,9 @@ object InputHelper {
     private const val SWIPE_MOTION_MILLIS = 300L
     private const val MIN_MOVE_INTERVAL_MILLIS = 16L
 
+    /** 抬手前原地驻留时长。约 11 帧（60fps），足够让 ScrollRect 的速度衰减到 0。 */
+    private const val SWIPE_SETTLE_MILLIS = 180L
+
     /**
      * 坐标覆盖表：`"原x,原y"` → `新x to 新y`。
      *
@@ -62,9 +65,31 @@ object InputHelper {
         }
     }
 
-    /** 默认 500ms：起终点各保持 100ms，中间均匀移动；步数增加时仍保留帧间隔。 */
-    suspend fun swipe(input: InputSink, x1: Int, y1: Int, x2: Int, y2: Int, steps: Int = 8) {
+    /**
+     * 默认 500ms：起终点各保持 100ms，中间均匀移动；步数增加时仍保留帧间隔。
+     *
+     * [settleMillis] 是抬手前**在终点原地持续发 touchMove** 的时长，用来消掉惯性滑动。
+     *
+     * 为什么非得原地发事件、光 delay 不行：Unity 的 ScrollRect 从每帧的指针位置差算速度，
+     * 抬手时速度不为零就按惯性继续滚。原来末尾只有一个 `delay(100ms)`，那段时间没有任何
+     * 新事件，速度追踪器停留在最后那个高值 —— 于是照样 fling。真机实测：队伍侧栏手指走
+     * 216px（6 行），列表实际走了约 341px（9.4 行），**1.58 倍**；把步数从 8 加到 40
+     * 也没用，因为 40 步匀速仍是 337px/s，抬手瞬间速度照样不为零。
+     *
+     * 默认开着：自动化想要的是"拖到哪就停在哪"，没有哪条流程需要惯性续滑。
+     * 需要快速甩到列表尽头（越界会被自动夹住，无害）时传 0 换取速度。
+     */
+    suspend fun swipe(
+        input: InputSink,
+        x1: Int,
+        y1: Int,
+        x2: Int,
+        y2: Int,
+        steps: Int = 8,
+        settleMillis: Long = SWIPE_SETTLE_MILLIS,
+    ) {
         require(steps > 0) { "Swipe steps must be positive" }
+        require(settleMillis >= 0) { "Swipe settle must not be negative" }
         @Suppress("NAME_SHADOWING") val (x1, y1) = resolve(x1, y1)
         @Suppress("NAME_SHADOWING") val (x2, y2) = resolve(x2, y2)
         val motionMillis = maxOf(SWIPE_MOTION_MILLIS, steps.toLong() * MIN_MOVE_INTERVAL_MILLIS)
@@ -81,6 +106,12 @@ object InputHelper {
                 // 注入失败也可能已送达设备；在最后尝试的位置释放，避免跳到终点。
                 x = (x1 + (x2 - x1) * t).toInt()
                 y = (y1 + (y2 - y1) * t).toInt()
+                input.touchMove(x, y)
+            }
+            var settled = 0L
+            while (settled < settleMillis) {
+                delay(MIN_MOVE_INTERVAL_MILLIS)
+                settled += MIN_MOVE_INTERVAL_MILLIS
                 input.touchMove(x, y)
             }
             delay(PRESS_MILLIS)
