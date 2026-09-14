@@ -62,6 +62,27 @@ class EngineResourceService internal constructor(
         latest
     }
 
+    /**
+     * 「修复 / 重试」：绕过 SHA 守卫，按远端最新版本重装。
+     *
+     * 守卫（见 [findUpdate]）在同名 tag 指向了新提交时拒绝覆盖，那是对的 —— 但它把出路
+     * 指向了「修复 / 重试」，而那个按钮原先走 [ensureInstalled]，后者在"已装且文件完好"时
+     * 直接 ready() 返回，不联网也不重装。于是状态翻回 READY、再检查更新又同样失败，
+     * 用户被关在一个没有出口的循环里。这个方法就是那个出口。
+     *
+     * 远端与本地完全一致且文件完好时只做校验、不下载：网络抖动导致的 FAILED 靠这条路
+     * 免费重试，不必为此重下 43MB。
+     */
+    suspend fun reinstall(pack: ResourcePackSpec): Result<File> = operate(pack) { target ->
+        val latest = resolveLatest(pack)
+        // 不在这里写 availableRevision：install() 自己会写（下载进度要用），
+        // 而"无需下载"的那条分支走 ready()，它会把状态整体重置成干净的 READY。
+        val intact = pack.readInstalledVersion(target) != null && pack.verifyInstalledFiles(target) == null
+        if (intact && readRevision(pack, target) == latest) ready(pack, target)
+        else install(pack, target, latest)
+        target
+    }
+
     /** Resolve tags to an immutable SHA, then validate and replace under the pack lease. */
     suspend fun update(pack: ResourcePackSpec): Result<File> = operate(pack) { target ->
         val revision = findUpdate(pack, target)
@@ -105,9 +126,9 @@ class EngineResourceService internal constructor(
         }
     }
 
-    private suspend fun findUpdate(pack: ResourcePackSpec, target: File): ResourceRevision? {
+    /** 只解析远端最新稳定标签，不比较、不设守卫；由调用方决定拿它做什么。 */
+    private suspend fun resolveLatest(pack: ResourcePackSpec): ResourceRevision {
         val source = requireNotNull(pack.upstreamArchive)
-        mutableState(pack).update { it.copy(phase = ResourcePhase.CHECKING, availableRevision = null) }
         val revisions = mutableListOf<ResourceRevision>()
         var page = 1
         while (true) {
@@ -116,7 +137,13 @@ class EngineResourceService internal constructor(
             if (!result.hasNext) break
             check(++page <= 20) { "上游标签页数超出限制，无法确认最新稳定版本" }
         }
-        val latest = GitHubResourceTags.latest(revisions, source.tagPrefix) ?: error("上游没有可用的稳定语义版本标签")
+        return GitHubResourceTags.latest(revisions, source.tagPrefix) ?: error("上游没有可用的稳定语义版本标签")
+    }
+
+    private suspend fun findUpdate(pack: ResourcePackSpec, target: File): ResourceRevision? {
+        val source = requireNotNull(pack.upstreamArchive)
+        mutableState(pack).update { it.copy(phase = ResourcePhase.CHECKING, availableRevision = null) }
+        val latest = resolveLatest(pack)
         // installed 为 null 表示本机还没装过（或清单来自另一个上游仓库）。
         val installed = readRevision(pack, target)
         val current = installed ?: source.initialRevision

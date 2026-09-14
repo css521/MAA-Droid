@@ -233,6 +233,13 @@ def main() -> int:
     ap.add_argument("--upstream", required=True, help="上游仓库本地路径(CI 里是 checkout 出的 tag)")
     ap.add_argument("--out", required=True, help="产物输出目录")
     ap.add_argument("--tag", default="", help="覆盖上游 tag(非 git 目录时用)")
+    ap.add_argument(
+        "--package-tag",
+        default="",
+        help="资源包自身的 tag(决定 zip 文件名)。缺省时用 <engine>-resource-<上游 tag>。"
+        "App 按 releaseAssetUrl 的 {tag}.zip 取包,所以它必须与 Release 的 tag 同名;"
+        "而 manifest.upstream.tag 始终记录真实的上游 tag,两者不是一回事。",
+    )
     ap.add_argument("--check-only", action="store_true", help="只做校验,不产出 zip")
     args = ap.parse_args()
 
@@ -343,7 +350,7 @@ def main() -> int:
         "\n".join(f"{e['path']}:{e['sha256']}" for e in entries).encode()
     ).hexdigest()
 
-    zip_name = f"{args.engine}-resource-{tag or rev[:12]}.zip"
+    zip_name = f"{args.package_tag or f'{args.engine}-resource-{tag or rev[:12]}'}.zip"
     zip_path = os.path.join(args.out, zip_name)
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for e in entries:

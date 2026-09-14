@@ -31,21 +31,41 @@ class HomeEngineResourcesViewModelTest {
         init {
             every { service.state(pack) } returns state
             coEvery { service.ensureInstalled(pack) } returns Result.success(File("resources"))
+            coEvery { service.reinstall(pack) } returns Result.success(File("resources"))
             coEvery { service.update(pack) } returns Result.success(File("resources"))
             coEvery { service.checkForUpdate(pack) } returns Result.success(null)
         }
     }
 
-    @Test fun absentAndFailedInstallationsUseTheExistingInstaller() = runBlocking {
+    /**
+     * 已装但失败时走重装，而不是 ensureInstalled —— 后者在"已装且文件完好"时只 ready()
+     * 不联网，于是「远端同名 tag 指向了新提交」被守卫拒绝后无路可走（状态翻回 READY，
+     * 再检查更新又同样失败）。
+     */
+    @Test fun failedInstalledResourcesReinstallFromTheRemoteLatest() = runBlocking {
         val f = Fixture(this)
-        f.viewModel.perform(f.pack)
-        yield()
         f.state.value = EngineResourceState(phase = ResourcePhase.FAILED, installedVersion = "5.0.0")
         f.viewModel.perform(f.pack)
         yield()
-        coVerify(exactly = 2) { f.service.ensureInstalled(f.pack) }
+        coVerify(exactly = 1) { f.service.reinstall(f.pack) }
+        coVerify(exactly = 0) { f.service.ensureInstalled(any()) }
         coVerify(exactly = 0) { f.service.update(any()) }
         coVerify(exactly = 0) { f.service.checkForUpdate(any()) }
+    }
+
+    /**
+     * 尚未安装时始终走 ensureInstalled —— 哪怕上一次就是失败的。它装编译期钉住的
+     * initialRevision，走 Release asset 直链不碰 tags API，是匿名访问被限流时唯一能装上的路。
+     */
+    @Test fun firstInstallUsesThePinnedRevisionEvenAfterAFailure() = runBlocking {
+        val f = Fixture(this)
+        f.viewModel.perform(f.pack)
+        yield()
+        f.state.value = EngineResourceState(phase = ResourcePhase.FAILED, installedVersion = null)
+        f.viewModel.perform(f.pack)
+        yield()
+        coVerify(exactly = 2) { f.service.ensureInstalled(f.pack) }
+        coVerify(exactly = 0) { f.service.reinstall(any()) }
     }
 
     @Test fun installedResourcesCheckThenApplyTheAvailableRevision() = runBlocking {

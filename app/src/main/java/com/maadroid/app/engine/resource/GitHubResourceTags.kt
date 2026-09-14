@@ -6,9 +6,23 @@ import kotlinx.serialization.json.*
 
 /** GitHub ordering is not semver ordering. Prereleases and malformed stable SHAs are never installed. */
 internal object GitHubResourceTags {
-    private val stable = Regex("^v?(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$")
-    fun version(tag: String): List<BigInteger>? = stable.matchEntire(tag)?.groupValues
-        ?.slice(1..3)?.map(::BigInteger)
+    private val stable = Regex("^v?(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:\\.(0|[1-9][0-9]*))?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$")
+
+    /**
+     * 解析成**四段**。前三段是上游版本，第四段是本仓库的资源修订号（缺省 0）。
+     *
+     * 为什么需要第四段：资源包 tag 跟着上游命名（`limbus-resource-v5.0.0` ← LALC v5.0.0），
+     * 但重打包的内容还取决于我们自己的打包脚本与动作白名单。上游不发新版而我们的产物变了时，
+     * 原来无路可走 —— 同名 tag 不会重发（流水线见 tag 存在即跳过），而 `+build` 元数据
+     * 按 semver 规则不参与比较，比出来是相等。第四段让这种"资源侧修订"能被排出先后。
+     *
+     * `v5.0.0` 与 `v5.0.0.0` 因此等价，旧 tag 无需改名即可继续参与比较。
+     */
+    fun version(tag: String): List<BigInteger>? = stable.matchEntire(tag)?.let { match ->
+        (1..4).map { i ->
+            match.groupValues[i].takeIf(String::isNotEmpty)?.let(::BigInteger) ?: BigInteger.ZERO
+        }
+    }
 
     fun compare(a: String, b: String, tagPrefix: String = ""): Int {
         val left = requireNotNull(version(a.removePrefix(tagPrefix))) { "Invalid stable tag: $a" }

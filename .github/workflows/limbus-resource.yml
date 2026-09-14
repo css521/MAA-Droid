@@ -56,20 +56,40 @@ jobs:
           echo "tag=limbus-resource-$REF" >> "$GITHUB_OUTPUT"
           echo "上游 ref: $REF"
 
-      - name: 跳过已发布的版本
-        id: check
+      # 不能再用"tag 已存在就跳过"来判断：资源包内容除了上游源码，还取决于本仓库的
+      # 打包脚本与动作白名单。上游不发新版而我们的产物变了时，那种判断会永久跳过，
+      # 修正推不出去（用户只能等 APK）。改为：先算出**待发布**的修订号，用它打包，
+      # 再拿内容摘要与已发布版本比对，只有真的变了才占用这个 tag。
+      - name: 解析待发布的资源修订号
+        id: rev
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE: limbus-resource-${{ steps.upstream.outputs.ref }}
         run: |
-          if gh release view "${{ steps.upstream.outputs.tag }}" >/dev/null 2>&1; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "已存在 ${{ steps.upstream.outputs.tag }}，无需重打包"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
+          set -euo pipefail
+          gh release list --limit 200 --json tagName -q '.[].tagName' > /tmp/tags.txt || : > /tmp/tags.txt
+          python3 - <<'PY' > /tmp/rev.env
+          import os, re
+          base = os.environ["BASE"]
+          # 同一上游 tag 下可以有多次资源修订：base 本身视为修订 0，其后是 base.1 / base.2…
+          pattern = re.compile(rf"^{re.escape(base)}(?:\.(\d+))?$")
+          revs = sorted(
+              int(m.group(1) or 0)
+              for line in open("/tmp/tags.txt")
+              if (m := pattern.match(line.strip()))
+          )
+          top = revs[-1] if revs else None
+          nxt = base if top is None else f"{base}.{top + 1}"
+          prev = "" if top is None else (base if top == 0 else f"{base}.{top}")
+          print(f"prev={prev}")
+          print(f"next={nxt}")
+          # 去前缀给 Release 标题用（limbus-resource-v5.0.0.1 → v5.0.0.1）
+          print(f"version={nxt.removeprefix('limbus-resource-')}")
+          PY
+          cat /tmp/rev.env
+          cat /tmp/rev.env >> "$GITHUB_OUTPUT"
 
       - name: 取上游该 tag 的源码
-        if: steps.check.outputs.skip == 'false'
         uses: actions/checkout@v4
         with:
           repository: HSLix/LixAssistantLimbusCompany
@@ -77,41 +97,78 @@ jobs:
           path: upstream
 
       - uses: actions/setup-python@v5
-        if: steps.check.outputs.skip == 'false'
         with:
           python-version: '3.12'
 
       - name: 打包并校验
-        if: steps.check.outputs.skip == 'false'
         run: |
           set -euo pipefail
           # 打包器会做三重校验：流水线引用可达、模板存在、语言目录结构保留。
           # 任一不过即非零退出且不产出资源包 —— 绝不发布一个跑到中途才崩的包。
+          #
+          # --tag 记录真实上游 tag（进 manifest.upstream.tag）；--package-tag 决定 zip 文件名，
+          # 必须与 Release 的 tag 同名，App 按 releaseAssetUrl 的 {tag}.zip 取包。
           python scripts/pack_engine_resource.py \
             --engine limbus \
             --upstream upstream \
             --tag "${{ steps.upstream.outputs.ref }}" \
+            --package-tag "${{ steps.rev.outputs.next }}" \
             --out dist
 
+      - name: 与已发布版本比对内容摘要
+        id: diff
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PREV: ${{ steps.rev.outputs.prev }}
+        run: |
+          set -euo pipefail
+          # manifest.revision 是对 (path, sha256) 求的稳定摘要，与打包时间、zip 字节无关。
+          # 所以内容没变的日常巡检不会因为时间戳差异而误发一版。
+          NEW=$(python3 -c "import json;print(json.load(open('dist/manifest.json'))['revision'])")
+          echo "新产物   revision=$NEW"
+          if [ -z "$PREV" ]; then
+            echo "该上游版本尚无资源包，直接发布"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # 区分两种失败：资源本身不存在（老版本没带 manifest）→ 无从比对，按"已变"发布；
+          # 存在却下不下来（网络/限流）→ 让这一步失败。宁可红一次巡检，也不要因为一次
+          # 网络抖动就误发一版让所有用户白下 43MB。
+          if ! gh release view "$PREV" --json assets -q '.assets[].name' | grep -qx manifest.json; then
+            echo "::warning::$PREV 没有 manifest.json 资源，无法比对内容，按已变更处理"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          gh release download "$PREV" -p manifest.json -D prev --clobber
+          OLD=$(python3 -c "import json;print(json.load(open('prev/manifest.json'))['revision'])")
+          echo "已发布   revision=$OLD ($PREV)"
+          if [ "$NEW" = "$OLD" ]; then
+            echo "内容一致，无需发布"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "内容已变，发布 ${{ steps.rev.outputs.next }}"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: 摘要
-        if: steps.check.outputs.skip == 'false'
         run: |
           {
-            echo "## 边狱资源包 ${{ steps.upstream.outputs.ref }}"
+            echo "## 边狱资源包 ${{ steps.rev.outputs.version }}"
+            echo "上游 LALC ${{ steps.upstream.outputs.ref }}｜内容变更: ${{ steps.diff.outputs.changed }}"
             echo '```json'
             python -c "import json;m=json.load(open('dist/manifest.json'));m['files']=f\"<{len(m['files'])} 个文件>\";print(json.dumps(m,ensure_ascii=False,indent=2))"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: 发布 Release
-        if: steps.check.outputs.skip == 'false' && inputs.dry_run != true
+        if: steps.diff.outputs.changed == 'true' && inputs.dry_run != true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          gh release create "${{ steps.upstream.outputs.tag }}" \
+          gh release create "${{ steps.rev.outputs.next }}" \
             dist/*.zip dist/manifest.json \
-            --title "边狱资源包 ${{ steps.upstream.outputs.ref }}" \
+            --title "边狱资源包 ${{ steps.rev.outputs.version }}" \
             --notes "自动跟随上游 [LALC ${{ steps.upstream.outputs.ref }}](https://github.com/HSLix/LixAssistantLimbusCompany/releases/tag/${{ steps.upstream.outputs.ref }}) 重打包。
 
             仅含 config/task、config/language、img、ai/model、recognize/models 五份，不含 Python 运行时。
