@@ -473,7 +473,7 @@ private object ShopReplacePurchaseAction : ActionBackend {
             // 「面板已关闭」的正常终止，而是取字区域真的读不到东西。
             // 把区域打进日志，下一轮就能对着真帧确认是框错位置还是切在文字上。
             ctx.log("罪人名 OCR 读不到内容（区域 ${SKILL_REPLACE_NAME_REGION}），跳过技能替换")
-            ctx.recognize.dumpFrame("skill_replace_panel")
+            ctx.recognize.dumpFrame("skill_replace_panel", overwrite = true)
             return false
         }
         val detected = nameOcr[0].text

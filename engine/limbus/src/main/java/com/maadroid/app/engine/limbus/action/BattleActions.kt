@@ -262,7 +262,7 @@ private object ChooseTeamAction : ActionBackend {
         }
 
         // 滑到顶之后先采一帧，作为"第 0 页"的基准
-        ctx.recognize.dumpFrame("team_list_top")
+        ctx.recognize.dumpFrame("team_list_top", overwrite = true)
         repeat(scrollCount) { i ->
             // 慢速滑动消除惯性。真机三帧实测：默认 8 步/300ms 的快滑，手指位移 220px
             // （≈6 格）却让列表走了约 9.5 格 —— 惯性把位移放大了 1.6 倍。滑 2 次后
@@ -276,7 +276,7 @@ private object ChooseTeamAction : ActionBackend {
                 steps = SLOW_SWIPE_STEPS,
             )
             ctx.delay(LIST_SETTLE)
-            ctx.recognize.dumpFrame("team_list_scroll_${i + 1}")
+            ctx.recognize.dumpFrame("team_list_scroll_${i + 1}", overwrite = true)
         }
         click(ctx.input, TEAM_CLICK_POSITIONS[clickIndex].first, TEAM_CLICK_POSITIONS[clickIndex].second)
         // 点完队伍要等罪人阵容真的载入：上游点完即返回，后续 ready_to_battle 会读

@@ -75,9 +75,10 @@ class LimbusRecognizer(
      * 命名带上当时正在识别的素材名：导出后据此就能分清哪张是队伍页、哪张是关卡页，
      * 裁素材时不必猜。
      */
-    private fun captureFrame(screen: Mat, seq: Long, tag: String) {
+    private fun captureFrame(screen: Mat, seq: Long, tag: String, overwrite: Boolean = false) {
         val base = captureDir ?: return
-        if (capturedCount >= MAX_CAPTURES) return
+        // 诊断帧不受张数上限约束：上限是给素材底片防写满存储的，而诊断帧只有几个固定名字
+        if (!overwrite && capturedCount >= MAX_CAPTURES) return
         val safeTag = tag.replace(Regex("[^A-Za-z0-9_.-]"), "_").take(48)
         // 按素材名去重，**且跨运行生效**（knownTags 惰性装载目录里已有的文件名）。
         // 只靠帧间差不够：识别器每次 connect 都重建，计数与指纹归零，于是每跑一次任务
@@ -86,7 +87,7 @@ class LimbusRecognizer(
         // 刻意不再叠加帧间差判断：那会让素材名在「画面与上次相同」时被白白消耗掉，
         // 之后该素材真正所在的界面就永远采不到了。素材名本身就是够好的主键，
         // 同一屏被多个素材名各存一份也无害——反而能看出那一屏在找哪些判据。
-        if (safeTag in knownTags) return
+        if (!overwrite && safeTag in knownTags) return
         try {
             if (!base.isDirectory && !base.mkdirs()) return
             val file = File(base, "$safeTag.png")
@@ -101,11 +102,11 @@ class LimbusRecognizer(
         }
     }
 
-    override suspend fun dumpFrame(tag: String) {
+    override suspend fun dumpFrame(tag: String, overwrite: Boolean) {
         val frame = frames.grab() ?: return
         val screen = frame.toMat()
         try {
-            captureFrame(screen, frame.seq, tag)
+            captureFrame(screen, frame.seq, tag, overwrite = overwrite)
         } finally {
             screen.release()
         }

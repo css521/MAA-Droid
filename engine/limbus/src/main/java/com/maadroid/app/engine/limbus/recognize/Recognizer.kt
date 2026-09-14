@@ -117,10 +117,14 @@ interface Recognizer {
         findText(stage, crop = ThreadStageQuery.REGION)
 
     /**
-     * 主动采集当前帧。用于动作代码里那些不走 templateMatch 的界面（例如九宫格选星光），
-     * 采集点在 templateMatch 里触发不到它们。[tag] 用作文件名，便于识别界面。
+     * 主动采一帧。用于动作代码里那些不走 templateMatch 的界面（例如九宫格选星光）——
+     * templateMatch 里的采集点触发不到它们。[tag] 用作文件名，便于识别界面。
+     *
+     * [overwrite]=true 用于**诊断帧**：按素材名跨运行去重是为了避免把同一个界面
+     * 重采几千遍（素材底片只需要一张），但诊断帧要的恰恰是「这一轮的现场」。
+     * 曾因此对比到上一轮的旧文件，误判成「慢速滑动没生效」。
      */
-    suspend fun dumpFrame(tag: String) {}
+    suspend fun dumpFrame(tag: String, overwrite: Boolean = false) {}
 
     /** 邮箱专用观察；未知结果不能作为空邮箱或领取完成的证据。 */
     suspend fun observeMailbox(): MailboxObservation? =
