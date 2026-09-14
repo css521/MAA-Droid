@@ -38,19 +38,12 @@ private val TEAM_ORDER_MAP = mapOf(
 )
 
 /**
- * 队伍列表可点位置，从真机三帧实测：**首项 y=313，行距 36px**。
+ * 队伍项行距（真机实测 36px，三帧一致：313/349/385/421/457/494）。
  *
- * 上游是 315/355/390/430/465/500（PC 布局），首项对得上但后面逐渐偏移，
- * 到第 6 项差 7px —— 不足半格所以单看不致命，但与滑动错位叠加就会选错队伍。
+ * 上游那套固定落点 315/355/390/430/465/500 是 PC 布局，且隐含"列表按行对齐"的假设 ——
+ * 实测行首 y 在三帧里是 313.5 / 331.2 / 319.7，**列表是自由滚动、不吸附行**的，
+ * 所以固定落点从根上不成立，只有行距可用。
  */
-private val TEAM_CLICK_POSITIONS = (0 until TEAMS_PER_PAGE).map {
-    130 to TEAM_FIRST_ROW_Y + it * TEAM_ROW_HEIGHT
-}
-
-/** 首个可点队伍项的 y（真机实测 313） */
-private const val TEAM_FIRST_ROW_Y = 313
-
-/** 队伍项行距（真机实测 36px：313/349/385/421/457/494） */
 private const val TEAM_ROW_HEIGHT = 36
 
 /** 精确滑动的步数。真正消掉惯性靠的是 [InputHelper.swipe] 抬手前的原地驻留，不是步数。 */
@@ -77,13 +70,39 @@ private const val ROW_BAND_BOTTOM = 520
 private const val ROW_BAND_CENTER = (ROW_BAND_TOP + ROW_BAND_BOTTOM) / 2
 
 /**
- * 未改名的队伍显示为 `TEAMS #N`，N 就是队伍编号 —— 列表里唯一的**绝对位置锚点**。
+ * 未改名的队伍显示为 `TEAMS #N`，N 就是队伍编号。
  *
- * 用户改过名的队伍显示自定义名，且名字会重复，所以按名字定位不成立；但只要视野里
- * 有任意一行还是默认名，就能反推出每一行的编号（列表按编号顺序排，真机实测
- * `MIRROR DUN.-BL.` / `TEAMS #21` / `TEAMS #22` / `TEAMS #23` 连续相邻）。
+ * 这是**免费的精确校准**，不是定位的依据：队伍名可以自定义，用户全改过名时一个都读不到。
+ * 真正的绝对锚点是"列表顶部就是队伍 #1"（见 [TOP_ROW_Y]），与名字无关。
  */
 private val TEAM_NO_REGEX = Regex("""TEAMS#(\d+)""", RegexOption.IGNORE_CASE)
+
+/**
+ * 滑到顶时首行的 y。三帧实测 313.5 —— 列表滚到尽头就夹住，所以这是个稳定参照，
+ * 且**与队伍名无关**：无论用户怎么改名，顶部那一行都是队伍 #1。
+ */
+private const val TOP_ROW_Y = 313
+private const val TOP_ROW_TOLERANCE = 12
+
+/**
+ * 单步允许的最大**内容**位移，按行计。
+ *
+ * 取 4 行（可见 6 行减 2）是为了保证相邻两次观测一定有 ≥2 行重叠 ——
+ * [matchShift] 要靠这段重叠反推实际位移。位移一旦超过可见行数就完全没有重叠，
+ * 上一版滑 6 行实际走 9.4 行就是这样把自己的参照丢掉的。
+ */
+private const val OVERLAP_SAFE_ROWS = 4
+
+/**
+ * 首步的步长（行）。倍率还是初值时误差最大，而 [matchShift] 的消歧前提是
+ * "预期与实际之差不足半个重名周期" —— 先用小步把倍率测准，后面才敢放大步子。
+ */
+private const val PROBE_ROWS = 2
+
+/** 手指位移 → 内容位移的倍率，运行时实测校准。1.0 = 无惯性（[InputHelper.swipe] 的驻留生效）。 */
+private const val RATIO_INITIAL = 1.0
+private const val RATIO_MIN = 0.7
+private const val RATIO_MAX = 2.5
 
 /** 编队页标题栏。点完队伍后读它核对选中的编号，专门抓"点到隔壁队伍"这个故障。 */
 private val TEAM_TITLE = Crop(222, 108, 210, 34)
@@ -91,19 +110,25 @@ private val TEAM_TITLE = Crop(222, 108, 210, 34)
 /** 单次精确滑动的最大内容位移。侧栏可拖区域约 y∈[310,515]，留出余量。 */
 private const val MAX_ALIGN_SWIPE_PX = 190
 
-/** 对齐循环上限。每轮最多走 190px≈5.2 行，12 轮足够覆盖 MAX_TEAM_NO。 */
-private const val MAX_ALIGN_ROUNDS = 12
+/**
+ * 对齐循环上限。每轮最多走 [OVERLAP_SAFE_ROWS] 行，走到第 60 套需要 ceil(59/4)=15 轮，
+ * 留出余量取 24。
+ */
+private const val MAX_ALIGN_ROUNDS = 24
 
-private const val TEAMS_PER_PAGE = 6
+/**
+ * 精确对齐每步之后的静置时间。
+ *
+ * 不用 [LIST_SETTLE] 那 2 秒：那是为惯性续滑留的，而这里的滑动抬手前已经把速度压到 0，
+ * 手指停下列表就停下，只需要覆盖一帧渲染延迟。按 15 步算，2.0 秒会白等 30 秒。
+ */
+private const val ALIGN_SETTLE = 0.6
 
 /**
  * 队伍编号上限。上游是 19（假设最多 20 个队伍），但实机可以有 40 个以上
  * —— 用户实测配置了 40 个。上限过小会把大编号 coerce 成 19，静默选错队伍。
  */
 private const val MAX_TEAM_NO = 59
-
-/** 最大滑动页数，随 MAX_TEAM_NO 放大：59 / 6 ≈ 9 页 */
-private const val MAX_SCROLL = 10
 
 /**
  * 队伍列表滑动后的静置时间。上游是 0.5 秒（PC 量），安卓上列表有惯性动画，不够。
@@ -292,18 +317,47 @@ private suspend fun readSidebar(ctx: ActionContext): List<SidebarRow> =
         }
 
 /**
- * 精确滚动侧栏：让**内容**上移 [deltaPx] 像素（正数=目标在下方）。
+ * 精确滚动侧栏：手指位移 [fingerPx]（正数=手指上移=内容上移）。返回实际发出的手指位移。
  *
- * 手指位移与内容位移 1:1 —— 前提是 [InputHelper.swipe] 默认的抬手前驻留把惯性消掉了。
- * 单次夹在 [MAX_ALIGN_SWIPE_PX]，剩下的交给外层循环下一轮重新观测后再走。
+ * 单次夹在 [MAX_ALIGN_SWIPE_PX]，因为侧栏可拖区域只有约 200px 高。
  */
-private suspend fun alignSidebar(ctx: ActionContext, deltaPx: Int) {
-    val step = deltaPx.coerceIn(-MAX_ALIGN_SWIPE_PX, MAX_ALIGN_SWIPE_PX)
-    if (step == 0) return
-    // 内容上移 → 手指也上移，所以起点要留出 step 的行程
+private suspend fun dragSidebar(ctx: ActionContext, fingerPx: Int): Int {
+    val step = fingerPx.coerceIn(-MAX_ALIGN_SWIPE_PX, MAX_ALIGN_SWIPE_PX)
+    if (step == 0) return 0
     val from = if (step > 0) ROW_BAND_BOTTOM - 5 else ROW_BAND_TOP + 5
     swipe(ctx.input, TEAM_COLUMN_X, from, TEAM_COLUMN_X, from - step, steps = SLOW_SWIPE_STEPS)
-    ctx.delay(LIST_SETTLE)
+    ctx.delay(ALIGN_SETTLE)
+    return step
+}
+
+/**
+ * 按名字序列比对两次观测，求**内容位移**（像素，正数=内容上移）。null = 没有重叠可比。
+ *
+ * 为什么比对连续序列而不是单个名字：队伍名可自定义**且会重复**，单行同名不足以定位；
+ * 但连续两行同时重名的概率低得多。这是整个定位不依赖 `TEAMS #N` 的关键 ——
+ * 用户把所有队伍都改了名，这条路照样走得通。
+ *
+ * [expectedPx] 用来消歧。名字序列可能**周期性重复**（比如 40 个队伍轮着用两个名字），
+ * 那时"位移 0 行"和"位移 3 行"的重叠看起来完全一样，纯序列比对无解。
+ * 所以在所有匹配解里挑物理上最接近预期位移的那个 —— 预期值来自上一次实测的倍率，
+ * 只要步长小到让误差不足半个周期，这个选择就是对的。
+ */
+private fun matchShift(prev: List<SidebarRow>, next: List<SidebarRow>, expectedPx: Int): Int? {
+    val candidates = mutableListOf<Int>()
+    fun scan(a: List<SidebarRow>, b: List<SidebarRow>, aIsPrev: Boolean) {
+        for (shift in a.indices) {
+            val tail = a.drop(shift)
+            val len = minOf(tail.size, b.size)
+            if (len < 2) break
+            if ((0 until len).all { tail[it].text == b[it].text }) {
+                // 同一物理行在两帧里的 y 之差，恒定写成"prev 的 y 减 next 的 y"
+                candidates += if (aIsPrev) tail[0].y - b[0].y else b[0].y - tail[0].y
+            }
+        }
+    }
+    scan(prev, next, aIsPrev = true)
+    scan(next, prev, aIsPrev = false)
+    return candidates.distinct().minByOrNull { kotlin.math.abs(it - expectedPx) }
 }
 
 private object ChooseTeamAction : ActionBackend {
@@ -316,60 +370,88 @@ private object ChooseTeamAction : ActionBackend {
         ctx.log("选择队伍 #$target")
 
         // 先甩到顶部：越界会被自动夹住，所以这里要的是"快"而不是"准"，
-        // 传 settleMillis=0 保留惯性，两下就能从任意位置回到第一项。
-        repeat(2) {
-            swipe(ctx.input, TEAM_COLUMN_X, 320, TEAM_COLUMN_X, ROW_BAND_BOTTOM, settleMillis = 0)
+        // 传 settleMillis=0 保留惯性，三下就能从任意位置回到第一项。
+        repeat(3) {
+            swipe(ctx.input, TEAM_COLUMN_X, ROW_BAND_TOP + 5, TEAM_COLUMN_X, ROW_BAND_BOTTOM, settleMillis = 0)
             ctx.delay(LIST_SETTLE)
         }
         ctx.recognize.dumpFrame("team_list_top", overwrite = true)
 
-        // 到顶后首行就是队伍 #1，据此粗跳到目标附近；此时滑动已无惯性，位移可预测。
-        val coarse = (target - 1) * TEAM_ROW_HEIGHT - (ROW_BAND_CENTER - ROW_BAND_TOP)
-        var remaining = coarse
-        var jumps = 0
-        while (remaining > 0 && jumps++ < MAX_ALIGN_ROUNDS) {
-            alignSidebar(ctx, remaining)
-            remaining -= remaining.coerceAtMost(MAX_ALIGN_SWIPE_PX)
+        var rows = readSidebar(ctx)
+        if (rows.isEmpty()) {
+            ctx.log("侧栏读不到任何队伍名，可能不在编队页；放弃选队，沿用当前编队")
+            return ActionOutcome.Continue
         }
-        ctx.recognize.dumpFrame("team_list_coarse", overwrite = true)
+        // 绝对锚点：滑到顶后首行就是队伍 #1，**与队伍名无关**。
+        // 顶部位置被列表夹住，所以首行 y 应当落在 TOP_ROW_Y 附近；差太多说明没真的到顶。
+        if (kotlin.math.abs(rows[0].y - TOP_ROW_Y) > TOP_ROW_TOLERANCE) {
+            ctx.log("已甩到顶但首行在 y=${rows[0].y}（预期 $TOP_ROW_Y±$TOP_ROW_TOLERANCE），定位可能偏一行")
+        }
+        // anchorY 是"队伍 anchorNo 那一行当前的 y"，可以是视野外的值 —— 公式只用差值。
+        var anchorY = rows[0].y
+        var anchorNo = 1
+        var ratio = RATIO_INITIAL
+        var measured = false
+        ctx.log("到顶：首行「${rows[0].text}」@${rows[0].y}，可见 ${rows.size} 行")
 
-        // 闭环对齐：用侧栏里的 TEAMS #N 直接算出目标行的 y。
-        // 这一步不依赖"滑了几行"，也不依赖行索引（被切掉的行 OCR 是乱码，计数会错），
-        // 只依赖"列表按编号顺序排"这一条 —— 真机三帧已证实相邻编号连续。
-        var clicked: SidebarRow? = null
-        var fallbackY = TEAM_CLICK_POSITIONS[(target - 1) % TEAMS_PER_PAGE].second
+        var landedY: Int? = null
         for (round in 1..MAX_ALIGN_ROUNDS) {
             ctx.ensureActive()
-            val rows = readSidebar(ctx)
-            if (rows.isEmpty()) {
-                ctx.log("侧栏读不到任何队伍名（第 $round 轮），可能不在编队页")
-                break
+            // 免费的精确校准：视野里只要有一行还是默认名，就能把 anchor 钉死。
+            rows.firstOrNull { it.teamNo != null }?.let { numbered ->
+                val no = requireNotNull(numbered.teamNo)
+                val predicted = anchorNo + (numbered.y - anchorY) / TEAM_ROW_HEIGHT
+                if (predicted != no) {
+                    ctx.log("校准：推算该行是 #$predicted，实为 TEAMS #$no（差 ${no - predicted} 行）")
+                }
+                anchorY = numbered.y
+                anchorNo = no
             }
-            val anchor = rows.firstOrNull { it.teamNo != null }
-            if (anchor == null) {
-                // 所有可见队伍都被改过名：没有绝对锚点，只能相信粗跳的落点
-                fallbackY = rows[((target - 1) % TEAMS_PER_PAGE).coerceAtMost(rows.lastIndex)].y
-                ctx.log("侧栏无 TEAMS #N 锚点（可见 ${rows.size} 行），按粗跳落点点击 y=$fallbackY")
-                break
-            }
-            val anchorNo = requireNotNull(anchor.teamNo)
-            val targetY = anchor.y + (target - anchorNo) * TEAM_ROW_HEIGHT
+            val targetY = anchorY + (target - anchorNo) * TEAM_ROW_HEIGHT
             if (targetY in ROW_BAND_TOP..ROW_BAND_BOTTOM) {
-                clicked = rows.minByOrNull { kotlin.math.abs(it.y - targetY) }
+                val row = rows.minByOrNull { kotlin.math.abs(it.y - targetY) }
                     ?.takeIf { kotlin.math.abs(it.y - targetY) <= TEAM_ROW_HEIGHT / 2 }
-                ctx.log("锚点 #$anchorNo@${anchor.y} → 队伍 #$target 在 y=$targetY（${clicked?.text ?: "该行未读到文字"}）")
+                ctx.log("队伍 #$target 在 y=$targetY（「${row?.text ?: "该行未读到文字"}」），点击")
                 click(ctx.input, TEAM_COLUMN_X, targetY)
-                fallbackY = targetY
+                landedY = targetY
                 break
             }
-            ctx.log("锚点 #$anchorNo@${anchor.y} → 目标 y=$targetY 在视野外，第 $round 轮继续对齐")
-            alignSidebar(ctx, targetY - ROW_BAND_CENTER)
             if (round == MAX_ALIGN_ROUNDS) {
-                ctx.log("对齐 $MAX_ALIGN_ROUNDS 轮仍未把队伍 #$target 带进视野，按粗跳落点点击")
-                click(ctx.input, TEAM_COLUMN_X, fallbackY)
+                ctx.log("对齐 $MAX_ALIGN_ROUNDS 轮仍未把队伍 #$target 带进视野（目标 y=$targetY），放弃选队")
+                break
+            }
+            // 想要的内容位移；夹到"一定留下重叠"的幅度，否则下一轮就没法实测位移了。
+            // 首步用更小的 PROBE_ROWS：此时倍率还是初值，而 matchShift 的消歧依赖
+            // "预期与实际之差不足半个重名周期"，步子越小这个前提越稳。
+            val stepRows = if (measured) OVERLAP_SAFE_ROWS else PROBE_ROWS
+            val want = (targetY - ROW_BAND_CENTER)
+                .coerceIn(-stepRows * TEAM_ROW_HEIGHT, stepRows * TEAM_ROW_HEIGHT)
+            val previous = rows
+            val finger = dragSidebar(ctx, (want / ratio).toInt())
+            rows = readSidebar(ctx)
+            if (rows.isEmpty()) {
+                ctx.log("滑动后侧栏读不到内容，放弃选队")
+                break
+            }
+            val moved = matchShift(previous, rows, expectedPx = (finger * ratio).toInt())
+            if (moved != null && finger != 0) {
+                measured = true
+                anchorY -= moved
+                val observed = moved.toDouble() / finger
+                if (observed in RATIO_MIN..RATIO_MAX) {
+                    if (kotlin.math.abs(observed - ratio) > 0.15) {
+                        ctx.log("倍率校准：手指 ${finger}px → 内容 ${moved}px，倍率 ${"%.2f".format(observed)}")
+                    }
+                    ratio = observed
+                }
+            } else {
+                // 没重叠可比：按预期位移推进，靠下一轮的数字锚点或再次比对纠正
+                anchorY -= (finger * ratio).toInt()
+                ctx.log("两次观测无重叠（手指 ${finger}px），位移按预期值估算")
             }
         }
-        if (clicked == null && fallbackY != 0) click(ctx.input, TEAM_COLUMN_X, fallbackY)
+        ctx.recognize.dumpFrame("team_list_aligned", overwrite = true)
+        if (landedY == null) return ActionOutcome.Continue
 
         // 点完队伍要等罪人阵容真的载入：上游点完即返回，后续 ready_to_battle 会读
         // "已选/总数"（Crop(1130,500,100,50)），读到旧值就会做出错误判断。

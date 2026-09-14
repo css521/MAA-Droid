@@ -105,7 +105,19 @@ class FakeRecognizer : Recognizer {
         return templateHits[template] ?: emptyList()
     }
 
-    override suspend fun detectText(crop: Crop?, threshold: Double): List<TextMatch> = textHits
+    /**
+     * 按取字区域动态给结果的钩子；返回 null 表示回落到 [textByCrop] 再回落到 [textHits]。
+     *
+     * 为队伍侧栏那种"结果随已注入的滑动而变"的场景准备：单个 [textHits] 无法表达
+     * 同一次执行里多个区域各读到不同内容（侧栏、标题、人数各有各的区域）。
+     */
+    var onDetectText: ((Crop?) -> List<TextMatch>?)? = null
+
+    /** 按区域登记固定结果；未登记的区域回落到 [textHits]，保持既有用例不变。 */
+    val textByCrop = mutableMapOf<Crop, List<TextMatch>>()
+
+    override suspend fun detectText(crop: Crop?, threshold: Double): List<TextMatch> =
+        onDetectText?.invoke(crop) ?: crop?.let { textByCrop[it] } ?: textHits
 
     /** 记录每次 findText 的目标串，便于断言"用的是文字判据而不是模板" */
     val textCalls = mutableListOf<String>()
